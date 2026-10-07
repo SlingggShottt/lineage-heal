@@ -1,0 +1,437 @@
+# Design and Architecture — LineageHeal
+
+| | |
+|---|---|
+| **Status** | Baseline for build |
+| **Last updated** | Week 2 |
+| **Related** | [SRS](SRS.md) · [Tech stack](techstack.md) · [Style guide](style_guide.md) · [Context](context.md) |
+
+## 1. Purpose
+
+This document explains how LineageHeal is put together: its components, data flows, agent design, data models, deployment and the reasoning behind them. Requirements live in the SRS; this document describes how they are met. Significant decisions are summarised in [context.md](context.md#key-decisions) and recorded in detail as ADRs in `docs/adr/`.
+
+## 2. System context
+
+```mermaid
+flowchart LR
+    subgraph Sources["Public data publishers"]
+        NSE["NSE"]
+        AMFI["AMFI"]
+        FBIL["FBIL"]
+    end
+
+    LH["LineageHeal"]
+
+    subgraph Services["External services"]
+        LLM["Gemini / Groq"]
+        LS["LangSmith"]
+        GH["GitHub<br/>repo, App, Actions"]
+    end
+
+    ENG["Approver"]
+    VIS["Viewer"]
+
+    Sources -- daily files --> LH
+    LH -- prompts --> LLM
+    LH -- traces --> LS
+    LH -- PRs, issues --> GH
+    GH -- schedules, runs --> LH
+    ENG -- review, approve --> LH
+    VIS -- browse read-only --> LH
+```
+
+## 3. Runtime topology
+
+```mermaid
+flowchart TB
+    subgraph GA["GitHub Actions"]
+        PIPE["pipeline.yml<br/>ingest + dbt"]
+        HEAL["heal.yml<br/>agents"]
+        BENCH["benchmark.yml"]
+        CI["ci.yml"]
+    end
+
+    subgraph Data["Data plane"]
+        R2[("Cloudflare R2<br/>raw files")]
+        MD[("MotherDuck<br/>prod warehouse")]
+        DDB[("Local DuckDB<br/>sandbox, bench")]
+    end
+
+    PG[("Neon Postgres + pgvector<br/>app state, lineage, knowledge,<br/>Dagster runs, agent checkpoints")]
+
+    subgraph Serve["Serving"]
+        API["FastAPI on Render"]
+        WEB["React on Cloudflare Pages"]
+    end
+
+    PIPE --> R2
+    PIPE --> MD
+    PIPE --> PG
+    PIPE -- failure --> HEAL
+    HEAL --> PG
+    HEAL --> DDB
+    HEAL --> MD
+    HEAL -- PRs, issues --> GHR["GitHub repository"]
+    BENCH --> DDB
+    BENCH --> PG
+    WEB --> API
+    API --> PG
+    API -- merge, close, dispatch --> GHR
+```
+
+Design choices worth noting:
+
+- **Heavy work runs in GitHub Actions, not on the API host.** Render's free instance has 512 MB of memory and sleeps when idle, so the API only serves reads and records decisions. Healing, benchmark runs and post-decision indexing all execute as workflows.
+- **Two warehouses, one dbt project.** `prod` targets MotherDuck. `dev`, `ci` and `bench` target local DuckDB files. The sandbox and the benchmark never touch MotherDuck, which protects its free compute allowance.
+
+## 4. Repository structure
+
+See the repository map in [CLAUDE.md](../CLAUDE.md#repository-map). Each Python subpackage under `src/lineageheal/` owns one concern and depends only on `core` and on packages below it in this order:
+
+```
+core  ←  store  ←  ingestion, lineage, llm, vcs, rag  ←  agents  ←  orchestration, api, benchmark
+```
+
+`api` and `orchestration` never import each other. A command-line entry point, `lineageheal` (built with Typer), exposes `ingest`, `backfill`, `detect`, `heal`, `index` and `bench` commands so that GitHub Actions and developers use the same code path.
+
+## 5. Data architecture
+
+### 5.1 Raw zone (R2)
+
+```
+raw/source=<source>/dataset=<dataset>/trade_date=<YYYY-MM-DD>/<sha256-prefix>__<original_filename>
+```
+
+- Files are stored exactly as published (compressed where the source compresses them).
+- The SHA-256 prefix makes a changed re-publication a new object instead of an overwrite (FR-ING-05).
+- Every attempt is recorded in the `ingestion_log` table (FR-ING-06).
+- Benchmark and sandbox copies live outside the raw zone (`bench/` prefix or a local directory), so injected faults can never contaminate production data.
+
+### 5.2 Source datasets
+
+| Source | Dataset | Bronze model |
+|---|---|---|
+| NSE | `cm_bhavcopy` (CM-UDiFF) | `brz_nse__cm_bhavcopy` |
+| NSE | `security_master` | `brz_nse__security_master` |
+| NSE | `corporate_actions` | `brz_nse__corporate_actions` |
+| AMFI | `navall` | `brz_amfi__navall` |
+| FBIL | `reference_rates` | `brz_fbil__reference_rates` |
+
+#### Source access details
+
+Filled in by the Week 2 data spike (LH-012, LH-013).
+
+| Dataset | URL pattern | Format | Headers needed | Publication time (IST) | History available | Reachable from Actions |
+|---|---|---|---|---|---|---|
+| NSE `cm_bhavcopy` | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
+| NSE `security_master` | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
+| NSE `corporate_actions` | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
+| AMFI `navall` | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
+| FBIL `reference_rates` | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
+
+### 5.3 Lakehouse layers (dbt)
+
+| Layer | Responsibility | Example models |
+|---|---|---|
+| Bronze | Read raw files, apply types, rename to project conventions, add `_source_file`, `_ingested_at` | `brz_nse__cm_bhavcopy`, `brz_amfi__navall` |
+| Silver | Clean, deduplicate on keys, conform units and identifiers, join reference data | `slv_nse__equity_eod`, `slv_nse__securities`, `slv_nse__corporate_actions`, `slv_amfi__nav`, `slv_fbil__reference_rates` |
+| Gold | Business-ready tables for consumers | `gld_equity_daily_prices`, `gld_mf_nav_daily`, `gld_fx_reference_rates`, `gld_market_daily_summary` |
+
+`gld_market_daily_summary` deliberately joins all three feeds (for example equity turnover, NAV coverage and USD/INR per day), so lineage paths cross sources and the agents must reason about which feed a failure came from.
+
+Seeds hold per-source calendars (`seed_calendar_nse`, `seed_calendar_amfi`, `seed_calendar_fbil`), used for expected-file checks (FR-ING-07) and late-data detection.
+
+### 5.4 Data quality
+
+- **Generic tests:** `unique`, `not_null`, `accepted_values`, `relationships`, plus range and row-count tests from `dbt_utils` and `dbt_expectations`.
+- **Anomaly monitors:** Elementary volume, freshness and column-distribution monitors on silver and gold (fallback: custom z-score tests if the Week 3 spike shows incompatibility).
+- **Domain checks:** close price within high–low range; day-over-day price change beyond a threshold without a matching corporate action (catches unit changes); NAV strictly positive; FX rate within a plausible band.
+
+## 6. Orchestration
+
+- **Raw assets** are daily-partitioned Dagster assets, one per dataset, backed by the loaders.
+- **dbt assets** come from the dbt manifest via `dagster-dbt`, so Dagster's graph matches dbt's.
+- **Run storage** uses `dagster-postgres` on Neon, so the local Dagster UI can browse runs executed in Actions.
+- **Scheduling:** `pipeline.yml` runs on a cron (default early morning IST) for the previous trade date, after all three feeds have published. It materialises the day's partition, uploads dbt artifacts, and records signals.
+- **Hand-off to healing:** if the run records any failure signal, a dependent `heal` job in the same workflow starts with the run's artifacts. `heal.yml` can also be triggered manually or dispatched by the API (resume after review).
+
+## 7. Lineage
+
+### 7.1 Collection
+
+- **Loaders** emit OpenLineage `RunEvent`s with a schema facet listing the raw file's column names (FR-ING-09). This lets the system compare today's raw schema with the expected one.
+- **dbt** runs are wrapped with `openlineage-dbt` to emit events for each model.
+- Events are stored as JSONB in `lineage_events`.
+
+### 7.2 Graph construction
+
+1. Parse the dbt manifest for model dependencies and compiled SQL.
+2. For each model, use `sqlglot.lineage` on compiled SQL to map each output column to its input columns. Edge types: `direct` (pass-through or rename), `transform` (expression), `aggregate`, `filter` (column used only in `WHERE`/`JOIN`).
+3. Link raw file columns to bronze columns using the bronze model's column mapping and the latest schema facet.
+4. If parsing fails, add table-level edges marked `inferred` (FR-LIN-05).
+5. Persist nodes and edges to `lineage_nodes` and `lineage_edges`, tagged with the manifest hash (FR-LIN-04).
+
+**Node identity:** `<dataset>.<column>`, where dataset is either `raw.<source>.<dataset>` or a dbt model name, e.g. `raw.nse.cm_bhavcopy.ClsPric` or `slv_nse__equity_eod.close_price_inr`.
+
+### 7.3 Traversal
+
+At runtime the graph is loaded into NetworkX. The lineage service offers `upstream(node, depth)`, `downstream(node, depth)`, `path(a, b)` and `common_ancestors(nodes)`, the last of which the Detector uses for correlation.
+
+## 8. Agent design
+
+### 8.1 Workflow
+
+```mermaid
+flowchart TD
+    S([Start]) --> D["Detect and correlate"]
+    D --> I["Investigate"]
+    I -->|more evidence needed, budget left| I
+    I -->|root cause in dbt| P["Write patch"]
+    I -->|root cause outside dbt| G["Draft suggestion"]
+    I -->|budget exhausted| U["Mark unresolved"]
+    P --> V["Verify in sandbox"]
+    V -->|failed, attempts left| P
+    V -->|failed, no attempts left| X["Mark fix unverified"]
+    V -->|passed| PR["Open pull request"]
+    G --> IS["Open issue"]
+    PR --> R{{"Interrupt: await human review"}}
+    R --> L["Record outcome and index"]
+    IS --> L
+    X --> L
+    U --> L
+    L --> E([End])
+```
+
+The graph is built with LangGraph and checkpointed to Postgres (`langgraph-checkpoint-postgres`). The run pauses at the review interrupt and the workflow job ends. When an approver decides, the API dispatches `heal.yml` in resume mode, which continues from the checkpoint into the learning step.
+
+### 8.2 State
+
+The graph state is a typed model holding: incident ID, signals, affected nodes, retrieved knowledge, an evidence list, ranked hypotheses with confidence, the chosen root cause, fix location (`dbt` or `external`), patch attempts with sandbox results, GitHub links, and counters for the budget (LLM calls, elapsed time).
+
+### 8.3 Detector
+
+Mostly deterministic, so its behaviour is predictable and testable:
+
+1. Parse `run_results.json`, Elementary results, the ingestion log and expected-file calendars into signals.
+2. Map each signal to lineage nodes.
+3. Group signals whose nodes share a common upstream ancestor within a depth limit (FR-DET-02).
+4. Match against open incidents by root ancestor and fault fingerprint to avoid duplicates (FR-DET-05).
+5. One LLM call classifies the fault and writes a short summary (FR-DET-04).
+
+### 8.4 Investigator
+
+A **lineage-guided search**. Starting from the failing columns, it visits upstream nodes in order of a cheap heuristic score (schema changed today, profile shifted, nearest to the source), and at each step uses tools to gather evidence for or against "this node is the root cause". It stops when one hypothesis reaches the confidence threshold, the frontier is exhausted, or the budget runs out (FR-INV-05).
+
+| Tool | Returns |
+|---|---|
+| `get_lineage` | Upstream or downstream nodes and edges |
+| `get_raw_schema` | Column names and inferred types of a raw file |
+| `compare_schemas` | Added, removed, renamed-candidate and retyped columns between two dates |
+| `profile_column` | Null rate, distinct count, min, max, mean for a column on a date |
+| `compare_profiles` | A column's profile today versus a trailing baseline |
+| `sample_rows` | At most 20 rows matching a filter |
+| `get_model_sql` | Raw and compiled SQL for a model |
+| `get_test_failure` | Test definition and sample failing rows |
+| `get_ingestion_log` | Ingestion attempts for a source, dataset and date |
+| `get_corporate_actions` | Corporate actions for instruments in a date range |
+| `get_calendar` | Whether a file was expected on a date |
+| `search_knowledge` | Top similar incidents and runbook sections |
+
+All tools are read-only and return bounded, delimited output (NFR-SEC-04).
+
+### 8.5 Fixer
+
+1. Read the relevant dbt files and the Investigator's root cause.
+2. Produce a unified diff. Reject it immediately if it touches anything outside `dbt/models/`, `dbt/macros/` or schema YAML files, or exceeds a size limit (FR-FIX-01).
+3. **Sandbox verification** (FR-FIX-02): create a temporary git worktree, apply the patch, build the affected subgraph on a DuckDB copy containing the incident's data, and compare test results before and after. Pass means: originally failing tests now pass, and no previously passing test fails.
+4. On failure, feed the error back and retry, up to the attempt limit (FR-FIX-03).
+5. On success, the GitHub App pushes branch `heal/<incident-id>` and opens a pull request using the PR template in section 10.3. For external root causes, it opens an issue instead (FR-FIX-05).
+
+### 8.6 LLM layer
+
+`lineageheal.llm` exposes one interface for chat and structured output. It applies a token-bucket rate limiter per provider, retries with backoff, and falls back from Gemini to Groq on rate-limit or server errors (NFR-REL-03). Prompts are loaded from versioned files, and every call records model ID, prompt version, tokens and latency. A fake provider replays recorded responses for tests.
+
+## 9. Application data model
+
+```mermaid
+erDiagram
+    PIPELINE_RUN ||--o{ SIGNAL : produces
+    INCIDENT ||--|{ SIGNAL : groups
+    INCIDENT ||--o{ AGENT_RUN : "investigated by"
+    AGENT_RUN ||--o{ EVIDENCE : collects
+    INCIDENT ||--o{ FIX : proposes
+    FIX ||--o{ REVIEW : "decided by"
+    KNOWLEDGE_DOCUMENT ||--|{ KNOWLEDGE_CHUNK : "split into"
+    LINEAGE_NODE ||--o{ LINEAGE_EDGE : "source of"
+    BENCHMARK_RUN ||--|{ BENCHMARK_RESULT : contains
+```
+
+Plus standalone tables: `ingestion_log`, `lineage_events`, LangGraph checkpoint tables, and Dagster's own schema.
+
+### Incident lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> detected
+    detected --> investigating
+    investigating --> fix_proposed: verified dbt patch
+    investigating --> suggestion_filed: root cause outside dbt
+    investigating --> fix_unverified: no patch passed sandbox
+    investigating --> unresolved: budget exhausted
+    fix_proposed --> approved: approver approves
+    fix_proposed --> rejected: approver rejects
+    approved --> resolved: next pipeline run passes
+    rejected --> resolved: fixed manually
+    suggestion_filed --> resolved: fixed manually
+    fix_unverified --> resolved: fixed manually
+    unresolved --> resolved: fixed manually
+    resolved --> [*]
+```
+
+## 10. API and review flow
+
+### 10.1 Endpoints
+
+| Method | Path | Access |
+|---|---|---|
+| GET | `/health` | Public |
+| GET | `/auth/login`, `/auth/callback`; POST `/auth/logout`; GET `/me` | Public |
+| GET | `/feeds/health` | Public |
+| GET | `/incidents`, `/incidents/{id}` | Public |
+| GET | `/incidents/{id}/lineage`, `/incidents/{id}/fix` | Public |
+| POST | `/incidents/{id}/approve` | Approver |
+| POST | `/incidents/{id}/reject` (reason required) | Approver |
+| GET | `/runbooks`, `/runbooks/{slug}` | Public |
+| GET | `/benchmark/runs`, `/benchmark/runs/{id}` | Public |
+
+### 10.2 Review sequence
+
+```mermaid
+sequenceDiagram
+    participant GA as GitHub Actions
+    participant AG as Agents
+    participant SB as Sandbox (DuckDB)
+    participant APP as GitHub App
+    participant PG as Postgres
+    participant API as FastAPI
+    actor R as Approver
+
+    GA->>AG: heal job with run artifacts
+    AG->>PG: create incident, store evidence
+    AG->>SB: apply patch, build affected subgraph
+    SB-->>AG: tests pass
+    AG->>APP: push branch, open pull request
+    AG->>PG: status fix_proposed, checkpoint
+    R->>API: approve (signed in with GitHub)
+    API->>API: check allowlist and CSRF token
+    API->>APP: approving review + squash merge with approver's token
+    API->>PG: record decision
+    API->>GA: dispatch heal.yml resume
+    GA->>AG: resume from checkpoint
+    AG->>PG: index outcome for retrieval
+```
+
+### 10.3 Pull request template (agent-generated)
+
+```markdown
+## Incident <id>: <one-line summary>
+
+**Fault class:** <class> · **Confidence:** <0.00–1.00>
+
+### Root cause
+<explanation>
+
+### Lineage path
+<root node> → … → <failing column>
+
+### Evidence
+- <evidence item with tool and value>
+
+### Change
+<what the patch does and why>
+
+### Verification
+<tests that failed before and pass now; count of tests still passing>
+
+[View incident in dashboard](<url>) · [Agent trace](<url>)
+```
+
+## 11. Retrieval design
+
+- **Corpus:** runbooks (`docs/runbooks/*.md`, chunked by heading) and decided incidents (one document each: summary, root cause, fix, decision, reviewer reason).
+- **Embedding:** `BAAI/bge-small-en-v1.5` via fastembed, 384 dimensions, stored in pgvector with an HNSW index.
+- **Keyword search:** Postgres `tsvector` with a GIN index.
+- **Fusion:** reciprocal rank fusion (k = 60) over both result lists, then optional filters by fault class and source.
+- **Benchmark isolation:** benchmark runs use a separate namespace containing runbooks plus seed-split incidents only (FR-KB-03, FR-BEN-07).
+
+## 12. Benchmark design
+
+### 12.1 Fault specification
+
+```yaml
+id: nse-schema-drift-007
+class: schema_drift
+source: nse
+dataset: cm_bhavcopy
+trade_date: 2024-09-12
+split: test
+seed: 7
+injection:
+  type: rename_column
+  column: ClsPric
+  new_name: ClosePrice
+expected:
+  root_cause: raw.nse.cm_bhavcopy.ClsPric
+  fix_location: dbt
+```
+
+### 12.2 Run procedure
+
+For each fault and each system (LineageHeal, rule-based, plain LLM):
+
+1. Build a sandbox DuckDB with clean data up to the fault's date.
+2. Copy the day's raw files and apply the injector.
+3. Run the pipeline for that date and collect signals.
+4. Run the system under test and record diagnosis, patch, verification result, timings, LLM calls and tokens.
+5. Score against the expected root cause and fix location.
+
+Results are written per fault, so an interrupted run resumes where it stopped (FR-BEN-06).
+
+### 12.3 Baselines
+
+- **Rule-based:** maps each failing test to the nearest upstream source of the failing model and applies templated fixes for known patterns. No LLM.
+- **Plain LLM:** the same model as LineageHeal, given only the failing test output and the failing model's SQL. No lineage, tools or retrieval.
+
+### 12.4 Held-out case
+
+The July 2024 replay configures the pipeline as it would have looked before NSE's change, then feeds the real post-change files. Both the file-naming change (outside dbt) and the column changes (inside dbt) appear, testing both fix paths.
+
+## 13. Security
+
+- **Secrets:** environment variables locally, GitHub Actions secrets in CI, Render and Cloudflare environment settings in deployment. gitleaks runs in pre-commit and CI.
+- **GitHub App permissions:** Contents (read and write), Pull requests (read and write), Issues (read and write), Metadata (read), Actions (write, for workflow dispatch). Nothing else.
+- **Authentication:** GitHub sign-in through the App's user authorisation flow. Sessions are signed, HTTP-only, `SameSite=Lax` cookies, and state-changing requests require a CSRF token.
+- **Authorisation:** the approver allowlist is checked server-side on every state-changing endpoint.
+- **Branch protection:** `main` requires pull requests and passing CI.
+- **Prompt injection:** feed data (such as scheme names) is untrusted. Tool outputs are delimited and truncated, the model never chooses which tools exist or what paths are writable, and patches are validated against the path allowlist outside the model.
+
+## 14. Configuration and observability
+
+- **Configuration:** `LH_ENV` selects `dev`, `ci`, `bench` or `prod`. All settings come from environment variables through `lineageheal.core.settings`.
+- **Logging:** structlog JSON with `run_id`, `incident_id` and `component` fields.
+- **Tracing:** LangSmith, tagged with incident ID, environment and prompt versions.
+- **Metrics:** agent run metrics in Postgres, shown on the dashboard and used by the benchmark report.
+
+## 15. Local development
+
+`docker compose up` starts:
+
+| Service | Purpose | Port |
+|---|---|---|
+| `postgres` | Postgres 17 with pgvector (replaces Neon locally) | 5432 |
+| `dagster-webserver` | Dagster UI | 3000 |
+| `dagster-daemon` | Schedules and sensors | — |
+| `api` | FastAPI with reload | 8000 |
+| `web` | Vite dev server | 5173 |
+
+Local DuckDB files live in `./.data/` (git-ignored).

@@ -1,0 +1,142 @@
+# Backlog
+
+Planned and completed work for LineageHeal, organised by diary week. Requirement IDs refer to [docs/SRS.md](docs/SRS.md).
+
+**Status:** `Todo` · `In progress` · `Done` · `Blocked`
+
+**Rules**
+- One item per pull request. Branch names use the item ID (see [style guide](docs/style_guide.md#21-branches)).
+- When an item is finished, set its status to `Done`, fill in the week, and add a line to the [done log](#done-log).
+- New work gets the next free ID and goes under the week it is planned for.
+
+## Milestones
+
+| Week | Milestone | Exit criteria |
+|---|---|---|
+| 1 | Topic and synopsis | Topic finalised, synopsis prepared |
+| 2 | Foundations | Repo, tooling, CI and Docker in place; data spike done; loaders writing to R2 |
+| 3 | Lakehouse | All layers built and tested on MotherDuck; daily schedule running; backfill complete |
+| 4 | Diagnosis | Lineage graph built; injected faults detected and diagnosed end to end |
+| 5 | Healing and UI | Verified pull requests and issues created; dashboard supports full review |
+| 6 | Evaluation and launch | Benchmark complete; deployed demo; documentation finished |
+
+## Week 1 — Topic and synopsis
+
+| ID | Task | Refs | Status | Week done |
+|---|---|---|---|---|
+| LH-001 | Discuss and finalise topic with guide | — | Done | 1 |
+| LH-002 | Background research: data incident costs, NSE UDiFF change | — | Done | 1 |
+| LH-003 | Select data feeds and technology stack | — | Done | 1 |
+| LH-004 | Prepare synopsis | — | Done | 1 |
+
+## Week 2 — Foundations
+
+| ID | Task | Refs | Status | Week done |
+|---|---|---|---|---|
+| LH-005 | Write project documentation: CLAUDE, README, context, PRD, SRS, design, style guide, tech stack, backlog | — | Done | 2 |
+| LH-006 | Create service accounts: Cloudflare R2, MotherDuck, Neon, Google AI Studio, Groq, LangSmith | NFR-COST-01 | Todo | |
+| LH-007 | Scaffold Python project: pyproject, uv, src layout, ruff, mypy, pytest, pre-commit (incl. gitleaks, commit lint), Makefile, .editorconfig, .gitignore, .env.example, LICENSE | NFR-MAINT-02, NFR-SEC-01 | Todo | |
+| LH-008 | Configure GitHub repo: branch protection, PR and issue templates, Dependabot | NFR-SEC-05 | Todo | |
+| LH-009 | CI workflow for Python: format, lint, types, tests | NFR-MAINT-02 | Todo | |
+| LH-010 | Docker Compose with Postgres + pgvector; Dockerfile for the Python app | NFR-PORT-01 | Todo | |
+| LH-011 | Core module: settings, structured logging, error hierarchy | FR-OBS-02 | Todo | |
+| LH-012 | Data spike: NSE bhavcopy, security master, corporate actions (URLs, headers, history, reachability from Actions) | IF-SW-01 | Todo | |
+| LH-013 | Data spike: AMFI NAVAll and FBIL reference rates (URLs, history, formats) | IF-SW-01 | Todo | |
+| LH-014 | Postgres store foundation: SQLAlchemy, Alembic, `ingestion_log` table | FR-ING-06 | Todo | |
+| LH-015 | R2 storage client: content-addressed keys, put-if-absent, checksums | FR-ING-05, IF-SW-02 | Todo | |
+| LH-016 | Per-source calendars as seeds (NSE, AMFI, FBIL; 2024 onwards) | FR-ING-07 | Todo | |
+| LH-017 | NSE CM-UDiFF bhavcopy loader | FR-ING-01, FR-ING-10 | Todo | |
+| LH-018 | NSE security master and corporate actions loaders | FR-ING-02 | Todo | |
+| LH-019 | AMFI NAVAll loader | FR-ING-03 | Todo | |
+| LH-020 | FBIL reference rates loader | FR-ING-04 | Todo | |
+| LH-021 | `lineageheal` CLI: `ingest` and `backfill` commands | FR-ING-08, FR-ORC-05 | Todo | |
+
+## Week 3 — Lakehouse and orchestration
+
+| ID | Task | Refs | Status | Week done |
+|---|---|---|---|---|
+| LH-022 | dbt project scaffold: profiles with dev/ci/bench/prod targets, packages, sqlfluff | FR-WH-06 | Todo | |
+| LH-023 | Raw-zone sources: DuckDB R2 secret, local-path mode for non-prod targets | FR-WH-01 | Todo | |
+| LH-024 | Bronze models (5) with docs and tests | FR-WH-01, FR-WH-04 | Todo | |
+| LH-025 | Silver models (5) with docs and tests | FR-WH-02, FR-WH-04 | Todo | |
+| LH-026 | Gold models (4) with docs and tests, including cross-feed summary | FR-WH-03, FR-WH-04 | Todo | |
+| LH-027 | Elementary spike and anomaly monitors (fallback: custom z-score tests) | FR-WH-05 | Todo | |
+| LH-028 | Domain quality checks: price ranges, unexplained price jumps, NAV and FX bounds | FR-WH-04 | Todo | |
+| LH-029 | dbt build in CI against fixture data | NFR-MAINT-02 | Todo | |
+| LH-030 | Dagster raw assets with daily partitions | FR-ORC-01 | Todo | |
+| LH-031 | dagster-dbt integration | FR-ORC-01 | Todo | |
+| LH-032 | Dagster run storage on Postgres; Compose services for webserver and daemon | FR-ORC-03 | Todo | |
+| LH-033 | `pipeline.yml`: scheduled and manual runs on MotherDuck | FR-ORC-02, FR-ORC-05 | Todo | |
+| LH-034 | Persist dbt artifacts and record failure signals per run | FR-WH-07, FR-ORC-04 | Todo | |
+| LH-035 | Historical backfill from January 2024 to R2 and MotherDuck | FR-ING-08 | Todo | |
+
+## Week 4 — Lineage, detection and investigation
+
+| ID | Task | Refs | Status | Week done |
+|---|---|---|---|---|
+| LH-036 | Application schema and migrations: runs, signals, incidents, agent runs, evidence, fixes, reviews, knowledge, lineage | §3.4 | Todo | |
+| LH-037 | OpenLineage events from loaders with schema facets | FR-ING-09, FR-LIN-01 | Todo | |
+| LH-038 | OpenLineage capture from dbt runs | FR-LIN-01 | Todo | |
+| LH-039 | Column-level lineage builder: manifest + sqlglot, raw-to-bronze edges, table-level fallback, versioning | FR-LIN-02, FR-LIN-04, FR-LIN-05 | Todo | |
+| LH-040 | Lineage traversal service | FR-LIN-03 | Todo | |
+| LH-041 | LLM layer: providers, rate limiter, retries, fallback, structured output, fake provider | IF-SW-05, NFR-REL-03 | Todo | |
+| LH-042 | Versioned prompt registry | NFR-MAINT-03 | Todo | |
+| LH-043 | LangSmith tracing and agent metrics persistence | FR-OBS-01, FR-OBS-03 | Todo | |
+| LH-044 | Detector: signal collection from dbt, monitors, ingestion log, calendars | FR-DET-01 | Todo | |
+| LH-045 | Detector: lineage-based correlation, deduplication, classification | FR-DET-02 to 05 | Todo | |
+| LH-046 | Runbooks for the five fault classes | FR-KB-01 | Todo | |
+| LH-047 | Knowledge indexing: fastembed, pgvector, full-text | FR-KB-01 | Todo | |
+| LH-048 | Hybrid retrieval with reciprocal rank fusion and filters | FR-KB-02 | Todo | |
+| LH-049 | Investigator tools (read-only, bounded output) | FR-INV-02, NFR-SEC-04 | Todo | |
+| LH-050 | Investigator: lineage-guided search, hypotheses, budget, fix location | FR-INV-01, FR-INV-03 to 06 | Todo | |
+| LH-051 | `lineageheal heal` end to end through diagnosis on a manually injected fault | FR-ORC-04 | Todo | |
+
+## Week 5 — Healing, API and dashboard
+
+| ID | Task | Refs | Status | Week done |
+|---|---|---|---|---|
+| LH-052 | Fixer: patch generation with path allowlist and size limit | FR-FIX-01 | Todo | |
+| LH-053 | Sandbox verifier: git worktree, DuckDB copy, before/after test comparison, retries | FR-FIX-02, FR-FIX-03, FR-FIX-06 | Todo | |
+| LH-054 | GitHub App setup and `vcs` client: branches, pull requests, issues, reviews, merges | FR-FIX-04, IF-SW-06, NFR-SEC-02 | Todo | |
+| LH-055 | Suggested-fix issues for root causes outside dbt | FR-FIX-05 | Todo | |
+| LH-056 | LangGraph workflow wiring with Postgres checkpoints, review interrupt and resume | FR-FIX-07, FR-REV-04 | Todo | |
+| LH-057 | `heal.yml`: on pipeline failure, manual, and resume modes | FR-ORC-04, NFR-REL-02 | Todo | |
+| LH-058 | FastAPI skeleton: health, problem details, pagination, OpenAPI | FR-API-01, FR-API-03 | Todo | |
+| LH-059 | GitHub sign-in, sessions, CSRF, approver allowlist | FR-API-02, FR-REV-03, NFR-SEC-03 | Todo | |
+| LH-060 | Read endpoints: feed health, incidents, lineage, fixes, runbooks | FR-API-01 | Todo | |
+| LH-061 | Approve and reject endpoints with GitHub reconciliation | FR-REV-01, FR-REV-02, FR-API-04 | Todo | |
+| LH-062 | Web scaffold: Vite, TypeScript, Tailwind, shadcn/ui, router, TanStack Query, generated client, ESLint, Prettier, Vitest; frontend CI job | NFR-MAINT-02 | Todo | |
+| LH-063 | Overview and incidents list screens | FR-UI-01, FR-UI-02 | Todo | |
+| LH-064 | Incident detail: evidence, lineage graph, patch diff | FR-UI-03 to 05 | Todo | |
+| LH-065 | Sign-in and approve/reject controls | FR-UI-06, FR-UI-09 | Todo | |
+| LH-066 | Runbooks screen | FR-UI-08 | Todo | |
+
+## Week 6 — Benchmark, deployment and polish
+
+| ID | Task | Refs | Status | Week done |
+|---|---|---|---|---|
+| LH-067 | Fault specification schema and injectors for five classes | FR-BEN-01, FR-BEN-02 | Todo | |
+| LH-068 | Fault corpus of about 100 with seed/test split | FR-BEN-01, FR-BEN-07 | Todo | |
+| LH-069 | Benchmark runner: sandbox setup, isolated index, resumable results | FR-BEN-03, FR-BEN-06, FR-KB-03 | Todo | |
+| LH-070 | Baselines: rule-based and plain LLM | FR-BEN-03 | Todo | |
+| LH-071 | July 2024 NSE held-out replay | FR-BEN-05 | Todo | |
+| LH-072 | Metrics and Markdown/JSON report generation | FR-BEN-04, NFR-REPRO-01 | Todo | |
+| LH-073 | `benchmark.yml` workflow | FR-BEN-06 | Todo | |
+| LH-074 | Full benchmark run and results analysis | NFR-PERF-01 | Todo | |
+| LH-075 | Benchmark screen in dashboard | FR-UI-07 | Todo | |
+| LH-076 | Deploy API to Render and dashboard to Cloudflare Pages | §2.4 | Todo | |
+| LH-077 | Playwright end-to-end test of the review flow | FR-UI-06, FR-REV-01 | Todo | |
+| LH-078 | Live demo rehearsal: corrupted source file to approved fix | FR-FIX-04, FR-REV-01 | Todo | |
+| LH-079 | Documentation polish: README results, demo video, final diagrams | — | Todo | |
+
+## Done log
+
+A running record of completed work, used for the weekly diary.
+
+| Week | ID | Summary |
+|---|---|---|
+| 1 | LH-001 | Topic finalised with guide |
+| 1 | LH-002 | Researched data-incident costs and the July 2024 NSE UDiFF change |
+| 1 | LH-003 | Chose NSE, AMFI and FBIL feeds and the technology stack |
+| 1 | LH-004 | Synopsis prepared |
+| 2 | LH-005 | Wrote project documentation: CLAUDE, README, context, PRD, SRS, design, style guide, tech stack, backlog |

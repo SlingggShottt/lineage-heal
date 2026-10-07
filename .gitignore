@@ -1,0 +1,127 @@
+# .gitignore
+# Keeps generated files, local tooling state and secrets out of version control.
+# Rule of thumb: commit anything needed to reproduce the build (source, lockfiles,
+# config templates); ignore anything a tool regenerates or that is personal to one machine.
+
+# ---------------------------------------------------------------------------
+# Personal files
+# ---------------------------------------------------------------------------
+# Session kickoff prompt for Claude Code; personal workflow aid, not project source.
+every_new_sesh_prompt.txt
+
+# ---------------------------------------------------------------------------
+# Secrets and environment
+# ---------------------------------------------------------------------------
+# Real credentials live only in local .env files and GitHub Actions secrets.
+.env
+.env.*
+# The template documents required variables and must be committed.
+!.env.example
+
+# GitHub App private keys and any other key material.
+*.pem
+*.key
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Virtual environment created by uv. uv.lock is intentionally NOT ignored:
+# it pins exact versions so every machine and CI run installs the same thing.
+.venv/
+
+# Tool caches; safe to delete, rebuilt on the next run.
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+
+# Coverage output from pytest-cov.
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# ---------------------------------------------------------------------------
+# Data and warehouse
+# ---------------------------------------------------------------------------
+# Local DuckDB databases for dev, ci and bench targets, plus any downloaded data.
+# Raw source files must never be committed (NFR-COMP-01); only small samples
+# under tests/fixtures/ are allowed.
+.data/
+*.duckdb
+*.duckdb.wal
+
+# ---------------------------------------------------------------------------
+# dbt
+# ---------------------------------------------------------------------------
+# Compiled SQL and run artifacts; regenerated on every dbt invocation.
+dbt/target/
+dbt/logs/
+# Installed packages; reproduced from packages.yml / package-lock.yml.
+dbt/dbt_packages/
+# Per-user dbt metadata (anonymous user ID).
+dbt/.user.yml
+
+# ---------------------------------------------------------------------------
+# Dagster
+# ---------------------------------------------------------------------------
+# Local instance storage when not pointed at Postgres (run logs, compute logs, schedules).
+.dagster_home/
+.tmp_dagster_home_*/
+
+# ---------------------------------------------------------------------------
+# Benchmark
+# ---------------------------------------------------------------------------
+# Local benchmark working directories and raw outputs. Final reports are written
+# to docs/ explicitly when they should be published.
+bench_runs/
+
+# ---------------------------------------------------------------------------
+# Frontend (web/)
+# ---------------------------------------------------------------------------
+node_modules/
+web/dist/
+web/.vite/
+# Playwright test output and reports.
+web/test-results/
+web/playwright-report/
+web/blob-report/
+web/playwright/.cache/
+# Coverage from Vitest.
+web/coverage/
+*.tsbuildinfo
+
+# ---------------------------------------------------------------------------
+# Logs
+# ---------------------------------------------------------------------------
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# ---------------------------------------------------------------------------
+# Editors and IDEs
+# ---------------------------------------------------------------------------
+.idea/
+# VS Code: ignore personal settings, but allow shared recommendations if added later.
+.vscode/*
+!.vscode/extensions.json
+
+# ---------------------------------------------------------------------------
+# Claude Code
+# ---------------------------------------------------------------------------
+# Personal overrides. The shared .claude/settings.json IS committed.
+.claude/settings.local.json
+
+# ---------------------------------------------------------------------------
+# Operating system
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+*.swp
+*~
