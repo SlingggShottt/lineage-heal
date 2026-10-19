@@ -1,0 +1,25 @@
+# .dockerignore
+# Keeps secrets, local data and tool caches out of the image build context. The most
+# important entries are .env and .data: credentials and downloaded files must never be
+# baked into an image.
+.git
+.venv
+.env
+.env.*
+!.env.example
+.data
+*.duckdb
+*.duckdb.wal
+__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+dbt/target
+dbt/logs
+dbt/dbt_packages
+tests
+docs
+web

@@ -34,7 +34,7 @@
 | Observability | LangSmith, structlog | — |
 | CI/CD | GitHub Actions | — |
 | Hosting | Render (API), Cloudflare Pages (web), Neon (Postgres) | — |
-| Containers | Docker, Docker Compose | — |
+| Containers | Docker, Docker Compose | Compose v2+ |
 
 ## Python platform
 
@@ -176,6 +176,18 @@ A cross-encoder reranker (also via fastembed) will be evaluated during the build
 Third-party actions are kept to a minimum and pinned to commit SHAs: `actions/checkout` and `astral-sh/setup-uv` (both MIT). The CI job installs the same uv version that created `uv.lock` and fails if the lockfile is out of date.
 
 Deployments: Render auto-deploys the API from `main`; Cloudflare Pages builds the dashboard from `main`. Dependabot keeps dependencies current.
+
+### Container images
+
+Pinned to exact versions in `docker-compose.yml` and `docker/Dockerfile`, so every machine builds the same thing.
+
+| Image | Used for | Licence |
+|---|---|---|
+| `pgvector/pgvector:0.8.7-pg17` | Postgres 17 with the pgvector extension, for application state and retrieval | PostgreSQL licence |
+| `python:3.12.15-slim-bookworm` | Base of the application image | Python Software Foundation licence |
+| `ghcr.io/astral-sh/uv:0.12.21` | Provides uv (copied into the build, not shipped as a service) | MIT or Apache-2.0 |
+
+The application image runs as an unprivileged user, installs exactly what `uv.lock` says, and excludes `.env` and `.data` through `.dockerignore`. Postgres is published on `127.0.0.1:5433` only. Port 5433 avoids a clash with a Postgres already running on the host's 5432.
 
 ## Free-tier budget
 

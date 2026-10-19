@@ -1,0 +1,50 @@
+# docker-compose.yml
+# Local development stack (NFR-PORT-01). Postgres with pgvector holds application state,
+# incidents and retrieval data; more services are added as they are built. Everything
+# here is for a laptop: the credentials below are development defaults, not secrets.
+#
+#   make up        start Postgres and wait until it is healthy
+#   make down      stop it (data stays in the pgdata volume)
+#   docker compose run --rm app ingest amfi --date 2026-10-16
+name: lineageheal
+
+services:
+  postgres:
+    # Pinned to a specific pgvector release on Postgres 17, so everyone gets the same server.
+    image: pgvector/pgvector:0.8.7-pg17
+    environment:
+      POSTGRES_USER: lineageheal
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lineageheal}
+      POSTGRES_DB: lineageheal
+    ports:
+      # Loopback only, so the database is not reachable from other machines. 5433 rather
+      # than 5432 avoids a clash with a Postgres already installed on the host.
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lineageheal -d lineageheal"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # The lineageheal command-line tool in a container. Not started by `make up`; run it on
+  # demand: `docker compose run --rm app <command>`.
+  app:
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://lineageheal:${POSTGRES_PASSWORD:-lineageheal}@postgres:5432/lineageheal
+      RAW_ZONE_DIR: /app/.data/raw
+    volumes:
+      - ./.data:/app/.data
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:

@@ -107,8 +107,9 @@ pnpm --dir web install               # Frontend dependencies
 cp .env.example .env                 # Fill in values. Never commit .env.
 
 # Local stack
-docker compose up -d                 # Postgres, Dagster UI, API, dashboard
-docker compose down
+make up                              # Postgres with pgvector; Dagster, API and dashboard are added by later tasks
+make down
+docker compose run --rm app ingest amfi --date 2026-10-15   # any lineageheal command, in a container
 
 # Ingestion (writes to RAW_ZONE_DIR, or to R2 when RAW_ZONE_BACKEND=r2)
 uv run lineageheal ingest amfi --date 2026-10-15
