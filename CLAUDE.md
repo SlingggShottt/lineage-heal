@@ -114,6 +114,7 @@ docker compose down
 uv run lineageheal ingest amfi --date 2026-10-15
 uv run lineageheal ingest nse --date 2026-10-15
 uv run lineageheal backfill amfi --start 2026-10-01 --end 2026-10-15
+uv run lineageheal dev inject-fault amfi --fault blank-nav --date 2026-10-15   # local raw zone only
 
 # Quality gates — all must pass before proposing a commit
 uv run ruff format . && uv run ruff check .

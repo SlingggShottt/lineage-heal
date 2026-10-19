@@ -118,7 +118,8 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 
 | ID | Task | Refs | Status | Week done |
 |---|---|---|---|---|
-| LH-067 | Fault specification schema and injectors for five classes | FR-BEN-01, FR-BEN-02 | Todo | |
+| LH-067 | Fault specification schema and injectors for five classes. AMFI report injectors exist from LH-083; NSE and FBIL injectors and the spec schema remain | FR-BEN-01, FR-BEN-02 | Todo | |
+| LH-083 | Demo fault injector: five AMFI faults and a local-only `dev inject-fault` command (first slice of LH-067) | FR-BEN-02 | Done | 2 |
 | LH-068 | Fault corpus of about 100 with seed/test split | FR-BEN-01, FR-BEN-07 | Todo | |
 | LH-069 | Benchmark runner: sandbox setup, isolated index, resumable results | FR-BEN-03, FR-BEN-06, FR-KB-03 | Todo | |
 | LH-070 | Baselines: rule-based and plain LLM | FR-BEN-03 | Todo | |
@@ -154,3 +155,4 @@ A running record of completed work, used for the weekly diary.
 | 2 | LH-021 | `lineageheal` CLI with `ingest` and `backfill` (AMFI only so far; NSE and FBIL plug in as their loaders land) |
 | 2 | LH-022 | dbt project scaffold: dev, ci, bench and prod targets (only prod on MotherDuck), exact schema names per layer, usage statistics off, guard tests |
 | 2 | LH-023 | Raw-zone sources in local-path mode: bronze reads the files the loaders wrote, through dbt sources that start every lineage path |
+| 2 | LH-083 | Fault injectors for AMFI reports (blank, negative, duplicate, wrong-date, renamed column) and a `dev inject-fault` command that refuses to touch R2; each fault proven to trip the expected dbt check |

@@ -13,13 +13,15 @@ from typing import Annotated
 
 import typer
 
-from lineageheal.core.errors import LineageHealError
+from lineageheal.benchmark.faults import AMFI_FAULTS
+from lineageheal.core.errors import BenchmarkError, ConfigurationError, LineageHealError
 from lineageheal.core.logging import configure_logging
 from lineageheal.core.settings import get_settings
-from lineageheal.ingestion.amfi import AmfiNavLoader
+from lineageheal.ingestion.amfi import AmfiNavLoader, report_filename
 from lineageheal.ingestion.http import PoliteFetcher
 from lineageheal.ingestion.nse import NSE_BROWSER_HEADERS, NseBhavcopyLoader
-from lineageheal.ingestion.raw_zone import open_raw_zone
+from lineageheal.ingestion.object_stores import LocalObjectStore
+from lineageheal.ingestion.raw_zone import RawZone, open_raw_zone
 from lineageheal.ingestion.types import IngestionOutcome, IngestionResult, Loader
 
 # India has no daylight saving, so a fixed offset is exact and avoids needing tzdata.
@@ -29,6 +31,10 @@ DATE_FORMAT = "%Y-%m-%d"
 EARLIEST_BACKFILL = date(2024, 1, 1)
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
+dev_app = typer.Typer(
+    no_args_is_help=True, help="Developer tools that only ever touch a local sandbox, never R2."
+)
+app.add_typer(dev_app, name="dev")
 
 
 class Source(enum.StrEnum):
@@ -38,7 +44,7 @@ class Source(enum.StrEnum):
     NSE = "nse"  # the CM-UDiFF bhavcopy; other NSE datasets follow in LH-018
 
 
-SourceArgument = Annotated[Source, typer.Argument(help="Feed to ingest.")]
+SourceArgument = Annotated[Source, typer.Argument(help="Data feed: amfi or nse.")]
 
 
 def today_ist(now: datetime | None = None) -> date:
@@ -152,3 +158,57 @@ def backfill(
     typer.echo(f"backfill {source.value} {first}..{last}: {summary}, {len(failed)} failed")
     if failed:
         raise typer.Exit(code=1)
+
+
+@dev_app.command("inject-fault")
+def inject_fault(
+    source: SourceArgument,
+    fault: Annotated[
+        str, typer.Option("--fault", help=f"Fault to inject: {', '.join(AMFI_FAULTS)}.")
+    ],
+    trade_date: Annotated[
+        datetime,
+        typer.Option(
+            "--date",
+            formats=[DATE_FORMAT],
+            help="Trade date of the stored report to damage, YYYY-MM-DD.",
+        ),
+    ],
+) -> None:
+    """Store a damaged copy of an ingested report as a new version, to rehearse a failure.
+
+    The copy is made from the earliest stored version of that day, so repeated
+    injections do not stack on each other. Only the local raw zone is written; the
+    command refuses to run when RAW_ZONE_BACKEND is r2.
+    """
+    if source is not Source.AMFI:
+        raise typer.BadParameter("fault injectors exist for amfi only")
+    if fault not in AMFI_FAULTS:
+        raise typer.BadParameter(f"unknown fault, choose one of: {', '.join(AMFI_FAULTS)}")
+
+    day = trade_date.date()
+    spec = AMFI_FAULTS[fault]
+    with _exit_on_project_errors():
+        settings = get_settings()
+        if settings.raw_zone_backend != "local":
+            raise ConfigurationError(
+                "Refusing to inject faults into the R2 raw zone; use RAW_ZONE_BACKEND=local"
+            )
+        store = LocalObjectStore(settings.raw_zone_dir)
+        folder = f"raw/source={AmfiNavLoader.source}/dataset={AmfiNavLoader.dataset}"
+        keys = store.list_folder(f"{folder}/trade_date={day.isoformat()}")
+        if not keys:
+            raise BenchmarkError(
+                f"No report is stored for {day}; run: lineageheal ingest amfi --date {day}"
+            )
+
+        zone = RawZone(store)
+        stored = zone.put_if_absent(
+            source=AmfiNavLoader.source,
+            dataset=AmfiNavLoader.dataset,
+            trade_date=day,
+            filename=report_filename(day),
+            content=spec.apply(zone.read(keys[0])),
+        )
+        verb = "injected" if stored.created else "already injected"
+        typer.echo(f"{verb} {fault} ({spec.fault_class}) into amfi/navall {day}: {stored.key}")

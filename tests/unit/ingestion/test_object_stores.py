@@ -1,5 +1,6 @@
 """Storage backends: the local directory store and the R2 store over a fake S3 client."""
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -90,6 +91,32 @@ def test_local_store_refuses_keys_that_escape_its_root(tmp_path: Path) -> None:
 
     with pytest.raises(StorageError, match="escapes"):
         store.put("../outside.txt", b"x", metadata={})
+
+
+FOLDER = "raw/source=amfi/dataset=navall/trade_date=2026-10-15"
+
+
+def test_local_store_lists_a_folder_oldest_first(tmp_path: Path) -> None:
+    store = LocalObjectStore(tmp_path)
+    for name, age_seconds in (("c.txt", 30), ("a.txt", 10), ("b.txt", 20)):
+        store.put(f"{FOLDER}/{name}", b"x", metadata={})
+        stamp = 1_700_000_000 - age_seconds  # larger age means older
+        os.utime(tmp_path / FOLDER / name, (stamp, stamp))
+
+    assert store.list_folder(FOLDER) == [f"{FOLDER}/c.txt", f"{FOLDER}/b.txt", f"{FOLDER}/a.txt"]
+
+
+def test_local_store_listing_skips_unfinished_writes_and_subfolders(tmp_path: Path) -> None:
+    store = LocalObjectStore(tmp_path)
+    store.put(f"{FOLDER}/real.txt", b"x", metadata={})
+    (tmp_path / FOLDER / ".partial-abc123").write_bytes(b"half")
+    store.put(f"{FOLDER}/nested/inner.txt", b"x", metadata={})
+
+    assert store.list_folder(FOLDER) == [f"{FOLDER}/real.txt"]
+
+
+def test_local_store_listing_a_missing_folder_is_empty(tmp_path: Path) -> None:
+    assert LocalObjectStore(tmp_path).list_folder(FOLDER) == []
 
 
 # --- R2ObjectStore -----------------------------------------------------------

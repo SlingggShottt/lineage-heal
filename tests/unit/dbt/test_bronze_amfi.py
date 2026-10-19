@@ -16,6 +16,7 @@ import pytest
 import yaml
 from dbt.cli.main import dbtRunner
 
+from lineageheal.benchmark.faults import AMFI_FAULTS
 from lineageheal.ingestion.object_stores import LocalObjectStore
 from lineageheal.ingestion.raw_zone import RawZone
 
@@ -24,10 +25,6 @@ DBT_DIR = REPO_ROOT / "dbt"
 FIXTURE = REPO_ROOT / "tests" / "fixtures" / "amfi" / "navall_history_2026-10-15_sample.txt"
 TRADE_DATE = date(2026, 10, 15)
 NAV_TEST = "not_null_brz_amfi__navall_nav_inr"
-FIRST_DATA_ROW = (
-    b"148921;Aditya Birla Sun Life Multi-Cap Fund-Direct Growth;"
-    b"Direct Plan;GROWTH;INF209KB1Y49;;21.86;15-Oct-2026"
-)
 
 
 @dataclass
@@ -140,22 +137,65 @@ def test_only_data_rows_are_kept_and_they_are_typed(workspace: Workspace) -> Non
     assert row == (148921, "Direct Plan", None, Decimal("21.8600"), date(2026, 10, 15))
 
 
-def test_blank_nav_in_a_republished_report_is_caught(workspace: Workspace) -> None:
-    workspace.store(healthy_report())
-    workspace.store(healthy_report().replace(b";21.86;", b";;"))
+# What each injectable fault should trip when it is the only version of the report.
+EXPECTED_FAILURES = {
+    "blank-nav": {NAV_TEST},
+    "negative-nav": {"non_negative_brz_amfi__navall_nav_inr"},
+    "duplicate-row": {"unique_combination_brz_amfi__navall_scheme_code__nav_date___source_file"},
+    "wrong-date": {"assert_brz_amfi__navall_dates_match_their_report"},
+    "rename-column": {"brz_amfi__navall"},  # the model itself fails; its tests are skipped
+}
+
+
+def test_every_injectable_fault_has_an_expected_check() -> None:
+    assert set(EXPECTED_FAILURES) == set(AMFI_FAULTS)
+
+
+@pytest.mark.parametrize("fault", sorted(AMFI_FAULTS))
+def test_each_injectable_fault_is_caught_by_the_expected_check(
+    workspace: Workspace, fault: str
+) -> None:
+    workspace.store(AMFI_FAULTS[fault].apply(healthy_report()))
 
     result = workspace.build()
 
     assert not result.success
-    assert result.failed() == {NAV_TEST}
+    assert result.failed() == EXPECTED_FAILURES[fault]
 
 
-def test_negative_nav_is_caught(workspace: Workspace) -> None:
-    workspace.store(healthy_report().replace(b";21.86;", b";-21.86;"))
+def test_a_bad_republication_is_caught_while_the_good_version_stays(
+    workspace: Workspace,
+) -> None:
+    report = healthy_report()
+    workspace.store(report)
+    workspace.store(AMFI_FAULTS["blank-nav"].apply(report))
 
     result = workspace.build()
 
-    assert result.failed() == {"non_negative_brz_amfi__navall_nav_inr"}
+    assert result.failed() == {NAV_TEST}
+    (rows, missing) = result.query(
+        "select count(*), count(*) filter (where nav_inr is null) from bronze.brz_amfi__navall"
+    )[0]
+    assert rows == 2 * data_row_count(report)
+    assert missing == 1
+
+
+def test_a_renamed_column_in_a_republished_report_shows_up_as_missing_navs(
+    workspace: Workspace,
+) -> None:
+    """Files merge by column name, so the drift appears as null NAVs, not a failed model.
+
+    With a healthy version present the model still builds; the renamed column is just
+    empty for the damaged version's rows.
+    """
+    report = healthy_report()
+    workspace.store(report)
+    workspace.store(AMFI_FAULTS["rename-column"].apply(report))
+
+    result = workspace.build()
+
+    assert result.statuses["brz_amfi__navall"] == "success"
+    assert result.failed() == {NAV_TEST}
 
 
 def test_a_zero_nav_is_not_a_fault(workspace: Workspace) -> None:
@@ -163,29 +203,6 @@ def test_a_zero_nav_is_not_a_fault(workspace: Workspace) -> None:
     workspace.store(healthy_report().replace(b";21.86;", b";0;"))
 
     assert workspace.build().success
-
-
-def test_a_duplicated_row_is_caught(workspace: Workspace) -> None:
-    report = healthy_report()
-    workspace.store(
-        report.replace(
-            FIRST_DATA_ROW + b"\r\n", FIRST_DATA_ROW + b"\r\n" + FIRST_DATA_ROW + b"\r\n"
-        )
-    )
-
-    result = workspace.build()
-
-    assert result.failed() == {
-        "unique_combination_brz_amfi__navall_scheme_code__nav_date___source_file"
-    }
-
-
-def test_a_report_for_the_wrong_day_is_caught(workspace: Workspace) -> None:
-    workspace.store(healthy_report().replace(b"15-Oct-2026", b"14-Oct-2026"))
-
-    result = workspace.build()
-
-    assert result.failed() == {"assert_brz_amfi__navall_dates_match_their_report"}
 
 
 def test_an_unparseable_date_is_caught_as_a_missing_value(workspace: Workspace) -> None:
@@ -200,11 +217,10 @@ def test_a_renamed_column_breaks_the_model_and_skips_what_depends_on_it(
     workspace: Workspace,
 ) -> None:
     """Schema drift surfaces in dbt: the model fails, so its tests cannot vouch for the data."""
-    workspace.store(healthy_report().replace(b";Net Asset Value;", b";NAV;"))
+    workspace.store(AMFI_FAULTS["rename-column"].apply(healthy_report()))
 
     result = workspace.build()
 
-    assert not result.success
     assert result.statuses["brz_amfi__navall"] == "error"
     assert result.statuses[NAV_TEST] == "skipped"
 

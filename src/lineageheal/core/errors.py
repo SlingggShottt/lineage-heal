@@ -32,3 +32,7 @@ class LineageError(LineageHealError):
 
 class AgentError(LineageHealError):
     """An agent step failed in a way the workflow cannot recover from."""
+
+
+class BenchmarkError(LineageHealError):
+    """A fault could not be injected or a benchmark step could not run."""
