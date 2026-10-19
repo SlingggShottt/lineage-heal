@@ -154,6 +154,7 @@ make up                   # Postgres, Dagster, API and dashboard
 | `make check` | Formatting, linting, type checks |
 | `make test` | Python, dbt and frontend tests |
 | `uv run lineageheal ingest amfi --date 2026-10-15` | Download one day of AMFI NAVs into the raw zone |
+| `uv run lineageheal ingest nse --date 2026-10-15` | Download one day of the NSE UDiFF bhavcopy into the raw zone |
 | `uv run lineageheal backfill amfi --start 2026-10-01` | Load a date range (from 2024-01-01); safe to re-run |
 | `make pipeline` | Run the ingestion and transformation pipeline |
 | `make bench` | Run the fault-injection benchmark |

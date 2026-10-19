@@ -18,6 +18,7 @@ from lineageheal.core.logging import configure_logging
 from lineageheal.core.settings import get_settings
 from lineageheal.ingestion.amfi import AmfiNavLoader
 from lineageheal.ingestion.http import PoliteFetcher
+from lineageheal.ingestion.nse import NSE_BROWSER_HEADERS, NseBhavcopyLoader
 from lineageheal.ingestion.raw_zone import open_raw_zone
 from lineageheal.ingestion.types import IngestionOutcome, IngestionResult, Loader
 
@@ -34,6 +35,7 @@ class Source(enum.StrEnum):
     """Feeds that can be ingested from the command line."""
 
     AMFI = "amfi"
+    NSE = "nse"  # the CM-UDiFF bhavcopy; other NSE datasets follow in LH-018
 
 
 SourceArgument = Annotated[Source, typer.Argument(help="Feed to ingest.")]
@@ -56,10 +58,15 @@ def _open_loader(source: Source) -> Iterator[Loader]:
     """Build the loader for a source on the configured raw zone, closing it afterwards."""
     settings = get_settings()
     zone = open_raw_zone(settings)
-    with PoliteFetcher.create(min_interval_seconds=settings.ingest_min_interval_seconds) as fetcher:
+    headers = NSE_BROWSER_HEADERS if source is Source.NSE else None
+    with PoliteFetcher.create(
+        min_interval_seconds=settings.ingest_min_interval_seconds, headers=headers
+    ) as fetcher:
         match source:
             case Source.AMFI:
                 yield AmfiNavLoader(fetcher, zone)
+            case Source.NSE:
+                yield NseBhavcopyLoader(fetcher, zone)
 
 
 @contextmanager

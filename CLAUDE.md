@@ -112,6 +112,7 @@ docker compose down
 
 # Ingestion (writes to RAW_ZONE_DIR, or to R2 when RAW_ZONE_BACKEND=r2)
 uv run lineageheal ingest amfi --date 2026-10-15
+uv run lineageheal ingest nse --date 2026-10-15
 uv run lineageheal backfill amfi --start 2026-10-01 --end 2026-10-15
 
 # Quality gates — all must pass before proposing a commit
