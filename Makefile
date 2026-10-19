@@ -3,7 +3,7 @@
 # Targets for Docker, dbt and the frontend are added by the tasks that introduce them.
 
 .DEFAULT_GOAL := help
-.PHONY: help setup fmt lint typecheck test check clean
+.PHONY: help setup up down fmt lint typecheck test check clean
 
 help: ## List available targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
@@ -11,6 +11,12 @@ help: ## List available targets
 setup: ## Install dependencies and git hooks
 	uv sync --all-extras
 	uv run pre-commit install --hook-type pre-commit --hook-type commit-msg
+
+up: ## Start local services (Postgres with pgvector) and wait until healthy
+	docker compose up -d --wait postgres
+
+down: ## Stop local services (data stays in the pgdata volume)
+	docker compose down
 
 fmt: ## Format code
 	uv run ruff format .

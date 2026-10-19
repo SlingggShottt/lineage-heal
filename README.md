@@ -140,7 +140,7 @@ git clone https://github.com/SlingggShottt/lineage-heal.git
 cd lineage-heal
 cp .env.example .env      # add your credentials
 make setup                # Python and frontend dependencies, pre-commit hooks
-make up                   # Postgres, Dagster, API and dashboard
+make up                   # Postgres with pgvector (more services as they are built)
 ```
 
 | Service | URL |
@@ -161,6 +161,8 @@ make up                   # Postgres, Dagster, API and dashboard
 | `uv run lineageheal backfill amfi --start 2026-10-01` | Load a date range (from 2024-01-01); safe to re-run |
 | `uv run dbt build --project-dir dbt --profiles-dir dbt --target dev` | Build the warehouse layers from the raw zone and run their quality tests |
 | `uv run lineageheal dev inject-fault amfi --fault blank-nav --date 2026-10-16` | Store a damaged copy of an ingested report in the local raw zone, to rehearse a failure (refuses to run against R2) |
+| `make up` and `make down` | Start and stop the local Postgres (port 5433, localhost only) |
+| `docker compose run --rm app ingest amfi --date 2026-10-15` | Run any `lineageheal` command in a container (the first run builds the image) |
 | `make pipeline` | Run the ingestion and transformation pipeline |
 | `make bench` | Run the fault-injection benchmark |
 

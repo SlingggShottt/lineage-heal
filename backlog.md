@@ -38,7 +38,7 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 | LH-007 | Scaffold Python project: pyproject, uv, src layout, ruff, mypy, pytest, pre-commit (incl. gitleaks, commit lint), Makefile, .editorconfig, .gitignore, .env.example, LICENSE | NFR-MAINT-02, NFR-SEC-01 | Done | 2 |
 | LH-008 | Configure GitHub repo: branch protection, PR and issue templates, Dependabot | NFR-SEC-05 | Todo | |
 | LH-009 | CI workflow for Python: format, lint, types, tests | NFR-MAINT-02 | Done | 2 |
-| LH-010 | Docker Compose with Postgres + pgvector; Dockerfile for the Python app | NFR-PORT-01 | Todo | |
+| LH-010 | Docker Compose with Postgres + pgvector; Dockerfile for the Python app | NFR-PORT-01 | Done | 2 |
 | LH-011 | Core module: settings, structured logging, error hierarchy | FR-OBS-02 | Done | 2 |
 | LH-012 | Data spike: NSE bhavcopy, security master, corporate actions (URLs, headers, history, reachability from Actions) | IF-SW-01 | Done | 2 |
 | LH-013 | Data spike: AMFI NAVAll (URLs, history, formats). FBIL split out to LH-080 | IF-SW-01 | Done | 2 |
@@ -161,3 +161,4 @@ A running record of completed work, used for the weekly diary.
 | 2 | LH-084 | Demo script `docs/demo.md`: 10-minute run-through verified by executing its own command blocks end to end, plus talking points, built-versus-not-built and likely questions |
 | 2 | LH-018 | NSE security master and corporate actions loaders on a shared base with the bhavcopy loader; `--dataset` option on ingest and backfill; corrected an earlier misreading of the security master as ragged |
 | 2 | LH-024 | Bronze, two of five models: AMFI NAVs and the NSE bhavcopy, with 36 checks. NSE zips are unzipped into a derived staged area (D-22); a file in the pre-July-2024 format is rejected by the model |
+| 2 | LH-010 | Docker Compose with Postgres 17 and pgvector (loopback only, healthchecked, named volume) and a pinned, non-root application image of 852 MB; guard tests for the configuration |
