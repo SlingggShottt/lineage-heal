@@ -140,7 +140,7 @@ Task-level detail lives in `backlog.md`.
 ## Current status
 **Current diary week:** 2
 - **Week 1 (complete):** topic finalised with the guide; background research on data incidents and the NSE UDiFF change; feeds and tech stack chosen; synopsis prepared.
-- **Week 2 (in progress):** project documentation (LH-005) and Python scaffold with tooling (LH-007) done. Next: core module (LH-011), R2 account (LH-006), then storage client and first loader. A mid-project evaluation demo is due within days, so Week 2 tasks are ordered to reach a working ingest-to-R2 slice first.
+- **Week 2 (in progress):** project documentation (LH-005), Python scaffold with tooling (LH-007) and core module (LH-011) done. Next: R2 account (LH-006, manual), then storage client (LH-015) and the AMFI loader (LH-013, LH-019). A mid-project evaluation demo is due within days, so Week 2 tasks are ordered to reach a working ingest-to-R2 slice first.
 
 ## Open questions
 

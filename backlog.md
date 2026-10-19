@@ -39,7 +39,7 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 | LH-008 | Configure GitHub repo: branch protection, PR and issue templates, Dependabot | NFR-SEC-05 | Todo | |
 | LH-009 | CI workflow for Python: format, lint, types, tests | NFR-MAINT-02 | Todo | |
 | LH-010 | Docker Compose with Postgres + pgvector; Dockerfile for the Python app | NFR-PORT-01 | Todo | |
-| LH-011 | Core module: settings, structured logging, error hierarchy | FR-OBS-02 | Todo | |
+| LH-011 | Core module: settings, structured logging, error hierarchy | FR-OBS-02 | Done | 2 |
 | LH-012 | Data spike: NSE bhavcopy, security master, corporate actions (URLs, headers, history, reachability from Actions) | IF-SW-01 | Todo | |
 | LH-013 | Data spike: AMFI NAVAll and FBIL reference rates (URLs, history, formats) | IF-SW-01 | Todo | |
 | LH-014 | Postgres store foundation: SQLAlchemy, Alembic, `ingestion_log` table | FR-ING-06 | Todo | |
@@ -141,3 +141,4 @@ A running record of completed work, used for the weekly diary.
 | 1 | LH-004 | Synopsis prepared |
 | 2 | LH-005 | Wrote project documentation: CLAUDE, README, context, PRD, SRS, design, style guide, tech stack, backlog |
 | 2 | LH-007 | Scaffolded the Python project: uv, src layout, ruff, strict mypy, pytest with layer markers, pre-commit (gitleaks, commit lint), Makefile, .env.example, LICENSE |
+| 2 | LH-011 | Core module: typed settings with R2 credentials accessor, structlog setup with secret redaction, error hierarchy |
