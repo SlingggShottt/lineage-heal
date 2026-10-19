@@ -156,7 +156,7 @@ make up                   # Postgres, Dagster, API and dashboard
 | `make check` | Formatting, linting, type checks |
 | `make test` | Python, dbt and frontend tests |
 | `uv run lineageheal ingest amfi --date 2026-10-15` | Download one day of AMFI NAVs into the raw zone |
-| `uv run lineageheal ingest nse --date 2026-10-15` | Download one day of the NSE UDiFF bhavcopy into the raw zone |
+| `uv run lineageheal ingest nse --date 2026-10-15` | Download one day of the NSE UDiFF bhavcopy into the raw zone, and unzip a copy into the staged area dbt reads |
 | `uv run lineageheal backfill amfi --start 2026-10-01` | Load a date range (from 2024-01-01); safe to re-run |
 | `uv run dbt build --project-dir dbt --profiles-dir dbt --target dev` | Build the warehouse layers from the raw zone and run their quality tests |
 | `uv run lineageheal dev inject-fault amfi --fault blank-nav --date 2026-10-16` | Store a damaged copy of an ingested report in the local raw zone, to rehearse a failure (refuses to run against R2) |

@@ -60,7 +60,7 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 |---|---|---|---|---|
 | LH-022 | dbt project scaffold: profiles with dev/ci/bench/prod targets, schema macro, guard tests. Packages and sqlfluff are added with the first models that need them (LH-024, LH-027) | FR-WH-06 | Done | 2 |
 | LH-023 | Raw-zone sources in local-path mode for non-prod targets. The DuckDB R2 secret for prod moved to LH-082 | FR-WH-01 | Done | 2 |
-| LH-024 | Bronze models (5) with docs and tests. AMFI done; NSE bhavcopy (zip, see note in design doc), NSE security master, NSE corporate actions and FBIL remain | FR-WH-01, FR-WH-04 | In progress | |
+| LH-024 | Bronze models (5) with docs and tests. AMFI and NSE bhavcopy done (zips are staged, D-22); NSE security master (gzip, which DuckDB reads), NSE corporate actions (JSON) and FBIL remain | FR-WH-01, FR-WH-04 | In progress | |
 | LH-025 | Silver models (5) with docs and tests | FR-WH-02, FR-WH-04 | Todo | |
 | LH-026 | Gold models (4) with docs and tests, including cross-feed summary | FR-WH-03, FR-WH-04 | Todo | |
 | LH-027 | Elementary spike and anomaly monitors (fallback: custom z-score tests) | FR-WH-05 | Todo | |
@@ -158,3 +158,4 @@ A running record of completed work, used for the weekly diary.
 | 2 | LH-023 | Raw-zone sources in local-path mode: bronze reads the files the loaders wrote, through dbt sources that start every lineage path |
 | 2 | LH-083 | Fault injectors for AMFI reports (blank, negative, duplicate, wrong-date, renamed column) and a `dev inject-fault` command that refuses to touch R2; each fault proven to trip the expected dbt check |
 | 2 | LH-084 | Demo script `docs/demo.md`: 10-minute run-through verified by executing its own command blocks end to end, plus talking points, built-versus-not-built and likely questions |
+| 2 | LH-024 | Bronze, two of five models: AMFI NAVs and the NSE bhavcopy, with 36 checks. NSE zips are unzipped into a derived staged area (D-22); a file in the pre-July-2024 format is rejected by the model |

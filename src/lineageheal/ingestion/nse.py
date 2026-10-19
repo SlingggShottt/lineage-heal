@@ -15,6 +15,7 @@ import structlog
 from lineageheal.core.errors import IngestionError, SourceUnavailableError
 from lineageheal.ingestion.http import PoliteFetcher
 from lineageheal.ingestion.raw_zone import RawZone
+from lineageheal.ingestion.staging import ZipStager
 from lineageheal.ingestion.types import IngestionOutcome, IngestionResult
 
 log = structlog.get_logger(__name__)
@@ -59,10 +60,21 @@ class NseBhavcopyLoader:
     source = "nse"
     dataset = "cm_bhavcopy"
 
-    def __init__(self, fetcher: PoliteFetcher, zone: RawZone) -> None:
-        """Create a loader that downloads with `fetcher` and stores into `zone`."""
+    def __init__(
+        self, fetcher: PoliteFetcher, zone: RawZone, stager: ZipStager | None = None
+    ) -> None:
+        """Create a loader that downloads with `fetcher` and stores into `zone`.
+
+        Args:
+            fetcher: The HTTP client to download with.
+            zone: Where the zip is stored, exactly as published.
+            stager: If given, also unzips each stored file into the staged area that
+                dbt reads. Staging is repeated for an unchanged file, so re-running an
+                ingest repairs a missing staged copy.
+        """
         self._fetcher = fetcher
         self._zone = zone
+        self._stager = stager
 
     def load(self, trade_date: date) -> IngestionResult:
         """Download and store the bhavcopy for one trade date.
@@ -76,7 +88,7 @@ class NseBhavcopyLoader:
 
         Returns:
             The result: stored, unchanged (an identical file was already stored) or
-            no data.
+            no data. When a stager is configured, `staged_key` names the unzipped copy.
 
         Raises:
             SourceUnavailableError: NSE could not be reached or answered with a status
@@ -111,6 +123,7 @@ class NseBhavcopyLoader:
             content=content,
         )
         outcome = IngestionOutcome.STORED if stored.created else IngestionOutcome.UNCHANGED
+        staged_key = self._stager.stage(stored.key) if self._stager else None
         return IngestionResult(
             source=self.source,
             dataset=self.dataset,
@@ -118,4 +131,5 @@ class NseBhavcopyLoader:
             outcome=outcome,
             http_status=response.status_code,
             stored=stored,
+            staged_key=staged_key,
         )

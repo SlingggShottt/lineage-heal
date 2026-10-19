@@ -191,7 +191,16 @@ Measured on 19 October 2026 (LH-013) with a handful of requests, spaced a few se
 - Values that do not convert become null and are reported by `not_null` tests. A singular test checks that every row's NAV date equals the trade date of the folder it was stored in.
 - Bronze reads every stored version of a report, so a day AMFI republished appears once per version, told apart by `_source_file`. Silver chooses which version to keep (D-21).
 
-**Open design question: NSE zips.** The NSE bhavcopy is a zip archive, which DuckDB cannot read natively (it does read gzip, which the security master uses). The raw zone keeps the zip as published (D-02), so bronze needs one of: a small decompression step that writes derived CSVs outside the raw zone; a DuckDB community extension that reads zip; or a dbt-duckdb Python source plugin. This is decided when the NSE bronze model is built (LH-024).
+**NSE zips are staged (D-22).** The NSE bhavcopy is a zip archive. DuckDB cannot read zip natively (it does read gzip, which the security master uses), and the raw zone keeps the zip as published (D-02). So the NSE loader also unzips each stored file into a sibling `staged/` area of the same store, and dbt reads from there:
+
+```
+raw/source=nse/dataset=cm_bhavcopy/trade_date=D/<hash>__BhavCopy_..._0000.csv.zip     as published
+staged/source=nse/dataset=cm_bhavcopy/trade_date=D/<hash>__BhavCopy_..._0000.csv      derived
+```
+
+The staged key is derived from the raw key, so the hash prefix still says which raw version a row came from, and staging is idempotent: re-running an ingest repairs a missing staged copy, and the whole area can be rebuilt from the raw zone. Raw bytes are never touched. Staging checks the raw object's hash, accepts only single-file zips, and refuses one that would expand beyond 256 MB. Alternatives considered: a DuckDB community extension that reads zip (it works, but loads third-party binary code at run time, in every CI run, and its behaviour on MotherDuck is unknown) and a dbt-duckdb Python model (it would hide the SQL from column-level lineage).
+
+`brz_nse__cm_bhavcopy` follows the same pattern over the staged files. Its checks are `not_null` on the key and price columns, "not negative" on prices, volume and turnover, uniqueness per day, symbol, series and file, a date-match test, and a range test (the high is never below the low, and the close lies between them). A file in the pre-July-2024 format is rejected, because its column names do not match: alone it fails the model, and next to a healthy file it shows up as missing values.
 
 The dbt project lives in `dbt/`. Its profile has four targets: `dev` (local DuckDB file), `ci` (in-memory DuckDB), `bench` (a separate local file) and `prod` (MotherDuck, with the token read from `MOTHERDUCK_TOKEN`). Only `prod` is remote, and a test guards that the benchmark target can never be. Each layer builds into a schema of the same name (`bronze`, `silver`, `gold`) on every target, through a `generate_schema_name` override.
 

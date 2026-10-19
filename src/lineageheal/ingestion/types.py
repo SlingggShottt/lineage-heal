@@ -26,6 +26,7 @@ class IngestionResult:
     outcome: IngestionOutcome
     http_status: int
     stored: StoredObject | None  # None when the source had no data
+    staged_key: str | None = None  # the unzipped copy, for archived feeds
 
 
 class Loader(Protocol):

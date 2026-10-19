@@ -21,7 +21,8 @@ from lineageheal.ingestion.amfi import AmfiNavLoader, report_filename
 from lineageheal.ingestion.http import PoliteFetcher
 from lineageheal.ingestion.nse import NSE_BROWSER_HEADERS, NseBhavcopyLoader
 from lineageheal.ingestion.object_stores import LocalObjectStore
-from lineageheal.ingestion.raw_zone import RawZone, open_raw_zone
+from lineageheal.ingestion.raw_zone import RawZone, open_store
+from lineageheal.ingestion.staging import ZipStager
 from lineageheal.ingestion.types import IngestionOutcome, IngestionResult, Loader
 
 # India has no daylight saving, so a fixed offset is exact and avoids needing tzdata.
@@ -63,7 +64,8 @@ def main() -> None:
 def _open_loader(source: Source) -> Iterator[Loader]:
     """Build the loader for a source on the configured raw zone, closing it afterwards."""
     settings = get_settings()
-    zone = open_raw_zone(settings)
+    store = open_store(settings)
+    zone = RawZone(store)
     headers = NSE_BROWSER_HEADERS if source is Source.NSE else None
     with PoliteFetcher.create(
         min_interval_seconds=settings.ingest_min_interval_seconds, headers=headers
@@ -72,7 +74,7 @@ def _open_loader(source: Source) -> Iterator[Loader]:
             case Source.AMFI:
                 yield AmfiNavLoader(fetcher, zone)
             case Source.NSE:
-                yield NseBhavcopyLoader(fetcher, zone)
+                yield NseBhavcopyLoader(fetcher, zone, ZipStager(store))
 
 
 @contextmanager

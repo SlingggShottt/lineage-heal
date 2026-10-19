@@ -5,7 +5,8 @@ version: 2
 #
 # The location comes from RAW_ZONE_DIR, the same setting the loaders write to. This is
 # local-path mode, used by the dev, ci and bench targets. Reading from R2 on prod is
-# tracked in LH-082.
+# tracked in LH-082. Archived feeds (the NSE zip) are read from the staged area, an
+# unzipped copy derived from the raw file (D-22).
 sources:
   - name: raw_amfi
     description: >
@@ -38,3 +39,53 @@ sources:
             description: Net asset value per unit in rupees, as text.
           - name: Date
             description: NAV date as DD-Mon-YYYY, for example 15-Oct-2026.
+
+  - name: raw_nse
+    description: >
+      NSE CM-UDiFF bhavcopy, one file per trade date. The raw file is a zip; dbt reads the
+      unzipped copy from the staged area, whose file name keeps the hash of the raw zip it
+      came from.
+    meta:
+      external_location: >
+        read_csv('{{ env_var("RAW_ZONE_DIR", ".data/raw") }}/staged/source=nse/dataset=cm_bhavcopy/*/*.csv',
+        header = true, all_varchar = true, union_by_name = true, filename = true,
+        hive_partitioning = true)
+    tables:
+      - name: cm_bhavcopy
+        description: >
+          One row per instrument per trade date, all columns as text. Only the columns the
+          bronze model uses are listed; UDiFF has 34, many of them constant or empty for the
+          cash segment. Columns are matched by header name.
+        columns:
+          - name: TradDt
+            description: Trade date as YYYY-MM-DD.
+          - name: FinInstrmId
+            description: NSE's numeric instrument id.
+          - name: ISIN
+            description: International Securities Identification Number.
+          - name: TckrSymb
+            description: Ticker symbol.
+          - name: SctySrs
+            description: Series, such as EQ, BE or SM.
+          - name: FinInstrmNm
+            description: Instrument name.
+          - name: OpnPric
+            description: Opening price in rupees.
+          - name: HghPric
+            description: Highest price of the day in rupees.
+          - name: LwPric
+            description: Lowest price of the day in rupees.
+          - name: ClsPric
+            description: Closing price in rupees.
+          - name: LastPric
+            description: Last traded price in rupees.
+          - name: PrvsClsgPric
+            description: Previous day's closing price in rupees.
+          - name: SttlmPric
+            description: Settlement price in rupees. Can be empty.
+          - name: TtlTradgVol
+            description: Total traded quantity.
+          - name: TtlTrfVal
+            description: Total traded value in rupees.
+          - name: TtlNbOfTxsExctd
+            description: Number of trades.
