@@ -46,7 +46,7 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 | LH-015 | R2 storage client: content-addressed keys, put-if-absent, checksums | FR-ING-05, IF-SW-02 | Done | 2 |
 | LH-016 | Per-source calendars as seeds (NSE, AMFI, FBIL; 2024 onwards) | FR-ING-07 | Todo | |
 | LH-017 | NSE CM-UDiFF bhavcopy loader | FR-ING-01, FR-ING-10 | Done | 2 |
-| LH-018 | NSE security master and corporate actions loaders | FR-ING-02 | Todo | |
+| LH-018 | NSE security master and corporate actions loaders | FR-ING-02 | Done | 2 |
 | LH-019 | AMFI NAVAll loader | FR-ING-03 | Done | 2 |
 | LH-020 | FBIL reference rates loader | FR-ING-04 | Todo | |
 | LH-021 | `lineageheal` CLI: `ingest` and `backfill` commands | FR-ING-08, FR-ORC-05 | Done | 2 |
@@ -158,4 +158,5 @@ A running record of completed work, used for the weekly diary.
 | 2 | LH-023 | Raw-zone sources in local-path mode: bronze reads the files the loaders wrote, through dbt sources that start every lineage path |
 | 2 | LH-083 | Fault injectors for AMFI reports (blank, negative, duplicate, wrong-date, renamed column) and a `dev inject-fault` command that refuses to touch R2; each fault proven to trip the expected dbt check |
 | 2 | LH-084 | Demo script `docs/demo.md`: 10-minute run-through verified by executing its own command blocks end to end, plus talking points, built-versus-not-built and likely questions |
+| 2 | LH-018 | NSE security master and corporate actions loaders on a shared base with the bhavcopy loader; `--dataset` option on ingest and backfill; corrected an earlier misreading of the security master as ragged |
 | 2 | LH-024 | Bronze, two of five models: AMFI NAVs and the NSE bhavcopy, with 36 checks. NSE zips are unzipped into a derived staged area (D-22); a file in the pre-July-2024 format is rejected by the model |

@@ -1,0 +1,34 @@
+[
+  {
+    "bcEndDate": "-",
+    "bcStartDate": "-",
+    "caBroadcastDate": null,
+    "comp": "Bansal Wire Industries Limited",
+    "exDate": "16-Oct-2026",
+    "faceVal": "1",
+    "ind": "-",
+    "isin": "INE0B9K01025",
+    "ndEndDate": "-",
+    "ndStartDate": "-",
+    "recDate": "16-Oct-2026",
+    "series": "EQ",
+    "subject": "Face Value Split (Sub-Division) - From Rs 5/- Per Share To Re 1/- Per Share",
+    "symbol": "BANSALWIRE"
+  },
+  {
+    "bcEndDate": "-",
+    "bcStartDate": "-",
+    "caBroadcastDate": null,
+    "comp": "Hindustan Composites Limited",
+    "exDate": "16-Oct-2026",
+    "faceVal": "5",
+    "ind": "-",
+    "isin": "INE310C01011",
+    "ndEndDate": "-",
+    "ndStartDate": "-",
+    "recDate": "16-Oct-2026",
+    "series": "EQ",
+    "subject": "Special Dividend - Rs 21 Per Share",
+    "symbol": "HINDCOMPOS"
+  }
+]

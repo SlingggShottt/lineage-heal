@@ -113,6 +113,7 @@ docker compose down
 # Ingestion (writes to RAW_ZONE_DIR, or to R2 when RAW_ZONE_BACKEND=r2)
 uv run lineageheal ingest amfi --date 2026-10-15
 uv run lineageheal ingest nse --date 2026-10-15
+uv run lineageheal ingest nse --dataset security_master --date 2026-10-15   # or corporate_actions
 uv run lineageheal backfill amfi --start 2026-10-01 --end 2026-10-15
 uv run lineageheal dev inject-fault amfi --fault blank-nav --date 2026-10-15   # local raw zone only
 

@@ -19,7 +19,12 @@ from lineageheal.core.logging import configure_logging
 from lineageheal.core.settings import get_settings
 from lineageheal.ingestion.amfi import AmfiNavLoader, report_filename
 from lineageheal.ingestion.http import PoliteFetcher
-from lineageheal.ingestion.nse import NSE_BROWSER_HEADERS, NseBhavcopyLoader
+from lineageheal.ingestion.nse import (
+    NSE_BROWSER_HEADERS,
+    NseBhavcopyLoader,
+    NseCorporateActionsLoader,
+    NseSecurityMasterLoader,
+)
 from lineageheal.ingestion.object_stores import LocalObjectStore
 from lineageheal.ingestion.raw_zone import RawZone, open_store
 from lineageheal.ingestion.staging import ZipStager
@@ -42,10 +47,37 @@ class Source(enum.StrEnum):
     """Feeds that can be ingested from the command line."""
 
     AMFI = "amfi"
-    NSE = "nse"  # the CM-UDiFF bhavcopy; other NSE datasets follow in LH-018
+    NSE = "nse"
 
+
+# The datasets each source offers; the first is the default.
+DATASETS: dict[Source, tuple[str, ...]] = {
+    Source.AMFI: (AmfiNavLoader.dataset,),
+    Source.NSE: (
+        NseBhavcopyLoader.dataset,
+        NseSecurityMasterLoader.dataset,
+        NseCorporateActionsLoader.dataset,
+    ),
+}
 
 SourceArgument = Annotated[Source, typer.Argument(help="Data feed: amfi or nse.")]
+DatasetOption = Annotated[
+    str | None,
+    typer.Option(
+        "--dataset",
+        help="Dataset to load. NSE: cm_bhavcopy (default), security_master or corporate_actions.",
+    ),
+]
+
+
+def _resolve_dataset(source: Source, dataset: str | None) -> str:
+    """Return the requested dataset, defaulting to the source's first, or reject an unknown one."""
+    choices = DATASETS[source]
+    if dataset is None:
+        return choices[0]
+    if dataset not in choices:
+        raise typer.BadParameter(f"{source.value} datasets are: {', '.join(choices)}")
+    return dataset
 
 
 def today_ist(now: datetime | None = None) -> date:
@@ -61,8 +93,8 @@ def main() -> None:
 
 
 @contextmanager
-def _open_loader(source: Source) -> Iterator[Loader]:
-    """Build the loader for a source on the configured raw zone, closing it afterwards."""
+def _open_loader(source: Source, dataset: str) -> Iterator[Loader]:
+    """Build the loader for a source's dataset on the configured raw zone, closing it afterwards."""
     settings = get_settings()
     store = open_store(settings)
     zone = RawZone(store)
@@ -70,11 +102,17 @@ def _open_loader(source: Source) -> Iterator[Loader]:
     with PoliteFetcher.create(
         min_interval_seconds=settings.ingest_min_interval_seconds, headers=headers
     ) as fetcher:
-        match source:
-            case Source.AMFI:
+        match (source, dataset):
+            case (Source.AMFI, AmfiNavLoader.dataset):
                 yield AmfiNavLoader(fetcher, zone)
-            case Source.NSE:
+            case (Source.NSE, NseBhavcopyLoader.dataset):
                 yield NseBhavcopyLoader(fetcher, zone, ZipStager(store))
+            case (Source.NSE, NseSecurityMasterLoader.dataset):
+                yield NseSecurityMasterLoader(fetcher, zone)
+            case (Source.NSE, NseCorporateActionsLoader.dataset):
+                yield NseCorporateActionsLoader(fetcher, zone)
+            case _:
+                raise ConfigurationError(f"No loader for {source.value}/{dataset}")
 
 
 @contextmanager
@@ -97,6 +135,7 @@ def _describe(result: IngestionResult) -> str:
 @app.command()
 def ingest(
     source: SourceArgument,
+    dataset: DatasetOption = None,
     trade_date: Annotated[
         datetime | None,
         typer.Option(
@@ -107,8 +146,9 @@ def ingest(
     ] = None,
 ) -> None:
     """Download one day of a feed and store it unchanged in the raw zone."""
+    chosen = _resolve_dataset(source, dataset)
     day = trade_date.date() if trade_date else today_ist()
-    with _exit_on_project_errors(), _open_loader(source) as loader:
+    with _exit_on_project_errors(), _open_loader(source, chosen) as loader:
         typer.echo(_describe(loader.load(day)))
 
 
@@ -129,12 +169,14 @@ def backfill(
             "--end", formats=[DATE_FORMAT], help="Last trade date, YYYY-MM-DD. Defaults to today."
         ),
     ] = None,
+    dataset: DatasetOption = None,
 ) -> None:
     """Ingest every day in a range. Safe to re-run: stored days are skipped.
 
     A day that fails is reported and skipped so the rest still load; the exit code is 1
     if any day failed.
     """
+    chosen = _resolve_dataset(source, dataset)
     first = start.date()
     last = end.date() if end else today_ist()
     if first < EARLIEST_BACKFILL:
@@ -144,20 +186,20 @@ def backfill(
 
     outcomes: Counter[IngestionOutcome] = Counter()
     failed: list[date] = []
-    with _exit_on_project_errors(), _open_loader(source) as loader:
+    with _exit_on_project_errors(), _open_loader(source, chosen) as loader:
         for offset in range((last - first).days + 1):
             day = first + timedelta(days=offset)
             try:
                 result = loader.load(day)
             except LineageHealError as exc:
                 failed.append(day)
-                typer.echo(f"{day} {source.value} failed: {exc}", err=True)
+                typer.echo(f"{day} {source.value}/{chosen} failed: {exc}", err=True)
                 continue
             outcomes[result.outcome] += 1
             typer.echo(_describe(result))
 
     summary = ", ".join(f"{outcomes[o]} {o.value}" for o in IngestionOutcome)
-    typer.echo(f"backfill {source.value} {first}..{last}: {summary}, {len(failed)} failed")
+    typer.echo(f"backfill {source.value}/{chosen} {first}..{last}: {summary}, {len(failed)} failed")
     if failed:
         raise typer.Exit(code=1)
 
