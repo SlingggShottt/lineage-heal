@@ -50,6 +50,7 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 | LH-019 | AMFI NAVAll loader | FR-ING-03 | Done | 2 |
 | LH-020 | FBIL reference rates loader | FR-ING-04 | Todo | |
 | LH-021 | `lineageheal` CLI: `ingest` and `backfill` commands | FR-ING-08, FR-ORC-05 | Done | 2 |
+| LH-084 | Mid-project demo script: timed run-through, talking points, built-versus-planned, likely questions | — | Done | 2 |
 | LH-080 | Data spike: FBIL reference rates access. The site is a JavaScript app behind reCAPTCHA; find a documented download or API route, or agree a replacement feed. Blocks LH-020 | IF-SW-01, FR-ING-04 | Todo | |
 | LH-081 | Secret scanning in CI: add a gitleaks job over the pull request diff (the pre-commit hook only scans staged changes, so it cannot run in CI). Needs approval for the action | NFR-SEC-01 | Todo | |
 
@@ -156,3 +157,4 @@ A running record of completed work, used for the weekly diary.
 | 2 | LH-022 | dbt project scaffold: dev, ci, bench and prod targets (only prod on MotherDuck), exact schema names per layer, usage statistics off, guard tests |
 | 2 | LH-023 | Raw-zone sources in local-path mode: bronze reads the files the loaders wrote, through dbt sources that start every lineage path |
 | 2 | LH-083 | Fault injectors for AMFI reports (blank, negative, duplicate, wrong-date, renamed column) and a `dev inject-fault` command that refuses to touch R2; each fault proven to trip the expected dbt check |
+| 2 | LH-084 | Demo script `docs/demo.md`: 10-minute run-through verified by executing its own command blocks end to end, plus talking points, built-versus-not-built and likely questions |
