@@ -179,7 +179,7 @@ Say: Week 3 finishes the warehouse layers and the daily schedule. Week 4 builds 
 
 | Built and working | Not built yet |
 |---|---|
-| Polite loaders for AMFI and the NSE bhavcopy, with retries | NSE security master and corporate actions (loaders and bronze), FBIL |
+| Polite loaders for AMFI and three NSE datasets (bhavcopy, security master, corporate actions), with retries | Bronze models for the NSE security master and corporate actions; the FBIL loader |
 | Write-once, content-addressed raw storage (local, R2 ready) | Reading raw files from R2 in the warehouse |
 | dbt project with AMFI and NSE bronze models and 36 quality checks | Silver and gold layers |
 | Five fault injectors, each proven to trip its check | Unit-change faults and the full corpus of about 100 |

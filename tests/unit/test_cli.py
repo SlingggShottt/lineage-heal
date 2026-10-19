@@ -1,5 +1,6 @@
 """FR-ING-08 and FR-ORC-05: the ingest and backfill commands."""
 
+import gzip
 import zipfile
 from datetime import UTC, date, datetime
 from io import BytesIO
@@ -14,6 +15,7 @@ from typer.testing import CliRunner
 from lineageheal import cli
 from lineageheal.benchmark.faults import blank_nav, negative_nav
 from lineageheal.cli import app, today_ist
+from lineageheal.core.errors import ConfigurationError
 from lineageheal.ingestion.amfi import AMFI_REPORT_URL
 from lineageheal.ingestion.object_stores import LocalObjectStore
 from lineageheal.ingestion.raw_zone import RawZone
@@ -221,7 +223,7 @@ def test_backfill_loads_every_day_in_the_range_and_summarises(tmp_path: Path) ->
     assert [line.split()[0] for line in lines[:3]] == ["2026-10-13", "2026-10-14", "2026-10-15"]
     assert (
         lines[-1]
-        == "backfill amfi 2026-10-13..2026-10-15: 2 stored, 0 unchanged, 1 no_data, 0 failed"
+        == "backfill amfi/navall 2026-10-13..2026-10-15: 2 stored, 0 unchanged, 1 no_data, 0 failed"
     )
     assert len(stored_files(tmp_path)) == 2
 
@@ -241,7 +243,7 @@ def test_backfill_carries_on_past_a_failed_day_and_exits_nonzero(tmp_path: Path)
     )
 
     assert result.exit_code == 1
-    assert "2026-10-14 amfi failed: AMFI returned HTTP 403" in result.stderr
+    assert "2026-10-14 amfi/navall failed: AMFI returned HTTP 403" in result.stderr
     assert (
         result.stdout.strip()
         .splitlines()[-1]
@@ -366,3 +368,92 @@ def test_inject_fault_explains_how_to_fetch_a_missing_report() -> None:
 )
 def test_inject_fault_rejects_bad_input(arguments: list[str]) -> None:
     assert runner.invoke(app, arguments).exit_code == 2
+
+
+# --- NSE datasets ------------------------------------------------------------------------
+
+MASTER_URL = "https://nsearchives.nseindia.com/content/cm/NSE_CM_security_05072024.csv.gz"
+ACTIONS_URL = "https://www.nseindia.com/api/corporates-corporateActions"
+
+
+@respx.mock
+def test_ingest_nse_security_master_stores_the_gzip(tmp_path: Path) -> None:
+    published = gzip.compress(b"FinInstrmId,TckrSymb\n1,TCS\n")
+    respx.get(MASTER_URL).mock(return_value=httpx.Response(200, content=published))
+
+    result = runner.invoke(
+        app, ["ingest", "nse", "--dataset", "security_master", "--date", "2024-07-05"]
+    )
+
+    assert result.exit_code == 0
+    assert result.stdout.startswith("2024-07-05 nse/security_master stored")
+    (stored,) = sorted((tmp_path / "raw").rglob("*.csv.gz"))
+    assert stored.read_bytes() == published
+    assert not (tmp_path / "raw" / "staged").exists()  # DuckDB reads gzip natively
+
+
+@respx.mock
+def test_ingest_nse_corporate_actions_stores_the_response() -> None:
+    respx.get(ACTIONS_URL).mock(return_value=httpx.Response(200, content=b'[{"symbol": "TCS"}]'))
+
+    result = runner.invoke(
+        app, ["ingest", "nse", "--dataset", "corporate_actions", "--date", "2024-07-05"]
+    )
+
+    assert result.exit_code == 0
+    assert result.stdout.startswith("2024-07-05 nse/corporate_actions stored")
+
+
+@respx.mock
+def test_a_day_without_corporate_actions_is_reported_as_no_data() -> None:
+    respx.get(ACTIONS_URL).mock(return_value=httpx.Response(200, content=b"[]"))
+
+    result = runner.invoke(
+        app, ["ingest", "nse", "--dataset", "corporate_actions", "--date", "2024-07-06"]
+    )
+
+    assert result.exit_code == 0
+    assert result.stdout.strip() == "2024-07-06 nse/corporate_actions no_data"
+
+
+@respx.mock
+def test_backfill_accepts_a_dataset_and_names_it_in_the_summary() -> None:
+    respx.get(ACTIONS_URL).mock(return_value=httpx.Response(200, content=b"[]"))
+
+    result = runner.invoke(
+        app,
+        [
+            "backfill", "nse", "--dataset", "corporate_actions",
+            "--start", "2024-07-05", "--end", "2024-07-06",
+        ],
+    )  # fmt: skip
+
+    assert result.exit_code == 0
+    assert result.stdout.strip().splitlines()[-1] == (
+        "backfill nse/corporate_actions 2024-07-05..2024-07-06: "
+        "0 stored, 0 unchanged, 2 no_data, 0 failed"
+    )
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["ingest", "amfi", "--dataset", "security_master", "--date", "2024-07-05"],
+        ["ingest", "nse", "--dataset", "no_such_dataset", "--date", "2024-07-05"],
+        ["backfill", "amfi", "--dataset", "cm_bhavcopy", "--start", "2024-07-05"],
+    ],
+)
+def test_an_unknown_dataset_for_a_source_is_a_usage_error(arguments: list[str]) -> None:
+    result = runner.invoke(app, arguments)
+
+    assert result.exit_code == 2
+    assert "datasets are" in result.output
+
+
+def test_the_loader_registry_refuses_a_combination_it_has_no_loader_for() -> None:
+    """Defensive: the commands validate the dataset first, so this guards a registry gap."""
+    with (
+        pytest.raises(ConfigurationError, match="No loader for amfi/nope"),
+        cli._open_loader(cli.Source.AMFI, "nope"),
+    ):
+        pass
