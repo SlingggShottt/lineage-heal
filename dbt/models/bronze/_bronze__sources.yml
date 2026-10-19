@@ -42,16 +42,16 @@ sources:
 
   - name: raw_nse
     description: >
-      NSE CM-UDiFF bhavcopy, one file per trade date. The raw file is a zip; dbt reads the
-      unzipped copy from the staged area, whose file name keeps the hash of the raw zip it
-      came from.
-    meta:
-      external_location: >
-        read_csv('{{ env_var("RAW_ZONE_DIR", ".data/raw") }}/staged/source=nse/dataset=cm_bhavcopy/*/*.csv',
-        header = true, all_varchar = true, union_by_name = true, filename = true,
-        hive_partitioning = true)
+      NSE datasets, one file per date. Each table has its own location and reader, because
+      the formats differ: a zip (read from the staged area, whose file names keep the hash of
+      the raw zip they came from), a gzipped CSV and a JSON array.
     tables:
       - name: cm_bhavcopy
+        meta:
+          external_location: >
+            read_csv('{{ env_var("RAW_ZONE_DIR", ".data/raw") }}/staged/source=nse/dataset=cm_bhavcopy/*/*.csv',
+            header = true, all_varchar = true, union_by_name = true, filename = true,
+            hive_partitioning = true)
         description: >
           One row per instrument per trade date, all columns as text. Only the columns the
           bronze model uses are listed; UDiFF has 34, many of them constant or empty for the
@@ -89,3 +89,73 @@ sources:
             description: Total traded value in rupees.
           - name: TtlNbOfTxsExctd
             description: Number of trades.
+
+      - name: security_master
+        meta:
+          external_location: >
+            read_csv('{{ env_var("RAW_ZONE_DIR", ".data/raw") }}/raw/source=nse/dataset=security_master/*/*.csv.gz',
+            header = true, all_varchar = true, union_by_name = true, filename = true,
+            hive_partitioning = true)
+        description: >
+          NSE's security master: one row per listed instrument per date, 120 columns, all as
+          text. DuckDB reads the gzip directly. Only the columns the bronze model uses are
+          listed. Dates are seconds since 1980-01-01, and 0 means "not set".
+        columns:
+          - name: FinInstrmId
+            description: NSE's numeric instrument id, unique within a file.
+          - name: TckrSymb
+            description: Ticker symbol.
+          - name: SctySrs
+            description: Series, such as EQ, BE or SM.
+          - name: FinInstrmNm
+            description: Instrument name.
+          - name: ISIN
+            description: International Securities Identification Number.
+          - name: NewBrdLotQty
+            description: Board lot size.
+          - name: ParVal
+            description: Par (face) value in paise, not rupees. 1000 means Rs 10.
+          - name: SctyTpFlg
+            description: Security type flag.
+          - name: IssdCptl
+            description: Issued capital in shares, in scientific notation such as 1.35E+10.
+          - name: IsseDt
+            description: Issue date, as seconds since 1980-01-01.
+          - name: ListgDt
+            description: Listing date, as seconds since 1980-01-01. 0 when not set.
+
+      - name: corporate_actions
+        meta:
+          external_location: >
+            read_json('{{ env_var("RAW_ZONE_DIR", ".data/raw") }}/raw/source=nse/dataset=corporate_actions/*/*.json',
+            format = 'array', union_by_name = true, filename = true, hive_partitioning = true)
+        description: >
+          Corporate actions (splits, bonuses, dividends, rights and so on) whose ex-date is
+          the date of the folder, as returned by NSE's API. A day with no actions has no file.
+        columns:
+          - name: symbol
+            description: Ticker symbol.
+          - name: series
+            description: Series, such as EQ.
+          - name: isin
+            description: ISIN.
+          - name: comp
+            description: Company name.
+          - name: subject
+            description: Free-text description of the action, for example "Bonus 1:1".
+          - name: exDate
+            description: Ex-date as DD-Mon-YYYY.
+          - name: recDate
+            description: Record date as DD-Mon-YYYY.
+          - name: bcStartDate
+            description: Book closure start, or "-" when none.
+          - name: bcEndDate
+            description: Book closure end, or "-" when none.
+          - name: ndStartDate
+            description: No-delivery period start, or "-" when none.
+          - name: ndEndDate
+            description: No-delivery period end, or "-" when none.
+          - name: faceVal
+            description: Face value in rupees, as text.
+          - name: ind
+            description: Indicator, or "-" when none.

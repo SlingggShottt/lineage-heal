@@ -5,10 +5,13 @@ temporary DuckDB file, and inspects which models and tests passed. Damaged files
 stored as a second version of the same trade date, the way a bad republication would arrive.
 """
 
+import csv
+import gzip
+import json
 import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
@@ -36,6 +39,12 @@ NSE_FIXTURE = NSE_DIR / "cm_bhavcopy_udiff_2024-07-05_sample.csv"
 NSE_OLD_FORMAT_FIXTURE = NSE_DIR / "cm_bhavcopy_old_2024-07-05_sample.csv"
 NSE_TRADE_DATE = date(2024, 7, 5)
 NSE_FILENAME = "BhavCopy_NSE_CM_0_0_0_20240705_F_0000.csv"
+
+MASTER_MODEL = "brz_nse__security_master"
+ACTIONS_MODEL = "brz_nse__corporate_actions"
+REFERENCE_DATE = date(2026, 10, 16)
+MASTER_FIXTURE = NSE_DIR / "security_master_sample.csv"
+ACTIONS_FIXTURE = NSE_DIR / "corporate_actions_sample.json"
 
 
 @dataclass
@@ -85,6 +94,24 @@ class Workspace:
             content=buffer.getvalue(),
         )
         self.stager.stage(stored.key)
+
+    def store_security_master(self, csv_content: bytes) -> None:
+        self.zone.put_if_absent(
+            source="nse",
+            dataset="security_master",
+            trade_date=REFERENCE_DATE,
+            filename="NSE_CM_security_16102026.csv.gz",
+            content=gzip.compress(csv_content),
+        )
+
+    def store_corporate_actions(self, json_content: bytes) -> None:
+        self.zone.put_if_absent(
+            source="nse",
+            dataset="corporate_actions",
+            trade_date=REFERENCE_DATE,
+            filename="corporate_actions_20261016.json",
+            content=json_content,
+        )
 
 
 @pytest.fixture
@@ -403,3 +430,321 @@ def test_an_added_bhavcopy_column_is_tolerated(workspace: Workspace) -> None:
     workspace.store_nse(widened)
 
     assert workspace.build(NSE_MODEL).success
+
+
+# --- NSE security master -----------------------------------------------------------------
+
+MASTER_UNIQUE_ID_TEST = "unique_combination_brz_nse__security_master_instrument_id___source_file"
+MASTER_UNIQUE_SYMBOL_TEST = (
+    "unique_combination_brz_nse__security_master_symbol__series___source_file"
+)
+
+
+def healthy_master() -> bytes:
+    return MASTER_FIXTURE.read_bytes()
+
+
+def edit_master(content: bytes, symbol: str, edit: Callable[[dict[str, str]], None]) -> bytes:
+    """Change one instrument's row (by symbol, series EQ) and write the CSV back."""
+    reader = csv.DictReader(content.decode("utf-8").splitlines())
+    fieldnames = list(reader.fieldnames or [])
+    rows = list(reader)
+    for row in rows:
+        if row["TckrSymb"] == symbol and row["SctySrs"] == "EQ":
+            edit(row)
+    out = _StringLines()
+    writer = csv.DictWriter(out, fieldnames=fieldnames, lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(rows)
+    return out.text().encode("utf-8")
+
+
+class _StringLines:
+    """A write target for csv that collects the text."""
+
+    def __init__(self) -> None:
+        self._parts: list[str] = []
+
+    def write(self, text: str) -> int:
+        self._parts.append(text)
+        return len(text)
+
+    def text(self) -> str:
+        return "".join(self._parts)
+
+
+def sets(**values: str) -> Callable[[dict[str, str]], None]:
+    def edit(row: dict[str, str]) -> None:
+        row.update(values)
+
+    return edit
+
+
+def test_untouched_master_survives_the_edit_helper() -> None:
+    """Guards the helper: with no change it must reproduce the published bytes."""
+    original = healthy_master()
+
+    assert edit_master(original, "RELIANCE", sets()) == original
+
+
+def test_a_healthy_security_master_builds_and_every_test_passes(workspace: Workspace) -> None:
+    workspace.store_security_master(healthy_master())
+
+    result = workspace.build(MASTER_MODEL)
+
+    assert result.success
+    assert result.failed() == set()
+
+
+def test_security_master_rows_are_typed_and_dates_are_decoded(workspace: Workspace) -> None:
+    workspace.store_security_master(healthy_master())
+
+    result = workspace.build(MASTER_MODEL)
+
+    (count,) = result.query("select count(*) from bronze.brz_nse__security_master")[0]
+    assert count == 7
+    row = result.query(
+        "select instrument_id, series, instrument_name, isin, board_lot_qty, par_value_paise, "
+        "issued_capital_shares, issue_date, listing_date "
+        "from bronze.brz_nse__security_master where symbol = 'RELIANCE'"
+    )[0]
+    assert row == (
+        2885,
+        "EQ",
+        "RELIANCE INDUSTRIES LTD",
+        "INE002A01018",
+        1,
+        Decimal("1000.00"),
+        Decimal("13532538722"),
+        date(1980, 1, 1) + timedelta(days=467424000 // 86400),
+        date(1995, 11, 29),
+    )
+
+
+def test_an_unset_listing_date_is_null_not_the_1980_epoch(workspace: Workspace) -> None:
+    workspace.store_security_master(edit_master(healthy_master(), "TCS", sets(ListgDt="0")))
+
+    result = workspace.build(MASTER_MODEL)
+
+    assert result.success
+    assert result.query(
+        "select listing_date from bronze.brz_nse__security_master where symbol = 'TCS'"
+    ) == [(None,)]
+
+
+@pytest.mark.parametrize(
+    ("symbol", "edit", "expected_failures"),
+    [
+        pytest.param(
+            "RELIANCE",
+            sets(TckrSymb=""),
+            {"not_null_brz_nse__security_master_symbol"},
+            id="blank symbol",
+        ),
+        pytest.param(
+            "RELIANCE",
+            sets(FinInstrmId="not-a-number"),
+            {"not_null_brz_nse__security_master_instrument_id"},
+            id="unreadable instrument id",
+        ),
+        pytest.param(
+            "RELIANCE",
+            sets(NewBrdLotQty="-1"),
+            {"non_negative_brz_nse__security_master_board_lot_qty"},
+            id="negative lot size",
+        ),
+        pytest.param(
+            "RELIANCE",
+            sets(ParVal=""),
+            {"not_null_brz_nse__security_master_par_value_paise"},
+            id="missing par value",
+        ),
+    ],
+)
+def test_each_security_master_fault_is_caught_by_the_expected_check(
+    workspace: Workspace,
+    symbol: str,
+    edit: Callable[[dict[str, str]], None],
+    expected_failures: set[str],
+) -> None:
+    workspace.store_security_master(edit_master(healthy_master(), symbol, edit))
+
+    result = workspace.build(MASTER_MODEL)
+
+    assert not result.success
+    assert result.failed() == expected_failures
+
+
+def test_a_duplicated_instrument_is_caught_by_both_uniqueness_checks(
+    workspace: Workspace,
+) -> None:
+    lines = healthy_master().decode("utf-8").splitlines()
+    reliance = next(line for line in lines if ",RELIANCE,EQ," in line)
+    workspace.store_security_master(("\n".join([*lines, reliance]) + "\n").encode("utf-8"))
+
+    result = workspace.build(MASTER_MODEL)
+
+    assert result.failed() == {MASTER_UNIQUE_ID_TEST, MASTER_UNIQUE_SYMBOL_TEST}
+
+
+def test_a_renamed_security_master_column_breaks_the_model(workspace: Workspace) -> None:
+    workspace.store_security_master(healthy_master().replace(b",TckrSymb,", b",Ticker,", 1))
+
+    result = workspace.build(MASTER_MODEL)
+
+    assert result.statuses[MASTER_MODEL] == "error"
+    assert result.statuses["not_null_brz_nse__security_master_symbol"] == "skipped"
+
+
+def test_an_added_security_master_column_is_tolerated(workspace: Workspace) -> None:
+    header, *rows = healthy_master().rstrip(b"\n").split(b"\n")
+    widened = b"\n".join([header + b",Extra", *(row + b",x" for row in rows)]) + b"\n"
+    workspace.store_security_master(widened)
+
+    assert workspace.build(MASTER_MODEL).success
+
+
+def test_par_value_switching_from_paise_to_rupees_is_invisible_to_bronze(
+    workspace: Workspace,
+) -> None:
+    """A known limit, written down on purpose: the values stay valid numbers.
+
+    NSE publishes par value in paise (1000 means Rs 10). A silent switch to rupees would
+    shrink every value by 100 and still pass every bronze check. Catching it needs corporate
+    actions' face value (in rupees) as a reference, which is a cross-feed check for silver
+    (LH-028) and a unit-change fault for the benchmark.
+    """
+    workspace.store_security_master(edit_master(healthy_master(), "RELIANCE", sets(ParVal="10")))
+
+    result = workspace.build(MASTER_MODEL)
+
+    assert result.success
+
+
+# --- NSE corporate actions -----------------------------------------------------------------
+
+
+def healthy_actions() -> list[dict[str, object]]:
+    return json.loads(ACTIONS_FIXTURE.read_bytes())  # type: ignore[no-any-return]
+
+
+def as_json(records: list[dict[str, object]]) -> bytes:
+    return json.dumps(records).encode("utf-8")
+
+
+def with_first(**changes: object) -> list[dict[str, object]]:
+    records = healthy_actions()
+    records[0].update(changes)
+    return records
+
+
+def test_healthy_corporate_actions_build_and_every_test_passes(workspace: Workspace) -> None:
+    workspace.store_corporate_actions(as_json(healthy_actions()))
+
+    result = workspace.build(ACTIONS_MODEL)
+
+    assert result.success
+    assert result.failed() == set()
+
+
+def test_corporate_actions_are_typed_and_placeholders_become_null(workspace: Workspace) -> None:
+    workspace.store_corporate_actions(as_json(healthy_actions()))
+
+    result = workspace.build(ACTIONS_MODEL)
+
+    (count,) = result.query("select count(*) from bronze.brz_nse__corporate_actions")[0]
+    assert count == 4
+    row = result.query(
+        "select series, company_name, ex_date, record_date, book_closure_start_date, "
+        "no_delivery_end_date, face_value_inr, indicator, subject like 'Face Value Split%' "
+        "from bronze.brz_nse__corporate_actions where symbol = 'BANSALWIRE'"
+    )[0]
+    assert row == (
+        "EQ",
+        "Bansal Wire Industries Limited",
+        date(2026, 10, 16),
+        date(2026, 10, 16),
+        None,
+        None,
+        Decimal("1.0000"),
+        None,
+        True,
+    )
+
+
+@pytest.mark.parametrize(
+    ("records", "expected_failures"),
+    [
+        pytest.param(
+            with_first(symbol=None),
+            {"not_null_brz_nse__corporate_actions_symbol"},
+            id="missing symbol",
+        ),
+        pytest.param(
+            with_first(subject=None),
+            {"not_null_brz_nse__corporate_actions_subject"},
+            id="missing description",
+        ),
+        pytest.param(
+            with_first(exDate="15-Oct-2026"),
+            {"assert_brz_nse__corporate_actions_ex_dates_match_their_file"},
+            id="ex-date for another day",
+        ),
+        pytest.param(
+            with_first(exDate="2026-10-16"),
+            {"not_null_brz_nse__corporate_actions_ex_date"},
+            id="unreadable ex-date",
+        ),
+        pytest.param(
+            with_first(faceVal="-1"),
+            {"non_negative_brz_nse__corporate_actions_face_value_inr"},
+            id="negative face value",
+        ),
+        pytest.param(
+            [*healthy_actions(), healthy_actions()[0]],
+            {
+                "unique_combination_brz_nse__corporate_actions_"
+                "symbol__series__subject__ex_date___source_file"
+            },
+            id="duplicated record",
+        ),
+    ],
+)
+def test_each_corporate_actions_fault_is_caught_by_the_expected_check(
+    workspace: Workspace,
+    records: list[dict[str, object]],
+    expected_failures: set[str],
+) -> None:
+    workspace.store_corporate_actions(as_json(records))
+
+    result = workspace.build(ACTIONS_MODEL)
+
+    assert not result.success
+    assert result.failed() == expected_failures
+
+
+def rename_key(records: list[dict[str, object]], old: str, new: str) -> list[dict[str, object]]:
+    return [{(new if key == old else key): value for key, value in r.items()} for r in records]
+
+
+def test_a_renamed_corporate_actions_key_breaks_the_model(workspace: Workspace) -> None:
+    workspace.store_corporate_actions(as_json(rename_key(healthy_actions(), "exDate", "exDt")))
+
+    result = workspace.build(ACTIONS_MODEL)
+
+    assert result.statuses[ACTIONS_MODEL] == "error"
+    assert result.statuses["not_null_brz_nse__corporate_actions_ex_date"] == "skipped"
+
+
+def test_a_change_of_letter_case_in_a_key_is_not_schema_drift(workspace: Workspace) -> None:
+    """DuckDB matches column names without regard to case, so exDate and exdate are the same."""
+    workspace.store_corporate_actions(as_json(rename_key(healthy_actions(), "exDate", "exdate")))
+
+    assert workspace.build(ACTIONS_MODEL).success
+
+
+def test_an_added_corporate_actions_key_is_tolerated(workspace: Workspace) -> None:
+    records = [{**record, "extra": "x"} for record in healthy_actions()]
+    workspace.store_corporate_actions(as_json(records))
+
+    assert workspace.build(ACTIONS_MODEL).success

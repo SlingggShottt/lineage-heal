@@ -34,7 +34,7 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 | ID | Task | Refs | Status | Week done |
 |---|---|---|---|---|
 | LH-005 | Write project documentation: CLAUDE, README, context, PRD, SRS, design, style guide, tech stack, backlog | — | Done | 2 |
-| LH-006 | Create service accounts: Cloudflare R2, MotherDuck, Neon, Google AI Studio, Groq, LangSmith | NFR-COST-01 | Todo | |
+| LH-006 | Create service accounts: Cloudflare R2, MotherDuck, Neon, Google AI Studio, Groq, LangSmith. Deferred while everything runs locally (D-23); R2 needs a payment method on file | NFR-COST-01 | Todo | |
 | LH-007 | Scaffold Python project: pyproject, uv, src layout, ruff, mypy, pytest, pre-commit (incl. gitleaks, commit lint), Makefile, .editorconfig, .gitignore, .env.example, LICENSE | NFR-MAINT-02, NFR-SEC-01 | Done | 2 |
 | LH-008 | Configure GitHub repo: branch protection, PR and issue templates, Dependabot | NFR-SEC-05 | Todo | |
 | LH-009 | CI workflow for Python: format, lint, types, tests | NFR-MAINT-02 | Done | 2 |
@@ -60,7 +60,7 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 |---|---|---|---|---|
 | LH-022 | dbt project scaffold: profiles with dev/ci/bench/prod targets, schema macro, guard tests. Packages and sqlfluff are added with the first models that need them (LH-024, LH-027) | FR-WH-06 | Done | 2 |
 | LH-023 | Raw-zone sources in local-path mode for non-prod targets. The DuckDB R2 secret for prod moved to LH-082 | FR-WH-01 | Done | 2 |
-| LH-024 | Bronze models (5) with docs and tests. AMFI and NSE bhavcopy done (zips are staged, D-22); NSE security master (gzip, which DuckDB reads), NSE corporate actions (JSON) and FBIL remain | FR-WH-01, FR-WH-04 | In progress | |
+| LH-024 | Bronze models (5) with docs and tests. AMFI, NSE bhavcopy (zips are staged, D-22), NSE security master and NSE corporate actions done; only FBIL remains, blocked by LH-080 | FR-WH-01, FR-WH-04 | In progress | |
 | LH-025 | Silver models (5) with docs and tests | FR-WH-02, FR-WH-04 | Todo | |
 | LH-026 | Gold models (4) with docs and tests, including cross-feed summary | FR-WH-03, FR-WH-04 | Todo | |
 | LH-027 | Elementary spike and anomaly monitors (fallback: custom z-score tests) | FR-WH-05 | Todo | |
@@ -73,6 +73,7 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 | LH-034 | Persist dbt artifacts and record failure signals per run | FR-WH-07, FR-ORC-04 | Todo | |
 | LH-035 | Historical backfill from January 2024 to R2 and MotherDuck | FR-ING-08 | Todo | |
 | LH-082 | DuckDB R2 secret and httpfs for the prod target: read the raw zone from R2 instead of a local path | FR-WH-01 | Todo | |
+| LH-085 | Speed up the dbt scenario tests by parsing the project once and reusing the manifest (measured: builds take about 0.75 s instead of 1.5 s); do it when the suite passes about three minutes | NFR-MAINT-02 | Todo | |
 
 ## Week 4 — Lineage, detection and investigation
 

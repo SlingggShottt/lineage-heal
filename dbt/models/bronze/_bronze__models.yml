@@ -134,3 +134,123 @@ models:
         description: Path of the staged file the row came from.
         data_tests:
           - not_null
+
+  - name: brz_nse__security_master
+    description: >
+      NSE's security master, typed and renamed to project conventions: one row per listed
+      instrument per stored version of the file. Dates are decoded from NSE's 1980-based
+      seconds, with 0 meaning not set. Par value is kept in paise, as published. Columns are
+      matched by header name, so a renamed column fails the model. Bronze cannot tell that
+      the par value switched to rupees, because the values stay valid numbers; that check
+      needs corporate actions' face value and belongs to silver.
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [instrument_id, _source_file]
+      - unique_combination:
+          arguments:
+            columns: [symbol, series, _source_file]
+    columns:
+      - name: instrument_id
+        description: NSE's numeric instrument id.
+        data_tests:
+          - not_null
+      - name: symbol
+        description: Ticker symbol.
+        data_tests:
+          - not_null
+      - name: series
+        description: Series, such as EQ, BE or SM.
+        data_tests:
+          - not_null
+      - name: instrument_name
+        description: Instrument name as published.
+        data_tests:
+          - not_null
+      - name: isin
+        description: ISIN. Null when absent.
+      - name: board_lot_qty
+        description: Board lot size.
+        data_tests:
+          - not_null
+          - non_negative
+      - name: par_value_paise
+        description: Par (face) value in paise, so 1000 means Rs 10.
+        data_tests:
+          - not_null
+          - non_negative
+      - name: issued_capital_shares
+        description: Issued capital in shares. Null when not published.
+        data_tests:
+          - non_negative
+      - name: issue_date
+        description: Issue date. Null when not set.
+      - name: listing_date
+        description: Listing date. Null when not set.
+      - name: security_type_flag
+        description: Security type flag as published.
+      - name: _trade_date
+        description: The date of the folder the file was stored under.
+        data_tests:
+          - not_null
+      - name: _source_file
+        description: Path of the raw file the row came from.
+        data_tests:
+          - not_null
+
+  - name: brz_nse__corporate_actions
+    description: >
+      NSE corporate actions (splits, bonuses, dividends, rights and so on), typed and
+      renamed to project conventions: one row per action per stored version of the day's
+      file. The description of what the action is stays in `subject` as free text; turning
+      it into a type and ratio is silver's job. A day with no actions has no file and so no
+      rows. NSE's "-" placeholders become nulls.
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [symbol, series, subject, ex_date, _source_file]
+    columns:
+      - name: symbol
+        description: Ticker symbol.
+        data_tests:
+          - not_null
+      - name: series
+        description: Series, such as EQ.
+        data_tests:
+          - not_null
+      - name: isin
+        description: ISIN. Null when absent.
+      - name: company_name
+        description: Company name as published.
+      - name: subject
+        description: Free-text description of the action, for example 'Bonus 1:1'.
+        data_tests:
+          - not_null
+      - name: ex_date
+        description: The date the share trades without the entitlement.
+        data_tests:
+          - not_null
+      - name: record_date
+        description: The date the entitlement is decided. Null when not applicable.
+      - name: book_closure_start_date
+        description: Book closure start. Null when none.
+      - name: book_closure_end_date
+        description: Book closure end. Null when none.
+      - name: no_delivery_start_date
+        description: No-delivery period start. Null when none.
+      - name: no_delivery_end_date
+        description: No-delivery period end. Null when none.
+      - name: face_value_inr
+        description: Face value in rupees. Null when not stated.
+        data_tests:
+          - non_negative
+      - name: indicator
+        description: Indicator as published. Null when none.
+      - name: _trade_date
+        description: The ex-date of the folder the file was stored under.
+        data_tests:
+          - not_null
+      - name: _source_file
+        description: Path of the raw file the row came from.
+        data_tests:
+          - not_null
