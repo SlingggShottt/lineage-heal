@@ -53,7 +53,10 @@ htmlcov/
 # Local DuckDB databases for dev, ci and bench targets, plus any downloaded data.
 # Raw source files must never be committed (NFR-COMP-01); only small samples
 # under tests/fixtures/ are allowed.
-.data/
+# The folder itself is tracked through .gitkeep because DuckDB cannot create a
+# missing parent directory, so a fresh clone needs it to exist.
+.data/*
+!.data/.gitkeep
 *.duckdb
 *.duckdb.wal
 

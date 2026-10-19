@@ -57,7 +57,7 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 
 | ID | Task | Refs | Status | Week done |
 |---|---|---|---|---|
-| LH-022 | dbt project scaffold: profiles with dev/ci/bench/prod targets, packages, sqlfluff | FR-WH-06 | Todo | |
+| LH-022 | dbt project scaffold: profiles with dev/ci/bench/prod targets, schema macro, guard tests. Packages and sqlfluff are added with the first models that need them (LH-024, LH-027) | FR-WH-06 | Done | 2 |
 | LH-023 | Raw-zone sources: DuckDB R2 secret, local-path mode for non-prod targets | FR-WH-01 | Todo | |
 | LH-024 | Bronze models (5) with docs and tests | FR-WH-01, FR-WH-04 | Todo | |
 | LH-025 | Silver models (5) with docs and tests | FR-WH-02, FR-WH-04 | Todo | |
@@ -151,3 +151,4 @@ A running record of completed work, used for the weekly diary.
 | 2 | LH-017 | NSE UDiFF bhavcopy loader: browser-like headers, zip integrity check, 404 as no data, `ingest nse` and `backfill nse`; verified live |
 | 2 | LH-019 | AMFI loader: polite fetcher with retries and rate limit, per-date report download, no-data handling, verified live |
 | 2 | LH-021 | `lineageheal` CLI with `ingest` and `backfill` (AMFI only so far; NSE and FBIL plug in as their loaders land) |
+| 2 | LH-022 | dbt project scaffold: dev, ci, bench and prod targets (only prod on MotherDuck), exact schema names per layer, usage statistics off, guard tests |

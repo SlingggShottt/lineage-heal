@@ -15,6 +15,7 @@ requires-python = ">=3.12,<3.13"
 # package in this list has a reason that can be traced to a backlog item.
 dependencies = [
     "boto3>=1.43.114",
+    "dbt-duckdb>=1.11.0",
     "httpx>=0.28.1",
     "pydantic-settings>=2.16.0",
     "structlog>=26.1.0",

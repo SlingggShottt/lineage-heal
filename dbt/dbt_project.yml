@@ -1,0 +1,34 @@
+# dbt_project.yml
+# The LineageHeal dbt project: bronze (typed raw), silver (cleaned and conformed) and
+# gold (business-ready) layers on DuckDB, with MotherDuck for the live pipeline.
+# Run from the repository root:
+#   uv run dbt build --project-dir dbt --profiles-dir dbt --target dev
+name: lineageheal
+version: "0.1.0"
+config-version: 2
+profile: lineageheal
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+target-path: target
+clean-targets: ["target", "dbt_packages"]
+
+# dbt sends anonymous usage statistics unless told not to; nobody has opted in.
+flags:
+  send_anonymous_usage_stats: false
+
+# A model may only read from its own layer or a lower one. Each layer gets its own
+# schema (see macros/generate_schema_name.sql) so layers are visible in the warehouse.
+models:
+  lineageheal:
+    bronze:
+      +schema: bronze
+      +materialized: table
+    silver:
+      +schema: silver
+      +materialized: table
+    gold:
+      +schema: gold
+      +materialized: table
