@@ -20,3 +20,11 @@ indent_style = tab
 # Trailing double space is a Markdown line break.
 [*.md]
 trim_trailing_whitespace = false
+
+# Fixtures are raw source files kept exactly as published, so editors must not tidy them.
+[tests/fixtures/**]
+end_of_line = unset
+insert_final_newline = unset
+trim_trailing_whitespace = false
+indent_style = unset
+indent_size = unset

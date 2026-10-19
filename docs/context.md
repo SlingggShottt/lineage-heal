@@ -114,6 +114,7 @@ Full design: `docs/design_architecture.md`.
 | D-16 | API on Render's free tier, dashboard on Cloudflare Pages | Free, Git-based deploys; a cold start of about a minute is acceptable for a demo |
 | D-17 | Dashboard login via GitHub OAuth; only allowlisted accounts can approve, everyone else is read-only | Approvals are attributable to a person, and a public demo link cannot merge anything |
 | D-18 | Agents open pull requests and issues through a dedicated GitHub App | Bot identity distinct from team members, with narrowly scoped permissions |
+| D-19 | The AMFI loader fetches the per-date history report, not the live `NAVAll.txt` snapshot, and bronze selects columns by header name | The live file holds 829 different NAV dates and cannot be fetched for a past date; the two endpoints also name and order columns differently (LH-013) |
 
 ## Constraints
 
@@ -140,12 +141,12 @@ Task-level detail lives in `backlog.md`.
 ## Current status
 **Current diary week:** 2
 - **Week 1 (complete):** topic finalised with the guide; background research on data incidents and the NSE UDiFF change; feeds and tech stack chosen; synopsis prepared.
-- **Week 2 (in progress):** project documentation (LH-005), Python scaffold with tooling (LH-007) and core module (LH-011) done. Next: R2 account (LH-006, manual), then storage client (LH-015) and the AMFI loader (LH-013, LH-019). A mid-project evaluation demo is due within days, so Week 2 tasks are ordered to reach a working ingest-to-R2 slice first.
+- **Week 2 (in progress):** project documentation (LH-005), Python scaffold with tooling (LH-007) and core module (LH-011) and the AMFI source spike (LH-013) done. FBIL access is unresolved (LH-080). Next: R2 account (LH-006, manual), then storage client (LH-015) and the AMFI loader (LH-019). A mid-project evaluation demo is due within days, so Week 2 tasks are ordered to reach a working ingest-to-R2 slice first.
 
 ## Open questions
 
 1. Can NSE archives be reached reliably from GitHub Actions runners, or do cloud IP ranges get blocked? (Week 2 data spike)
-2. How much FBIL history can be retrieved, and in what format? (Week 2 data spike)
+2. How can FBIL reference rates be retrieved at all, and how much history is there? The site is a JavaScript application behind reCAPTCHA with no plain file URL (LH-013). To be resolved by hand in a browser, then recorded (LH-080).
 3. Does Elementary run correctly on DuckDB and MotherDuck? (Week 3 spike; fallback is custom statistical tests in dbt)
 4. Which venue to target for the research paper? (Decided after the build)
 
@@ -156,6 +157,7 @@ Resolved: fix scope outside dbt (D-14), hosting (D-16).
 | Risk | Impact | Mitigation |
 |---|---|---|
 | Source sites block automated or cloud traffic | Ingestion fails in CI | Polite headers and rates, caching, fallback to running ingestion locally and syncing to R2 |
+| FBIL offers no scriptable download | The third feed cannot be ingested as planned | Look for a documented download or API route (LH-080); otherwise agree a replacement rate feed with the guide, keeping the NSE and AMFI feeds as the core of the demo |
 | Free LLM tiers change or tighten | Agents or benchmark stall | Provider abstraction with fallback; benchmark runs batched and resumable |
 | MotherDuck compute allowance runs out | Live pipeline paused until the monthly reset | Incremental models; benchmark and experiments on local DuckDB; usage checked weekly |
 | Free-tier services pause when idle | Slow first request in demos | Warm-up step before demos; documented in runbooks |

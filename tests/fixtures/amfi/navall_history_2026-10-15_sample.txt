@@ -1,0 +1,20 @@
+Scheme Code;NAV Name;Plan;Option;ISIN Div Payout/ISIN Growth;ISIN Div Reinvestment;Net Asset Value;Date
+
+Open Ended Schemes ( Equity Scheme - Multi Cap Fund )
+
+
+Aditya Birla Sun Life Mutual Fund
+148921;Aditya Birla Sun Life Multi-Cap Fund-Direct Growth;Direct Plan;GROWTH;INF209KB1Y49;;21.86;15-Oct-2026
+148920;Aditya Birla Sun Life Multi-Cap Fund-Direct IDCW Payout;Direct Plan;IDCW Payout;INF209KB1Y56;;17.98;15-Oct-2026
+148918;Aditya Birla Sun Life Multi-Cap Fund-Regular Growth;Regular Plan;GROWTH;INF209KB1Y23;;20.33;15-Oct-2026
+148919;Aditya Birla Sun Life Multi-Cap Fund-Regular-IDCW Payout;Regular Plan;IDCW Payout;INF209KB1Y31;;16.73;15-Oct-2026
+
+Bajaj Finserv Mutual Fund
+153309;BAJAJ FINSERV MULTI CAP FUND - DIRECT - GROWTH;Direct Plan;Growth;INF0QA701AV7;;12.066;15-Oct-2026
+153306;BAJAJ FINSERV MULTI CAP FUND - DIRECT - IDCW;Direct Plan;IDCW;INF0QA701AW5;INF0QA701AX3;12.066;15-Oct-2026
+153307;BAJAJ FINSERV MULTI CAP FUND - REGULAR - GROWTH;Regular Plan;Growth;INF0QA701AS3;;11.770;15-Oct-2026
+153308;BAJAJ FINSERV MULTI CAP FUND - REGULAR - IDCW;Regular Plan;IDCW;INF0QA701AT1;INF0QA701AU9;11.770;15-Oct-2026
+
+Bandhan Mutual Fund
+149303;BANDHAN MULTI CAP FUND - GROWTH - DIRECT PLAN;Direct Plan;Growth;INF194KB1CL0;;18.230;15-Oct-2026
+149305;BANDHAN MULTI CAP FUND - GROWTH - REGULAR PLAN;Regular Plan;Growth;INF194KB1CI6;;16.934;15-Oct-2026
