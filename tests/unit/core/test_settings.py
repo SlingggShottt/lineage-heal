@@ -20,6 +20,17 @@ def test_defaults_are_safe_for_local_development() -> None:
     assert settings.raw_zone_dir == Path(".data/raw")
 
 
+def test_requests_to_sources_are_spaced_three_seconds_apart_by_default() -> None:
+    assert make_settings().ingest_min_interval_seconds == 3.0
+
+
+def test_the_request_interval_cannot_be_negative(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("INGEST_MIN_INTERVAL_SECONDS", "-1")
+
+    with pytest.raises(ValueError, match="greater than or equal to 0"):
+        make_settings()
+
+
 def test_raw_zone_backend_can_be_switched_to_r2(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("RAW_ZONE_BACKEND", "r2")
 

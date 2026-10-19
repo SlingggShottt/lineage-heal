@@ -141,7 +141,7 @@ Task-level detail lives in `backlog.md`.
 ## Current status
 **Current diary week:** 2
 - **Week 1 (complete):** topic finalised with the guide; background research on data incidents and the NSE UDiFF change; feeds and tech stack chosen; synopsis prepared.
-- **Week 2 (in progress):** project documentation (LH-005), Python scaffold with tooling (LH-007) and core module (LH-011), the AMFI source spike (LH-013) and the raw-zone storage client (LH-015) done. FBIL access is unresolved (LH-080). Next: the AMFI loader (LH-019) and a minimal `ingest` command; R2 account (LH-006, manual) is needed to write to the real bucket. A mid-project evaluation demo is due within days, so Week 2 tasks are ordered to reach a working ingest-to-R2 slice first.
+- **Week 2 (in progress):** project documentation (LH-005), Python scaffold with tooling (LH-007) and core module (LH-011), the AMFI source spike (LH-013) and the raw-zone storage client (LH-015) and the AMFI loader (LH-019) done. FBIL access is unresolved (LH-080). Next: a minimal `lineageheal ingest` command (LH-021); R2 account (LH-006, manual) is needed to write to the real bucket. A mid-project evaluation demo is due within days, so Week 2 tasks are ordered to reach a working ingest-to-R2 slice first.
 
 ## Open questions
 

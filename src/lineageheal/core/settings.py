@@ -9,7 +9,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, SecretStr
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from lineageheal.core.errors import ConfigurationError
@@ -54,6 +54,9 @@ class Settings(BaseSettings):
     # the scheduled pipeline and the demo set "r2" explicitly.
     raw_zone_backend: Literal["local", "r2"] = "local"
     raw_zone_dir: Path = Path(".data/raw")
+
+    # Gap between requests to a source site (FR-ING-10). Raise it if a source pushes back.
+    ingest_min_interval_seconds: float = Field(default=3.0, ge=0)
 
     r2_account_id: str | None = None
     r2_access_key_id: SecretStr | None = None
