@@ -31,6 +31,11 @@ def format_amfi_date(value: date) -> str:
     return f"{value.day:02d}-{_MONTHS[value.month - 1]}-{value.year}"
 
 
+def report_filename(trade_date: date) -> str:
+    """Return AMFI's file name for a date's report, such as `NAVHistoryReport151026.txt`."""
+    return f"NAVHistoryReport{trade_date:%d%m%y}.txt"
+
+
 class AmfiNavLoader:
     """Loads the AMFI NAV report for a trade date into the raw zone."""
 
@@ -81,7 +86,7 @@ class AmfiNavLoader:
             source=self.source,
             dataset=self.dataset,
             trade_date=trade_date,
-            filename=f"NAVHistoryReport{trade_date:%d%m%y}.txt",
+            filename=report_filename(trade_date),
             content=body,
         )
         outcome = IngestionOutcome.STORED if stored.created else IngestionOutcome.UNCHANGED

@@ -455,6 +455,8 @@ For each fault and each system (LineageHeal, rule-based, plain LLM):
 
 Results are written per fault, so an interrupted run resumes where it stopped (FR-BEN-06).
 
+**Injectors so far.** `lineageheal.benchmark.faults` holds pure bytes-to-bytes injectors for AMFI reports: `blank-nav` (nulls), `duplicate-row` (duplicates), `rename-column` (schema drift), `wrong-date` (late data: a stale report), and `negative-nav` (invalid values, which is not one of the five classes). A test asserts which bronze check catches each one. `lineageheal dev inject-fault` stores an injected copy as a new version in a local raw zone, for rehearsals and demos, and refuses to run when `RAW_ZONE_BACKEND` is `r2`, so faults cannot reach production data. Unit-change faults (for example paise instead of rupees) are not injected yet because bronze tests cannot see them; they need the price and NAV jump checks (LH-028).
+
 ### 12.3 Baselines
 
 - **Rule-based:** maps each failing test to the nearest upstream source of the failing model and applies templated fixes for known patterns. No LLM.

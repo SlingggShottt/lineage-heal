@@ -52,6 +52,26 @@ class LocalObjectStore:
             Path(tmp_name).unlink(missing_ok=True)
             raise StorageError(f"Local write failed for key {key}: {exc.strerror}") from exc
 
+    def list_folder(self, folder: str) -> list[str]:
+        """List the keys stored directly under a folder key, oldest first.
+
+        Files are ordered by modification time, then name, so the first key is the
+        earliest stored version. Unfinished writes are skipped.
+
+        Args:
+            folder: A key prefix that names a folder, for example
+                `raw/source=amfi/dataset=navall/trade_date=2026-10-15`.
+
+        Returns:
+            The keys, or an empty list if nothing is stored there.
+        """
+        path = self._path(folder)
+        if not path.is_dir():
+            return []
+        files = [p for p in path.iterdir() if p.is_file() and not p.name.startswith(".partial-")]
+        files.sort(key=lambda p: (p.stat().st_mtime_ns, p.name))
+        return [p.relative_to(self._root).as_posix() for p in files]
+
     def get(self, key: str) -> bytes:
         """Return the stored bytes, or raise `StorageError` if the key is absent."""
         try:

@@ -8,11 +8,15 @@ from pathlib import Path
 import httpx
 import pytest
 import respx
+from click.testing import Result
 from typer.testing import CliRunner
 
 from lineageheal import cli
+from lineageheal.benchmark.faults import blank_nav, negative_nav
 from lineageheal.cli import app, today_ist
 from lineageheal.ingestion.amfi import AMFI_REPORT_URL
+from lineageheal.ingestion.object_stores import LocalObjectStore
+from lineageheal.ingestion.raw_zone import RawZone
 
 FIXTURES = Path(__file__).parents[1] / "fixtures" / "amfi"
 REPORT = (FIXTURES / "navall_history_2026-10-15_sample.txt").read_bytes()
@@ -257,3 +261,93 @@ def test_backfill_refuses_an_end_before_the_start() -> None:
 
     assert result.exit_code == 2
     assert "must not be before" in result.output
+
+
+def store_report(tmp_path: Path, content: bytes = REPORT) -> RawZone:
+    """Put a report in the temporary raw zone the autouse fixture points the CLI at."""
+    zone = RawZone(LocalObjectStore(tmp_path / "raw"))
+    zone.put_if_absent(
+        source="amfi",
+        dataset="navall",
+        trade_date=date(2026, 10, 15),
+        filename="NAVHistoryReport151026.txt",
+        content=content,
+    )
+    return zone
+
+
+def inject(fault: str, day: str = "2026-10-15", source: str = "amfi") -> Result:
+    return runner.invoke(app, ["dev", "inject-fault", source, "--fault", fault, "--date", day])
+
+
+def test_the_dev_group_lists_its_commands() -> None:
+    result = runner.invoke(app, ["dev"])
+
+    assert "inject-fault" in result.output
+
+
+def test_inject_fault_stores_a_damaged_copy_as_a_new_version(tmp_path: Path) -> None:
+    store_report(tmp_path)
+
+    result = inject("blank-nav")
+
+    assert result.exit_code == 0
+    assert result.stdout.startswith("injected blank-nav (nulls) into amfi/navall 2026-10-15")
+    contents = [p.read_bytes() for p in stored_files(tmp_path)]
+    assert len(contents) == 2
+    assert REPORT in contents
+    assert blank_nav(REPORT) in contents
+
+
+def test_injecting_the_same_fault_twice_stores_nothing_new(tmp_path: Path) -> None:
+    store_report(tmp_path)
+    inject("blank-nav")
+
+    second = inject("blank-nav")
+
+    assert second.stdout.startswith("already injected blank-nav")
+    assert len(stored_files(tmp_path)) == 2
+
+
+def test_each_injection_starts_from_the_genuine_report_not_from_an_earlier_fault(
+    tmp_path: Path,
+) -> None:
+    store_report(tmp_path)
+    inject("blank-nav")
+
+    inject("negative-nav")
+
+    contents = [p.read_bytes() for p in stored_files(tmp_path)]
+    assert len(contents) == 3
+    assert negative_nav(REPORT) in contents  # not blank-then-negative
+
+
+def test_inject_fault_refuses_to_touch_r2(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Injected faults must never reach the production raw zone."""
+    store_report(tmp_path)
+    monkeypatch.setenv("RAW_ZONE_BACKEND", "r2")
+
+    result = inject("blank-nav")
+
+    assert result.exit_code == 1
+    assert "Refusing to inject faults into the R2 raw zone" in result.stderr
+    assert len(stored_files(tmp_path)) == 1
+
+
+def test_inject_fault_explains_how_to_fetch_a_missing_report() -> None:
+    result = inject("blank-nav")
+
+    assert result.exit_code == 1
+    assert "lineageheal ingest amfi --date 2026-10-15" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["dev", "inject-fault", "amfi", "--fault", "no-such-fault", "--date", "2026-10-15"],
+        ["dev", "inject-fault", "nse", "--fault", "blank-nav", "--date", "2026-10-15"],
+        ["dev", "inject-fault", "amfi", "--fault", "blank-nav"],
+    ],
+)
+def test_inject_fault_rejects_bad_input(arguments: list[str]) -> None:
+    assert runner.invoke(app, arguments).exit_code == 2
