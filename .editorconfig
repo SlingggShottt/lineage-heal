@@ -1,0 +1,22 @@
+# .editorconfig
+# Keeps whitespace consistent across editors; ruff and Prettier enforce the same rules in CI.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{yml,yaml,json,toml,md,ts,tsx,js,css,html}]
+indent_size = 2
+
+# Makefile recipes must be indented with tabs.
+[Makefile]
+indent_style = tab
+
+# Trailing double space is a Markdown line break.
+[*.md]
+trim_trailing_whitespace = false

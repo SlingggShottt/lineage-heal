@@ -35,7 +35,7 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 |---|---|---|---|---|
 | LH-005 | Write project documentation: CLAUDE, README, context, PRD, SRS, design, style guide, tech stack, backlog | — | Done | 2 |
 | LH-006 | Create service accounts: Cloudflare R2, MotherDuck, Neon, Google AI Studio, Groq, LangSmith | NFR-COST-01 | Todo | |
-| LH-007 | Scaffold Python project: pyproject, uv, src layout, ruff, mypy, pytest, pre-commit (incl. gitleaks, commit lint), Makefile, .editorconfig, .gitignore, .env.example, LICENSE | NFR-MAINT-02, NFR-SEC-01 | Todo | |
+| LH-007 | Scaffold Python project: pyproject, uv, src layout, ruff, mypy, pytest, pre-commit (incl. gitleaks, commit lint), Makefile, .editorconfig, .gitignore, .env.example, LICENSE | NFR-MAINT-02, NFR-SEC-01 | Done | 2 |
 | LH-008 | Configure GitHub repo: branch protection, PR and issue templates, Dependabot | NFR-SEC-05 | Todo | |
 | LH-009 | CI workflow for Python: format, lint, types, tests | NFR-MAINT-02 | Todo | |
 | LH-010 | Docker Compose with Postgres + pgvector; Dockerfile for the Python app | NFR-PORT-01 | Todo | |
@@ -140,3 +140,4 @@ A running record of completed work, used for the weekly diary.
 | 1 | LH-003 | Chose NSE, AMFI and FBIL feeds and the technology stack |
 | 1 | LH-004 | Synopsis prepared |
 | 2 | LH-005 | Wrote project documentation: CLAUDE, README, context, PRD, SRS, design, style guide, tech stack, backlog |
+| 2 | LH-007 | Scaffolded the Python project: uv, src layout, ruff, strict mypy, pytest with layer markers, pre-commit (gitleaks, commit lint), Makefile, .env.example, LICENSE |
