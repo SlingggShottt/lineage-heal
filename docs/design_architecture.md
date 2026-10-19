@@ -126,8 +126,21 @@ Filled in by the Week 2 data spike (LH-012, LH-013).
 | NSE `cm_bhavcopy` | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
 | NSE `security_master` | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
 | NSE `corporate_actions` | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
-| AMFI `navall` | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
-| FBIL `reference_rates` | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
+| AMFI `navall` | `https://portal.amfiindia.com/DownloadNAVHistoryReport_Po.aspx?frmdt=DD-Mon-YYYY&todt=DD-Mon-YYYY` (set both to the same date). Live snapshot: `https://portal.amfiindia.com/spages/NAVAll.txt` | Semicolon-delimited text, UTF-8, CRLF; see [AMFI findings](#amfi-findings) | None; the default curl User-Agent worked | Not measured; the live file was last modified 15:27 IST on 19 Oct 2026 | From at least 2 Jan 2024 (tested), one request per date | Not tested yet (check in LH-033) |
+| FBIL `reference_rates` | Not found. `fbil.org.in` is a JavaScript application with reCAPTCHA and exposes no plain file URL (LH-080) | Unknown | Unknown | Unknown | Unknown | Not tested |
+
+#### AMFI findings
+
+Measured on 19 October 2026 (LH-013) with a handful of requests, spaced a few seconds apart.
+
+- **Two endpoints, two layouts.** The live snapshot has the columns `Scheme Code; ISIN Div Payout/ ISIN Growth; ISIN Div Reinvestment; Scheme Name; Plan; Option; Net Asset Value; Date`. The history report has `Scheme Code; NAV Name; Plan; Option; ISIN Div Payout/ISIN Growth; ISIN Div Reinvestment; Net Asset Value; Date`. Names and order differ, so bronze must select columns by header name, never by position.
+- **The live file is not date-addressable.** It is a snapshot of the latest NAV per scheme and held 829 distinct NAV dates (8,035 rows dated Friday 16 Oct, 709 dated Sunday 18 Oct, the rest older). The history report returns exactly one NAV date per file, so the loader uses it, which keeps ingestion idempotent per trade date (D-19).
+- **Row types.** Data rows have eight fields. Blank lines (a single space in the live file), category lines such as `Open Ended Schemes(...)` and fund-house names are interleaved with them. Bronze must keep only lines with eight fields. Category lines can contain non-ASCII characters (a curly apostrophe), so read the file as UTF-8.
+- **Weekends are partial, not missing.** Saturday 17 Oct 2026 returned 603 rows (83 KB) against 8,747 on Thursday 15 Oct. Row-count monitors, not file existence, will catch a truncated weekday file. Behaviour on a full market holiday has not been observed.
+- **Placeholders differ.** Plan and Option are blank on about 40% of live-file rows. A missing ISIN is always `-` in the live file (799 rows in the first ISIN column, 9,795 in the second) but an empty string in the history report (about 640 rows in the first column), with a stray `-` in one or two rows. Bronze should treat both as null.
+- **Size and cost.** A single date is about 1 MB and takes under a second. Backfilling from 1 January 2024 is roughly 700 requests, about 35 minutes at one request every three seconds.
+- **Date format** is `DD-Mon-YYYY` in both the query and the data.
+- **Precision.** History NAVs have at most four decimal places. 476 live-file NAVs have more, up to eight, so a `DECIMAL(18, 4)` column fed from the live file would silently round them, which is another reason to use the history report.
 
 ### 5.3 Lakehouse layers (dbt)
 

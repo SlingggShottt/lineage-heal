@@ -1,0 +1,5 @@
+# .gitattributes
+# Sample source files must reach every checkout byte for byte (CRLF line endings,
+# trailing spaces), because loaders store raw files as published and schema drift
+# tests depend on exact bytes. `-text` stops git converting line endings.
+tests/fixtures/** -text
