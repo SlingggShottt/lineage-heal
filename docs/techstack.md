@@ -41,6 +41,7 @@
 | Tool | Purpose |
 |---|---|
 | **uv** | Dependency management, lockfile, virtual environments, Python version management |
+| **uv_build** | Build backend for the `lineageheal` package; versioned in lockstep with uv |
 | **ruff** | Linting and formatting (replaces black, isort and flake8) |
 | **mypy** | Static type checking, strict mode on `src/` |
 | **pytest**, pytest-cov, pytest-asyncio | Test runner, coverage, async tests |
