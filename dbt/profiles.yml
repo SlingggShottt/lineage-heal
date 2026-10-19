@@ -1,0 +1,33 @@
+# profiles.yml
+# Connection targets for the dbt project. Checked in because it holds no secrets.
+#
+#   dev    local DuckDB file, for everyday development
+#   ci     in-memory DuckDB, discarded after each run
+#   bench  local DuckDB file for the fault-injection benchmark (D-11)
+#   prod   MotherDuck, for the scheduled pipeline
+#
+# dev, ci and bench must stay local: the benchmark never runs against prod.
+lineageheal:
+  target: dev # never default to prod
+  outputs:
+    dev:
+      type: duckdb
+      path: .data/dev.duckdb # relative to the repository root, where dbt is run
+      threads: 4
+
+    ci:
+      type: duckdb
+      path: ":memory:"
+      threads: 4
+
+    bench:
+      type: duckdb
+      path: .data/bench.duckdb
+      threads: 4
+
+    prod:
+      type: duckdb
+      # The MotherDuck token is read from the MOTHERDUCK_TOKEN environment variable by
+      # DuckDB itself, so it never appears in this file or in dbt's logs.
+      path: md:lineageheal
+      threads: 4

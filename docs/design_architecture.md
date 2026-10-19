@@ -184,6 +184,8 @@ Measured on 19 October 2026 (LH-013) with a handful of requests, spaced a few se
 | Silver | Clean, deduplicate on keys, conform units and identifiers, join reference data | `slv_nse__equity_eod`, `slv_nse__securities`, `slv_nse__corporate_actions`, `slv_amfi__nav`, `slv_fbil__reference_rates` |
 | Gold | Business-ready tables for consumers | `gld_equity_daily_prices`, `gld_mf_nav_daily`, `gld_fx_reference_rates`, `gld_market_daily_summary` |
 
+The dbt project lives in `dbt/`. Its profile has four targets: `dev` (local DuckDB file), `ci` (in-memory DuckDB), `bench` (a separate local file) and `prod` (MotherDuck, with the token read from `MOTHERDUCK_TOKEN`). Only `prod` is remote, and a test guards that the benchmark target can never be. Each layer builds into a schema of the same name (`bronze`, `silver`, `gold`) on every target, through a `generate_schema_name` override.
+
 `gld_market_daily_summary` deliberately joins all three feeds (for example equity turnover, NAV coverage and USD/INR per day), so lineage paths cross sources and the agents must reason about which feed a failure came from.
 
 Seeds hold per-source calendars (`seed_calendar_nse`, `seed_calendar_amfi`, `seed_calendar_fbil`), used for expected-file checks (FR-ING-07) and late-data detection.
