@@ -103,7 +103,9 @@ raw/source=<source>/dataset=<dataset>/trade_date=<YYYY-MM-DD>/<sha256-prefix>__<
 ```
 
 - Files are stored exactly as published (compressed where the source compresses them).
-- The SHA-256 prefix makes a changed re-publication a new object instead of an overwrite (FR-ING-05).
+- The SHA-256 prefix (first 16 hex characters; the full digest is stored as object metadata) makes a changed re-publication a new object instead of an overwrite (FR-ING-05). An identical file resolves to the existing key and is skipped. Reading a file re-checks its hash against the key.
+- File names are reduced to `A-Za-z0-9._-` before they enter a key.
+- `RAW_ZONE_BACKEND` selects `r2` (the bucket) or `local` (a directory, `.data/raw` by default). Tests, offline development and benchmark sandboxes use `local`, so they cannot touch the production bucket.
 - Every attempt is recorded in the `ingestion_log` table (FR-ING-06).
 - Benchmark and sandbox copies live outside the raw zone (`bench/` prefix or a local directory), so injected faults can never contaminate production data.
 

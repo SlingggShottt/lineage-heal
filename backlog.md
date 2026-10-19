@@ -43,7 +43,7 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 | LH-012 | Data spike: NSE bhavcopy, security master, corporate actions (URLs, headers, history, reachability from Actions) | IF-SW-01 | Todo | |
 | LH-013 | Data spike: AMFI NAVAll (URLs, history, formats). FBIL split out to LH-080 | IF-SW-01 | Done | 2 |
 | LH-014 | Postgres store foundation: SQLAlchemy, Alembic, `ingestion_log` table | FR-ING-06 | Todo | |
-| LH-015 | R2 storage client: content-addressed keys, put-if-absent, checksums | FR-ING-05, IF-SW-02 | Todo | |
+| LH-015 | R2 storage client: content-addressed keys, put-if-absent, checksums | FR-ING-05, IF-SW-02 | Done | 2 |
 | LH-016 | Per-source calendars as seeds (NSE, AMFI, FBIL; 2024 onwards) | FR-ING-07 | Todo | |
 | LH-017 | NSE CM-UDiFF bhavcopy loader | FR-ING-01, FR-ING-10 | Todo | |
 | LH-018 | NSE security master and corporate actions loaders | FR-ING-02 | Todo | |
@@ -144,3 +144,4 @@ A running record of completed work, used for the weekly diary.
 | 2 | LH-007 | Scaffolded the Python project: uv, src layout, ruff, strict mypy, pytest with layer markers, pre-commit (gitleaks, commit lint), Makefile, .env.example, LICENSE |
 | 2 | LH-011 | Core module: typed settings with R2 credentials accessor, structlog setup with secret redaction, error hierarchy |
 | 2 | LH-013 | AMFI spike: history report is date-addressable, live NAVAll is a snapshot, layouts differ; fixtures added; FBIL split out to LH-080 |
+| 2 | LH-015 | Raw-zone storage client: content-addressed write-once keys, checksum-verified reads, R2 and local backends |

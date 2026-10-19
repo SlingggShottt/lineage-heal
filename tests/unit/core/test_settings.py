@@ -1,16 +1,9 @@
+from pathlib import Path
+
 import pytest
 
 from lineageheal.core.errors import ConfigurationError
 from lineageheal.core.settings import Settings, get_settings
-
-R2_VARIABLES = ("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET")
-
-
-@pytest.fixture(autouse=True)
-def _clean_environment(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Start every test with no R2 or logging variables, whatever the developer exported."""
-    for name in (*R2_VARIABLES, "LOG_LEVEL", "LOG_FORMAT"):
-        monkeypatch.delenv(name, raising=False)
 
 
 def make_settings() -> Settings:
@@ -23,6 +16,14 @@ def test_defaults_are_safe_for_local_development() -> None:
 
     assert settings.log_level == "INFO"
     assert settings.log_format == "console"
+    assert settings.raw_zone_backend == "local"
+    assert settings.raw_zone_dir == Path(".data/raw")
+
+
+def test_raw_zone_backend_can_be_switched_to_r2(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RAW_ZONE_BACKEND", "r2")
+
+    assert make_settings().raw_zone_backend == "r2"
 
 
 def test_values_come_from_environment_variables(monkeypatch: pytest.MonkeyPatch) -> None:
