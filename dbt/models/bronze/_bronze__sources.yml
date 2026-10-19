@@ -1,0 +1,40 @@
+version: 2
+
+# Raw files in the raw zone, exactly as published. Each source points at the files with a
+# DuckDB reader, so they appear in the dbt lineage graph as the start of every path.
+#
+# The location comes from RAW_ZONE_DIR, the same setting the loaders write to. This is
+# local-path mode, used by the dev, ci and bench targets. Reading from R2 on prod is
+# tracked in LH-082.
+sources:
+  - name: raw_amfi
+    description: >
+      AMFI mutual fund NAV reports, one file per NAV date, stored by the AMFI loader.
+      Fund-house names and category headings are interleaved with the data rows.
+    meta:
+      external_location: >
+        read_csv('{{ env_var("RAW_ZONE_DIR", ".data/raw") }}/raw/source=amfi/dataset=navall/*/*.txt',
+        delim = ';', header = true, quote = '', escape = '', null_padding = true,
+        all_varchar = true, union_by_name = true, filename = true, hive_partitioning = true)
+    tables:
+      - name: navall
+        description: >
+          One row per line of every stored report, all columns as text. Columns are matched
+          by header name, because AMFI's live and history layouts order them differently.
+        columns:
+          - name: Scheme Code
+            description: AMFI scheme code. Blank on category and fund-house lines.
+          - name: NAV Name
+            description: Scheme name including plan and option.
+          - name: Plan
+            description: Direct or Regular plan. Blank for some older schemes.
+          - name: Option
+            description: Growth, IDCW or similar. Blank for some older schemes.
+          - name: ISIN Div Payout/ISIN Growth
+            description: ISIN for the payout or growth option. Empty or "-" when absent.
+          - name: ISIN Div Reinvestment
+            description: ISIN for the reinvestment option. Empty or "-" when absent.
+          - name: Net Asset Value
+            description: Net asset value per unit in rupees, as text.
+          - name: Date
+            description: NAV date as DD-Mon-YYYY, for example 15-Oct-2026.

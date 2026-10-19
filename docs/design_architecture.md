@@ -184,6 +184,15 @@ Measured on 19 October 2026 (LH-013) with a handful of requests, spaced a few se
 | Silver | Clean, deduplicate on keys, conform units and identifiers, join reference data | `slv_nse__equity_eod`, `slv_nse__securities`, `slv_nse__corporate_actions`, `slv_amfi__nav`, `slv_fbil__reference_rates` |
 | Gold | Business-ready tables for consumers | `gld_equity_daily_prices`, `gld_mf_nav_daily`, `gld_fx_reference_rates`, `gld_market_daily_summary` |
 
+**How bronze reads the raw zone.** Each raw dataset is a dbt source whose location is a DuckDB `read_csv(...)` over the raw-zone folder, so raw files are the first node of every lineage path. The folder comes from `RAW_ZONE_DIR`, the setting the loaders write to; this local-path mode serves `dev`, `ci` and `bench`, and reading from R2 on `prod` is LH-082. `brz_amfi__navall` shows the pattern:
+
+- Columns are matched by header name, not position. A renamed column makes the model fail (the schema drift surfaces in dbt, where lineage can trace it), while an added column is ignored.
+- Blank lines, category headings and fund-house names are dropped, but any line with a scheme code or another value is kept, so a damaged data row reaches the tests instead of vanishing.
+- Values that do not convert become null and are reported by `not_null` tests. A singular test checks that every row's NAV date equals the trade date of the folder it was stored in.
+- Bronze reads every stored version of a report, so a day AMFI republished appears once per version, told apart by `_source_file`. Silver chooses which version to keep (D-21).
+
+**Open design question: NSE zips.** The NSE bhavcopy is a zip archive, which DuckDB cannot read natively (it does read gzip, which the security master uses). The raw zone keeps the zip as published (D-02), so bronze needs one of: a small decompression step that writes derived CSVs outside the raw zone; a DuckDB community extension that reads zip; or a dbt-duckdb Python source plugin. This is decided when the NSE bronze model is built (LH-024).
+
 The dbt project lives in `dbt/`. Its profile has four targets: `dev` (local DuckDB file), `ci` (in-memory DuckDB), `bench` (a separate local file) and `prod` (MotherDuck, with the token read from `MOTHERDUCK_TOKEN`). Only `prod` is remote, and a test guards that the benchmark target can never be. Each layer builds into a schema of the same name (`bronze`, `silver`, `gold`) on every target, through a `generate_schema_name` override.
 
 `gld_market_daily_summary` deliberately joins all three feeds (for example equity turnover, NAV coverage and USD/INR per day), so lineage paths cross sources and the agents must reason about which feed a failure came from.
@@ -194,7 +203,7 @@ Seeds hold per-source calendars (`seed_calendar_nse`, `seed_calendar_amfi`, `see
 
 - **Generic tests:** `unique`, `not_null`, `accepted_values`, `relationships`, plus range and row-count tests from `dbt_utils` and `dbt_expectations`.
 - **Anomaly monitors:** Elementary volume, freshness and column-distribution monitors on silver and gold (fallback: custom z-score tests if the Week 3 spike shows incompatibility).
-- **Domain checks:** close price within high–low range; day-over-day price change beyond a threshold without a matching corporate action (catches unit changes); NAV strictly positive; FX rate within a plausible band.
+- **Domain checks:** close price within high–low range; day-over-day price change beyond a threshold without a matching corporate action (catches unit changes); NAV not negative (zero is valid: about 100 segregated-portfolio schemes publish exactly 0 on an ordinary day); FX rate within a plausible band.
 
 ## 6. Orchestration
 

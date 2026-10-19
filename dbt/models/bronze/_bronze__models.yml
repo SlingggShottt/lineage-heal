@@ -1,0 +1,50 @@
+version: 2
+
+models:
+  - name: brz_amfi__navall
+    description: >
+      AMFI mutual fund NAVs, typed and renamed to project conventions. One row per scheme
+      per stored report. Every stored version of a report is read, so a day that AMFI
+      republished appears once per version; _source_file tells them apart and silver
+      chooses which to keep. Category headings, fund-house names and blank lines are
+      removed; a damaged data row is kept so the tests below can report it.
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [scheme_code, nav_date, _source_file]
+    columns:
+      - name: scheme_code
+        description: AMFI scheme code.
+        data_tests:
+          - not_null
+      - name: scheme_name
+        description: Scheme name including plan and option, as published.
+        data_tests:
+          - not_null
+      - name: plan_name
+        description: Direct or Regular plan. Null for some older schemes.
+      - name: option_name
+        description: Growth, IDCW or similar, as published. Null for some older schemes.
+      - name: isin_div_payout_or_growth
+        description: ISIN of the growth or dividend-payout option. Null when absent.
+      - name: isin_div_reinvestment
+        description: ISIN of the dividend-reinvestment option. Null when absent.
+      - name: nav_inr
+        description: >
+          Net asset value per unit in rupees. Zero is valid (segregated portfolios);
+          negative is not.
+        data_tests:
+          - not_null
+          - non_negative
+      - name: nav_date
+        description: The date the NAV applies to.
+        data_tests:
+          - not_null
+      - name: _trade_date
+        description: The trade date of the folder the report was stored under.
+        data_tests:
+          - not_null
+      - name: _source_file
+        description: Path of the raw file the row came from.
+        data_tests:
+          - not_null

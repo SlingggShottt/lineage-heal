@@ -58,8 +58,8 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 | ID | Task | Refs | Status | Week done |
 |---|---|---|---|---|
 | LH-022 | dbt project scaffold: profiles with dev/ci/bench/prod targets, schema macro, guard tests. Packages and sqlfluff are added with the first models that need them (LH-024, LH-027) | FR-WH-06 | Done | 2 |
-| LH-023 | Raw-zone sources: DuckDB R2 secret, local-path mode for non-prod targets | FR-WH-01 | Todo | |
-| LH-024 | Bronze models (5) with docs and tests | FR-WH-01, FR-WH-04 | Todo | |
+| LH-023 | Raw-zone sources in local-path mode for non-prod targets. The DuckDB R2 secret for prod moved to LH-082 | FR-WH-01 | Done | 2 |
+| LH-024 | Bronze models (5) with docs and tests. AMFI done; NSE bhavcopy (zip, see note in design doc), NSE security master, NSE corporate actions and FBIL remain | FR-WH-01, FR-WH-04 | In progress | |
 | LH-025 | Silver models (5) with docs and tests | FR-WH-02, FR-WH-04 | Todo | |
 | LH-026 | Gold models (4) with docs and tests, including cross-feed summary | FR-WH-03, FR-WH-04 | Todo | |
 | LH-027 | Elementary spike and anomaly monitors (fallback: custom z-score tests) | FR-WH-05 | Todo | |
@@ -71,6 +71,7 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 | LH-033 | `pipeline.yml`: scheduled and manual runs on MotherDuck | FR-ORC-02, FR-ORC-05 | Todo | |
 | LH-034 | Persist dbt artifacts and record failure signals per run | FR-WH-07, FR-ORC-04 | Todo | |
 | LH-035 | Historical backfill from January 2024 to R2 and MotherDuck | FR-ING-08 | Todo | |
+| LH-082 | DuckDB R2 secret and httpfs for the prod target: read the raw zone from R2 instead of a local path | FR-WH-01 | Todo | |
 
 ## Week 4 — Lineage, detection and investigation
 
@@ -152,3 +153,4 @@ A running record of completed work, used for the weekly diary.
 | 2 | LH-019 | AMFI loader: polite fetcher with retries and rate limit, per-date report download, no-data handling, verified live |
 | 2 | LH-021 | `lineageheal` CLI with `ingest` and `backfill` (AMFI only so far; NSE and FBIL plug in as their loaders land) |
 | 2 | LH-022 | dbt project scaffold: dev, ci, bench and prod targets (only prod on MotherDuck), exact schema names per layer, usage statistics off, guard tests |
+| 2 | LH-023 | Raw-zone sources in local-path mode: bronze reads the files the loaders wrote, through dbt sources that start every lineage path |
