@@ -131,6 +131,20 @@ def test_no_waiting_when_the_interval_has_already_passed(fake_time: FakeTime) ->
 
 
 @respx.mock
+def test_extra_headers_replace_the_defaults_of_the_same_name() -> None:
+    route = respx.get(URL).mock(return_value=httpx.Response(200))
+
+    with PoliteFetcher.create(
+        min_interval_seconds=0, headers={"User-Agent": "Mozilla/5.0 test", "Accept": "*/*"}
+    ) as fetcher:
+        fetcher.get(URL)
+
+    headers = route.calls.last.request.headers
+    assert headers["user-agent"] == "Mozilla/5.0 test"
+    assert headers["accept"] == "*/*"
+
+
+@respx.mock
 def test_real_client_identifies_the_project_and_sets_explicit_timeouts() -> None:
     route = respx.get(URL).mock(return_value=httpx.Response(200))
 

@@ -66,10 +66,18 @@ class PoliteFetcher:
         self._last_request_at: float | None = None
 
     @classmethod
-    def create(cls, *, min_interval_seconds: float = 3.0) -> Self:
-        """Build a fetcher with a real client: identified, with explicit timeouts."""
+    def create(
+        cls, *, min_interval_seconds: float = 3.0, headers: Mapping[str, str] | None = None
+    ) -> Self:
+        """Build a fetcher with a real client: identified, with explicit timeouts.
+
+        Args:
+            min_interval_seconds: Minimum gap between the start of two requests.
+            headers: Headers added to every request, replacing the defaults of the
+                same name. Used for sources that reject the project User-Agent.
+        """
         client = httpx.Client(
-            headers={"User-Agent": USER_AGENT},
+            headers={"User-Agent": USER_AGENT, **(headers or {})},
             timeout=httpx.Timeout(60.0, connect=10.0),
             follow_redirects=True,
         )

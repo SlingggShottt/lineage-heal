@@ -1,6 +1,8 @@
 """FR-ING-08 and FR-ORC-05: the ingest and backfill commands."""
 
+import zipfile
 from datetime import UTC, date, datetime
+from io import BytesIO
 from pathlib import Path
 
 import httpx
@@ -16,7 +18,19 @@ FIXTURES = Path(__file__).parents[1] / "fixtures" / "amfi"
 REPORT = (FIXTURES / "navall_history_2026-10-15_sample.txt").read_bytes()
 NO_DATA_PAGE = (FIXTURES / "navall_no_data_response.html").read_bytes()
 
+NSE_URL = (
+    "https://nsearchives.nseindia.com/content/cm/BhavCopy_NSE_CM_0_0_0_20240705_F_0000.csv.zip"
+)
+NSE_CSV = (FIXTURES.parent / "nse" / "cm_bhavcopy_udiff_2024-07-05_sample.csv").read_bytes()
+
 runner = CliRunner()
+
+
+def make_nse_zip() -> bytes:
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("BhavCopy_NSE_CM_0_0_0_20240705_F_0000.csv", NSE_CSV)
+    return buffer.getvalue()
 
 
 def report_response(content: bytes = REPORT) -> httpx.Response:
@@ -125,11 +139,48 @@ def test_missing_r2_settings_are_named_in_the_error(monkeypatch: pytest.MonkeyPa
     "arguments",
     [
         ["ingest", "amfi", "--date", "15-10-2026"],
-        ["ingest", "nse", "--date", "2026-10-15"],
+        ["ingest", "bse", "--date", "2026-10-15"],
     ],
 )
 def test_bad_input_is_a_usage_error(arguments: list[str]) -> None:
     assert runner.invoke(app, arguments).exit_code == 2
+
+
+@respx.mock
+def test_nse_ingest_stores_the_bhavcopy_zip_using_browser_headers(tmp_path: Path) -> None:
+    published = make_nse_zip()
+    route = respx.get(NSE_URL).mock(
+        return_value=httpx.Response(
+            200, content=published, headers={"content-type": "application/zip"}
+        )
+    )
+
+    result = runner.invoke(app, ["ingest", "nse", "--date", "2024-07-05"])
+
+    assert result.exit_code == 0
+    assert result.stdout.startswith("2024-07-05 nse/cm_bhavcopy stored")
+    assert route.calls.last.request.headers["user-agent"].startswith("Mozilla/5.0")
+    (stored,) = sorted((tmp_path / "raw").rglob("*.zip"))
+    assert stored.read_bytes() == published
+
+
+@respx.mock
+def test_nse_404_is_reported_as_no_data_not_a_failure() -> None:
+    respx.get(NSE_URL).mock(return_value=httpx.Response(404))
+
+    result = runner.invoke(app, ["ingest", "nse", "--date", "2024-07-05"])
+
+    assert result.exit_code == 0
+    assert result.stdout.strip() == "2024-07-05 nse/cm_bhavcopy no_data"
+
+
+@respx.mock
+def test_amfi_requests_keep_the_project_user_agent() -> None:
+    route = respx.get(AMFI_REPORT_URL).mock(return_value=report_response())
+
+    runner.invoke(app, ["ingest", "amfi", "--date", "2026-10-15"])
+
+    assert route.calls.last.request.headers["user-agent"].startswith("lineageheal/")
 
 
 @respx.mock
