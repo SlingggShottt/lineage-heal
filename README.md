@@ -33,6 +33,8 @@ Every agent step is traced, and every resolved incident is stored so that future
 
 _Coming soon: a corrupted NSE file → root cause traced through lineage → patch approved from the dashboard._
 
+What works today, rehearsed end to end (ingest real files, build the warehouse layer, inject a fault, watch a check fail): [docs/demo.md](docs/demo.md).
+
 ## Architecture
 
 ```mermaid
