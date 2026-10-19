@@ -18,6 +18,7 @@ from lineageheal.ingestion.nse import (
 )
 from lineageheal.ingestion.object_stores import LocalObjectStore
 from lineageheal.ingestion.raw_zone import RawZone
+from lineageheal.ingestion.staging import ZipStager
 from lineageheal.ingestion.types import IngestionOutcome
 
 TRADE_DATE = date(2024, 7, 5)
@@ -159,3 +160,58 @@ def test_a_zip_with_damaged_contents_is_rejected(loader: NseBhavcopyLoader, tmp_
         loader.load(TRADE_DATE)
 
     assert list(tmp_path.rglob("*.*")) == []
+
+
+@pytest.fixture
+def staging_loader(tmp_path: Path) -> NseBhavcopyLoader:
+    store = LocalObjectStore(tmp_path)
+    fetcher = PoliteFetcher(httpx.Client(), min_interval_seconds=0, sleep=lambda _: None)
+    return NseBhavcopyLoader(fetcher, RawZone(store), ZipStager(store))
+
+
+@respx.mock
+def test_a_stored_file_is_also_unzipped_into_the_staged_area(
+    staging_loader: NseBhavcopyLoader, tmp_path: Path
+) -> None:
+    respx.get(URL).mock(return_value=zip_response(make_zip()))
+
+    result = staging_loader.load(TRADE_DATE)
+
+    assert result.staged_key is not None
+    assert result.staged_key.startswith("staged/source=nse/dataset=cm_bhavcopy/")
+    assert result.staged_key.endswith(".csv")
+    assert (tmp_path / result.staged_key).read_bytes() == CSV
+
+
+@respx.mock
+def test_an_unchanged_file_repairs_a_missing_staged_copy(
+    staging_loader: NseBhavcopyLoader, tmp_path: Path
+) -> None:
+    respx.get(URL).mock(return_value=zip_response(make_zip()))
+    first = staging_loader.load(TRADE_DATE)
+    assert first.staged_key is not None
+    (tmp_path / first.staged_key).unlink()
+
+    second = staging_loader.load(TRADE_DATE)
+
+    assert second.outcome is IngestionOutcome.UNCHANGED
+    assert (tmp_path / first.staged_key).read_bytes() == CSV
+
+
+@respx.mock
+def test_a_day_without_a_file_stages_nothing(
+    staging_loader: NseBhavcopyLoader, tmp_path: Path
+) -> None:
+    respx.get(URL).mock(return_value=httpx.Response(404))
+
+    result = staging_loader.load(TRADE_DATE)
+
+    assert result.staged_key is None
+    assert list(tmp_path.rglob("*.*")) == []
+
+
+@respx.mock
+def test_without_a_stager_nothing_is_staged(loader: NseBhavcopyLoader) -> None:
+    respx.get(URL).mock(return_value=zip_response(make_zip()))
+
+    assert loader.load(TRADE_DATE).staged_key is None

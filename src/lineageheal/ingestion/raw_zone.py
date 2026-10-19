@@ -155,18 +155,27 @@ class RawZone:
         return data
 
 
-def open_raw_zone(settings: Settings) -> RawZone:
-    """Open the raw zone selected by `RAW_ZONE_BACKEND`.
+def open_store(settings: Settings) -> ObjectStore:
+    """Open the object store selected by `RAW_ZONE_BACKEND`.
 
     Args:
         settings: Application settings.
 
     Returns:
-        A raw zone backed by R2 or by a local directory.
+        A store backed by R2 or by a local directory.
 
     Raises:
         ConfigurationError: R2 is selected but its credentials are incomplete.
     """
     if settings.raw_zone_backend == "r2":
-        return RawZone(R2ObjectStore.from_credentials(settings.r2_credentials()))
-    return RawZone(LocalObjectStore(settings.raw_zone_dir))
+        return R2ObjectStore.from_credentials(settings.r2_credentials())
+    return LocalObjectStore(settings.raw_zone_dir)
+
+
+def open_raw_zone(settings: Settings) -> RawZone:
+    """Open the raw zone on the store selected by `RAW_ZONE_BACKEND`.
+
+    Raises:
+        ConfigurationError: R2 is selected but its credentials are incomplete.
+    """
+    return RawZone(open_store(settings))

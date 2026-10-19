@@ -169,6 +169,21 @@ def test_nse_ingest_stores_the_bhavcopy_zip_using_browser_headers(tmp_path: Path
 
 
 @respx.mock
+def test_nse_ingest_also_stages_an_unzipped_copy_for_dbt(tmp_path: Path) -> None:
+    respx.get(NSE_URL).mock(
+        return_value=httpx.Response(
+            200, content=make_nse_zip(), headers={"content-type": "application/zip"}
+        )
+    )
+
+    runner.invoke(app, ["ingest", "nse", "--date", "2024-07-05"])
+
+    (staged,) = sorted((tmp_path / "raw" / "staged").rglob("*.csv"))
+    assert staged.read_bytes() == NSE_CSV
+    assert "trade_date=2024-07-05" in staged.as_posix()
+
+
+@respx.mock
 def test_nse_404_is_reported_as_no_data_not_a_failure() -> None:
     respx.get(NSE_URL).mock(return_value=httpx.Response(404))
 

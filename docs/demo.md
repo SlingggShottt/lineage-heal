@@ -97,7 +97,7 @@ You see `stored` for NSE, then `unchanged` for the repeat, then `no_data` for th
 find .data/demo -type f
 ```
 
-Point at the SHA-256 prefix in each file name. If you have R2 set up, switch the storage with one setting (`RAW_ZONE_BACKEND=r2`) and show the same file in the Cloudflare dashboard.
+Point at the SHA-256 prefix in each file name. Point out the third kind of file: the NSE zip is stored exactly as published under `raw/`, and an unzipped copy sits beside it under `staged/`. Say: the warehouse tool cannot read zip files, so the pipeline derives a copy for it and never touches the original. If you have R2 set up, switch the storage with one setting (`RAW_ZONE_BACKEND=r2`) and show the same file in the Cloudflare dashboard.
 
 ### 4. What the real data taught us (1 min)
 
@@ -121,13 +121,19 @@ Say any two of these, they are real findings from this project:
 dbtb
 ```
 
-You see `Done. PASS=10 WARN=0 ERROR=0`. Say: dbt reads the stored files, drops the blank lines and headings the report mixes in, matches columns by name and types them, then runs ten checks.
+You see `Done. PASS=36 WARN=0 ERROR=0`: two models and 34 checks. Say: dbt reads the stored files, drops the blank lines and headings the AMFI report mixes in, matches columns by name, types them, then runs the checks. For NSE the checks include that a day's high is never below its low and that the close lies between them.
 
 ```bash
 dbts --limit 5 --inline "select scheme_code, left(scheme_name, 44) as scheme_name, plan_name, nav_inr, nav_date from {{ ref('brz_amfi__navall') }} where _trade_date = '2026-10-16' order by scheme_code"
 ```
 
-You see a table of schemes with typed NAVs. (Do not put your own `limit` inside the query. `dbt show` adds one and it would fail.)
+You see a table of schemes with typed NAVs. (Do not put your own `limit` inside the query. `dbt show` adds one and it would fail.) Then the NSE side:
+
+```bash
+dbts --limit 5 --inline "select symbol, series, close_price_inr, volume, turnover_inr, trade_date from {{ ref('brz_nse__cm_bhavcopy') }} where symbol in ('RELIANCE','TCS','INFY','HDFCBANK') and series = 'EQ' order by symbol"
+```
+
+You see four large caps with real closing prices, volumes and turnover for 16 October.
 
 *Optional, if you have time:* in the second terminal run `uv run dbt docs generate --project-dir dbt --profiles-dir dbt --target dev && uv run dbt docs serve --project-dir dbt --profiles-dir dbt --target dev --port 8080`, open http://localhost:8080, open the `brz_amfi__navall` model and its lineage graph. It shows the raw source feeding the model. Say: this is table-level; the agents will use column-level lineage.
 
@@ -145,7 +151,7 @@ You see `injected blank-nav (nulls) into amfi/navall 2026-10-16: raw/source=...`
 dbtb
 ```
 
-You see `FAIL 1 not_null_brz_amfi__navall_nav_inr`, `Got 1 result, configured to fail if != 0` and `Done. PASS=9 WARN=0 ERROR=1`. Say: one missing value in about nine thousand rows, caught by a check.
+You see `FAIL 1 not_null_brz_amfi__navall_nav_inr`, `Got 1 result, configured to fail if != 0` and `Done. PASS=35 WARN=0 ERROR=1`. Say: one missing value in about nine thousand rows, caught by a check.
 
 ```bash
 dbts --limit 5 --inline "select scheme_code, left(scheme_name, 40) as scheme_name, nav_inr, _trade_date, regexp_extract(_source_file, '([0-9a-f]{16})__', 1) as file_version from {{ ref('brz_amfi__navall') }} where nav_inr is null"
@@ -173,11 +179,11 @@ Say: Week 3 finishes the warehouse layers and the daily schedule. Week 4 builds 
 
 | Built and working | Not built yet |
 |---|---|
-| Polite loaders for AMFI and the NSE bhavcopy, with retries | NSE security master, corporate actions and FBIL loaders |
+| Polite loaders for AMFI and the NSE bhavcopy, with retries | NSE security master and corporate actions (loaders and bronze), FBIL |
 | Write-once, content-addressed raw storage (local, R2 ready) | Reading raw files from R2 in the warehouse |
-| dbt project, AMFI bronze model and ten quality checks | NSE bronze, silver and gold layers |
+| dbt project with AMFI and NSE bronze models and 36 quality checks | Silver and gold layers |
 | Five fault injectors, each proven to trip its check | Unit-change faults and the full corpus of about 100 |
-| CI on every pull request, over 150 automated tests | Dagster schedule, lineage graph, agents, dashboard |
+| CI on every pull request, about 190 automated tests | Dagster schedule, lineage graph, agents, dashboard |
 
 Be direct about the gaps. FBIL's site sits behind a reCAPTCHA with no plain download, so we are looking for a documented route or agreeing a replacement feed (LH-080).
 
@@ -194,6 +200,8 @@ Be direct about the gaps. FBIL's site sits behind a reCAPTCHA with no plain down
 **Is the data real?** Yes, public end-of-day files from NSE and AMFI, downloaded live in step 3.
 
 **Does it cost anything?** No. Everything runs on free tiers.
+
+**What happens if NSE ships the old file format again?** The model rejects it, because the column names do not match. This is tested with NSE's real pre-July-2024 file: alone it fails the model, and next to a healthy file it shows up as missing values. That is the July 2024 change in miniature, and it is the held-out case for the benchmark.
 
 **Why did the unit-change fault not appear?** Bronze checks cannot see it, because the values are still valid numbers. It needs the price and NAV jump checks planned for the next phase.
 

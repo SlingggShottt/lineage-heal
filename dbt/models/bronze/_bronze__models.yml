@@ -48,3 +48,89 @@ models:
         description: Path of the raw file the row came from.
         data_tests:
           - not_null
+
+  - name: brz_nse__cm_bhavcopy
+    description: >
+      NSE equity end-of-day data in the UDiFF format, typed and renamed to project
+      conventions. One row per instrument per trade date per stored version of the file;
+      _source_file tells versions apart (its hash prefix is the raw zip's) and silver
+      chooses which to keep. Columns are matched by header name, so a renamed column fails
+      the model and a file in the pre-July-2024 format is rejected.
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [trade_date, symbol, series, _source_file]
+    columns:
+      - name: instrument_id
+        description: NSE's numeric instrument id.
+      - name: symbol
+        description: Ticker symbol.
+        data_tests:
+          - not_null
+      - name: series
+        description: Series, such as EQ, BE or SM.
+        data_tests:
+          - not_null
+      - name: isin
+        description: ISIN. Null when absent.
+      - name: instrument_name
+        description: Instrument name as published.
+      - name: open_price_inr
+        description: Opening price, in rupees.
+        data_tests:
+          - not_null
+          - non_negative
+      - name: high_price_inr
+        description: Highest price of the day, in rupees.
+        data_tests:
+          - not_null
+          - non_negative
+      - name: low_price_inr
+        description: Lowest price of the day, in rupees.
+        data_tests:
+          - not_null
+          - non_negative
+      - name: close_price_inr
+        description: Closing price, in rupees.
+        data_tests:
+          - not_null
+          - non_negative
+      - name: last_price_inr
+        description: Last traded price, in rupees.
+        data_tests:
+          - non_negative
+      - name: prev_close_price_inr
+        description: Previous day's closing price, in rupees.
+        data_tests:
+          - non_negative
+      - name: settlement_price_inr
+        description: Settlement price, in rupees. Null when not published.
+        data_tests:
+          - non_negative
+      - name: volume
+        description: Total traded quantity.
+        data_tests:
+          - not_null
+          - non_negative
+      - name: turnover_inr
+        description: Total traded value, in rupees.
+        data_tests:
+          - not_null
+          - non_negative
+      - name: trades
+        description: Number of trades.
+        data_tests:
+          - not_null
+          - non_negative
+      - name: trade_date
+        description: The date the prices apply to, from the file's contents.
+        data_tests:
+          - not_null
+      - name: _trade_date
+        description: The trade date of the folder the file was stored under.
+        data_tests:
+          - not_null
+      - name: _source_file
+        description: Path of the staged file the row came from.
+        data_tests:
+          - not_null
