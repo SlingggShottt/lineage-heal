@@ -58,6 +58,8 @@
 
 Loaders are plain Python modules using httpx. Each one downloads a feed for a trade date and writes the file, unchanged, to **Cloudflare R2** through its S3-compatible API using **boto3**.
 
+A local-directory backend sits behind the same interface for tests and sandboxes. boto3 carries its own timeouts and retries (standard mode, five attempts), since it does not use httpx.
+
 **Why R2:** S3-compatible, no egress fees (DuckDB and MotherDuck read the raw zone repeatedly), and a permanent free tier.
 
 **Considered:** AWS S3 (egress charges, and its free tier expires after 12 months), Backblaze B2 (viable fallback if R2 sign-up is a problem).

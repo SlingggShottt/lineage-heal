@@ -6,6 +6,7 @@ out of call sites and makes configuration easy to fake in tests.
 """
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, SecretStr
@@ -48,6 +49,11 @@ class Settings(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     # Console output is readable while developing; JSON is for CI logs.
     log_format: Literal["console", "json"] = "console"
+
+    # "local" is the safe default so nothing reaches the shared bucket by accident;
+    # the scheduled pipeline and the demo set "r2" explicitly.
+    raw_zone_backend: Literal["local", "r2"] = "local"
+    raw_zone_dir: Path = Path(".data/raw")
 
     r2_account_id: str | None = None
     r2_access_key_id: SecretStr | None = None
