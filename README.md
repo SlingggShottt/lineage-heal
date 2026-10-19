@@ -153,8 +153,12 @@ make up                   # Postgres, Dagster, API and dashboard
 |---|---|
 | `make check` | Formatting, linting, type checks |
 | `make test` | Python, dbt and frontend tests |
+| `uv run lineageheal ingest amfi --date 2026-10-15` | Download one day of AMFI NAVs into the raw zone |
+| `uv run lineageheal backfill amfi --start 2026-10-01` | Load a date range (from 2024-01-01); safe to re-run |
 | `make pipeline` | Run the ingestion and transformation pipeline |
 | `make bench` | Run the fault-injection benchmark |
+
+Ingestion writes to `.data/raw` by default. Set `RAW_ZONE_BACKEND=r2` and the four `R2_*` values in `.env` to write to Cloudflare R2 instead. AMFI publishes a day's NAVs in the evening, so ingest an earlier date if today's comes back as `no_data`.
 
 ## Project structure
 

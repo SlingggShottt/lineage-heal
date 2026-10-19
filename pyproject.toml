@@ -19,7 +19,11 @@ dependencies = [
     "pydantic-settings>=2.16.0",
     "structlog>=26.1.0",
     "tenacity>=9.2.1",
+    "typer>=0.27.3",
 ]
+
+[project.scripts]
+lineageheal = "lineageheal.cli:app"
 
 [dependency-groups]
 dev = [

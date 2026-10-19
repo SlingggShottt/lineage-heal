@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from datetime import date
 from enum import StrEnum
+from typing import Protocol
 
 from lineageheal.ingestion.raw_zone import StoredObject
 
@@ -25,3 +26,14 @@ class IngestionResult:
     outcome: IngestionOutcome
     http_status: int
     stored: StoredObject | None  # None when the source had no data
+
+
+class Loader(Protocol):
+    """What the command-line tool needs from a feed loader."""
+
+    source: str
+    dataset: str
+
+    def load(self, trade_date: date) -> IngestionResult:
+        """Download one trade date's file and store it in the raw zone."""
+        ...

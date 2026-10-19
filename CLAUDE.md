@@ -110,6 +110,10 @@ cp .env.example .env                 # Fill in values. Never commit .env.
 docker compose up -d                 # Postgres, Dagster UI, API, dashboard
 docker compose down
 
+# Ingestion (writes to RAW_ZONE_DIR, or to R2 when RAW_ZONE_BACKEND=r2)
+uv run lineageheal ingest amfi --date 2026-10-15
+uv run lineageheal backfill amfi --start 2026-10-01 --end 2026-10-15
+
 # Quality gates — all must pass before proposing a commit
 uv run ruff format . && uv run ruff check .
 uv run mypy src
