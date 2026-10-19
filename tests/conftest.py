@@ -9,6 +9,8 @@ from collections.abc import Iterator
 import pytest
 import structlog
 
+from lineageheal.core.settings import get_settings
+
 _LAYERS = ("unit", "integration", "e2e")
 
 # Every environment variable Settings reads. Cleared for each test so results never
@@ -43,6 +45,7 @@ def _clean_settings_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     """Remove all settings variables from the process environment for this test."""
     for name in _SETTINGS_VARIABLES:
         monkeypatch.delenv(name, raising=False)
+    get_settings.cache_clear()  # tests of code using get_settings() must see fresh values
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
