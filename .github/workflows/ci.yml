@@ -1,0 +1,53 @@
+# ci.yml
+# Continuous integration. Runs the same commands developers run locally (`make check`
+# and `make test`) on every pull request and every push to main, so a green check here
+# means the same thing as a green run on a laptop. Jobs for dbt and the frontend are
+# added by the tasks that introduce them (LH-029, LH-062).
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A new push to a pull request supersedes the previous run. Runs on main always finish,
+# so every merged commit has a result.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# This workflow only reads the repository.
+permissions:
+  contents: read
+
+env:
+  # Fail instead of silently updating uv.lock, so the lockfile in the pull request is
+  # exactly what gets tested.
+  UV_LOCKED: "1"
+
+jobs:
+  python:
+    name: Python (format, lint, types, tests)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      # Actions are pinned to commit SHAs rather than movable tags; the comment names the
+      # release. Dependabot keeps them current (LH-008).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # nothing later needs to push
+
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.12.21" # the uv used to create uv.lock
+          enable-cache: true # keyed on pyproject.toml and uv.lock
+
+      # uv reads the Python version from .python-version and downloads it if needed.
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Format, lint and types
+        run: make check
+
+      - name: Tests
+        run: make test

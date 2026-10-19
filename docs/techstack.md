@@ -173,6 +173,8 @@ A cross-encoder reranker (also via fastembed) will be evaluated during the build
 | `heal.yml` | Pipeline failure, manual, resume after review | Run the agent workflow on the new incident, or resume it from its checkpoint |
 | `benchmark.yml` | Manual only | Fault-injection benchmark on local DuckDB |
 
+Third-party actions are kept to a minimum and pinned to commit SHAs: `actions/checkout` and `astral-sh/setup-uv` (both MIT). The CI job installs the same uv version that created `uv.lock` and fails if the lockfile is out of date.
+
 Deployments: Render auto-deploys the API from `main`; Cloudflare Pages builds the dashboard from `main`. Dependabot keeps dependencies current.
 
 ## Free-tier budget

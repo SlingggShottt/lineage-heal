@@ -37,7 +37,7 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 | LH-006 | Create service accounts: Cloudflare R2, MotherDuck, Neon, Google AI Studio, Groq, LangSmith | NFR-COST-01 | Todo | |
 | LH-007 | Scaffold Python project: pyproject, uv, src layout, ruff, mypy, pytest, pre-commit (incl. gitleaks, commit lint), Makefile, .editorconfig, .gitignore, .env.example, LICENSE | NFR-MAINT-02, NFR-SEC-01 | Done | 2 |
 | LH-008 | Configure GitHub repo: branch protection, PR and issue templates, Dependabot | NFR-SEC-05 | Todo | |
-| LH-009 | CI workflow for Python: format, lint, types, tests | NFR-MAINT-02 | Todo | |
+| LH-009 | CI workflow for Python: format, lint, types, tests | NFR-MAINT-02 | Done | 2 |
 | LH-010 | Docker Compose with Postgres + pgvector; Dockerfile for the Python app | NFR-PORT-01 | Todo | |
 | LH-011 | Core module: settings, structured logging, error hierarchy | FR-OBS-02 | Done | 2 |
 | LH-012 | Data spike: NSE bhavcopy, security master, corporate actions (URLs, headers, history, reachability from Actions) | IF-SW-01 | Done | 2 |
@@ -51,6 +51,7 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 | LH-020 | FBIL reference rates loader | FR-ING-04 | Todo | |
 | LH-021 | `lineageheal` CLI: `ingest` and `backfill` commands | FR-ING-08, FR-ORC-05 | Done | 2 |
 | LH-080 | Data spike: FBIL reference rates access. The site is a JavaScript app behind reCAPTCHA; find a documented download or API route, or agree a replacement feed. Blocks LH-020 | IF-SW-01, FR-ING-04 | Todo | |
+| LH-081 | Secret scanning in CI: add a gitleaks job over the pull request diff (the pre-commit hook only scans staged changes, so it cannot run in CI). Needs approval for the action | NFR-SEC-01 | Todo | |
 
 ## Week 3 — Lakehouse and orchestration
 
@@ -142,6 +143,7 @@ A running record of completed work, used for the weekly diary.
 | 1 | LH-004 | Synopsis prepared |
 | 2 | LH-005 | Wrote project documentation: CLAUDE, README, context, PRD, SRS, design, style guide, tech stack, backlog |
 | 2 | LH-007 | Scaffolded the Python project: uv, src layout, ruff, strict mypy, pytest with layer markers, pre-commit (gitleaks, commit lint), Makefile, .env.example, LICENSE |
+| 2 | LH-009 | CI workflow for Python: format, lint, strict types and tests on every pull request and push to main, actions pinned to commit SHAs |
 | 2 | LH-011 | Core module: typed settings with R2 credentials accessor, structlog setup with secret redaction, error hierarchy |
 | 2 | LH-012 | NSE spike: bhavcopy (UDiFF from Jan 2024, old format to 5 Jul 2024, row-for-row equal), security master and corporate actions mapped; browser-like User-Agent needed; reachability from Actions deferred to LH-033; paired fixtures added |
 | 2 | LH-013 | AMFI spike: history report is date-addressable, live NAVAll is a snapshot, layouts differ; fixtures added; FBIL split out to LH-080 |
