@@ -125,11 +125,40 @@ Filled in by the Week 2 data spike (LH-012, LH-013).
 
 | Dataset | URL pattern | Format | Headers needed | Publication time (IST) | History available | Reachable from Actions |
 |---|---|---|---|---|---|---|
-| NSE `cm_bhavcopy` | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
-| NSE `security_master` | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
-| NSE `corporate_actions` | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
+| NSE `cm_bhavcopy` | `https://nsearchives.nseindia.com/content/cm/BhavCopy_NSE_CM_0_0_0_YYYYMMDD_F_0000.csv.zip` | Zip holding one CSV: 34 columns, ISO dates, LF endings, two-decimal prices, about 3,700 rows | Browser-like User-Agent and `Accept` headers; see [NSE findings](#nse-findings) | About 16:30 IST on the trade date | UDiFF back to at least 2 Jan 2024; old format until 5 Jul 2024 | Not tested yet (check in LH-033) |
+| NSE `security_master` | `https://nsearchives.nseindia.com/content/cm/NSE_CM_security_DDMMYYYY.csv.gz` | Gzipped CSV, about 38,100 rows; rows are longer than the 31-name header | As above | About 20:20 IST | Not available for 2 Jan 2024 (404); earliest date unknown | Not tested yet |
+| NSE `corporate_actions` | `https://www.nseindia.com/api/corporates-corporateActions?index=equities&from_date=DD-MM-YYYY&to_date=DD-MM-YYYY` | JSON array of objects | As above; answered without cookies in the spike | Not measured | Date ranges back to at least Jan 2024 | Not tested yet |
 | AMFI `navall` | `https://portal.amfiindia.com/DownloadNAVHistoryReport_Po.aspx?frmdt=DD-Mon-YYYY&todt=DD-Mon-YYYY` (set both to the same date). Live snapshot: `https://portal.amfiindia.com/spages/NAVAll.txt` | Semicolon-delimited text, UTF-8, CRLF; see [AMFI findings](#amfi-findings) | None; the default curl User-Agent worked | Evening; not yet published at 18:47 IST on the same day, and the live file was last modified 15:27 IST on 19 Oct 2026 | From at least 2 Jan 2024 (tested), one request per date | Not tested yet (check in LH-033) |
 | FBIL `reference_rates` | Not found. `fbil.org.in` is a JavaScript application with reCAPTCHA and exposes no plain file URL (LH-080) | Unknown | Unknown | Unknown | Unknown | Not tested |
+
+#### NSE findings
+
+Measured on 19 October 2026 (LH-012) with about 16 requests, spaced at least four seconds apart, from a home network (not yet from a GitHub Actions runner).
+
+- **The project User-Agent is rejected.** NSE sits behind Akamai. A request identifying itself as `lineageheal/0.1` was reset (curl error 92, an HTTP/2 stream reset), with or without `Accept` headers. A Chrome-style User-Agent with `Accept` and `Accept-Language` headers was served over HTTP/2 and HTTP/1.1. NSE loaders therefore send a browser-like User-Agent (as the data rules in CLAUDE.md anticipate), keep the three-second spacing, and never retry in a tight loop.
+- **A missing file is HTTP 404.** Saturday 17 Oct 2026 and the old-format URL for 8 Jul 2024 both returned a 3.4 KB HTML error page with status 404. This differs from AMFI, which answers 200 with an HTML page.
+- **Two formats exist side by side.** The old files live at `.../content/historical/EQUITIES/YYYY/MON/cmDDMONYYYYbhav.csv.zip` and were served up to 5 Jul 2024 (404 from 8 Jul). UDiFF files were served for every date tried back to 2 Jan 2024. The July 2024 change was therefore a change of publication, and both formats overlap from January to July 2024. Backfills use UDiFF only (D-20); old-format files are the held-out schema-drift case.
+- **The two formats hold the same data.** For 5 Jul 2024 both have 2,775 rows (1,906 `EQ`), and every row matches on close, volume, value and trade count. The pair is ground truth for a replay (fixtures in `tests/fixtures/nse/`).
+- **What changed between the formats:**
+
+  | Old | UDiFF | Note |
+  |---|---|---|
+  | `SYMBOL` | `TckrSymb` | |
+  | `SERIES` | `SctySrs` | |
+  | `OPEN`, `HIGH`, `LOW`, `CLOSE` | `OpnPric`, `HghPric`, `LwPric`, `ClsPric` | |
+  | `LAST`, `PREVCLOSE` | `LastPric`, `PrvsClsgPric` | |
+  | `TOTTRDQTY`, `TOTTRDVAL` | `TtlTradgVol`, `TtlTrfVal` | |
+  | `TIMESTAMP` (`05-JUL-2024`) | `TradDt` (`2024-07-05`) | date format changes |
+  | `TOTALTRADES` | `TtlNbOfTxsExctd` | |
+  | `ISIN` | `ISIN` | unchanged name; column moves from last to seventh |
+  | trailing empty column | none | the old header and rows end with a comma |
+  | not present | `FinInstrmId`, `FinInstrmNm`, `SttlmPric`, `BizDt`, and about 17 constant or empty columns (segment, expiry, strike, option type, open interest, reserved fields) | new in UDiFF |
+
+  Numbers also change shape: prices always have two decimals in UDiFF (`990.00`) but trailing zeros are trimmed in the old format (`990`).
+- **Security master quirks.** The header names 31 columns but each row has many more fields, so bronze must read only the named columns or pad short headers. It includes dummy instruments such as `011NSETEST`. No file was served for 2 Jan 2024, so the master is effectively a snapshot captured from now on, and silver conformance for older dates must cope with symbols that are missing from it.
+- **`EQUITY_L.csv`** (`.../content/equities/EQUITY_L.csv`) is a latest-only list of about 2,620 equities, not addressable by date, with leading spaces in some header names.
+- **Corporate actions are an API, not an archive file.** It returned 27 records for 1 to 16 Oct 2026 and 15 for 1 to 15 Jan 2024, with fields `symbol`, `series`, `isin`, `subject`, `exDate`, `recDate`, `bcStartDate`, `bcEndDate`, `ndStartDate`, `ndEndDate`, `faceVal`, `comp`, `ind` and `caBroadcastDate`. Completeness against NSE's website was not checked. Because it lives on the main site rather than the archive host, it is the most likely endpoint to be rate limited or blocked; fetch it with wide date ranges and few requests.
+- **Publication times.** The bhavcopy zip entry is stamped 16:30 IST and the file was last modified at 16:33 IST on the trade date. The security master was last modified at 20:22 IST.
 
 #### AMFI findings
 

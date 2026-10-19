@@ -115,6 +115,7 @@ Full design: `docs/design_architecture.md`.
 | D-17 | Dashboard login via GitHub OAuth; only allowlisted accounts can approve, everyone else is read-only | Approvals are attributable to a person, and a public demo link cannot merge anything |
 | D-18 | Agents open pull requests and issues through a dedicated GitHub App | Bot identity distinct from team members, with narrowly scoped permissions |
 | D-19 | The AMFI loader fetches the per-date history report, not the live `NAVAll.txt` snapshot, and bronze selects columns by header name | The live file holds 829 different NAV dates and cannot be fetched for a past date; the two endpoints also name and order columns differently (LH-013) |
+| D-20 | NSE history is backfilled in UDiFF only; old-format bhavcopy files (served up to 5 Jul 2024) are the held-out schema-drift case | UDiFF is served back to at least 2 Jan 2024 and matches the old format row for row, so one bronze schema covers the backfill while the old files give ground truth for the replay (LH-012) |
 
 ## Constraints
 
@@ -141,11 +142,11 @@ Task-level detail lives in `backlog.md`.
 ## Current status
 **Current diary week:** 2
 - **Week 1 (complete):** topic finalised with the guide; background research on data incidents and the NSE UDiFF change; feeds and tech stack chosen; synopsis prepared.
-- **Week 2 (in progress):** project documentation (LH-005), Python scaffold with tooling (LH-007) and core module (LH-011), the AMFI source spike (LH-013) and the raw-zone storage client (LH-015) the AMFI loader (LH-019) and the `ingest`/`backfill` commands (LH-021) done, so AMFI data can be ingested end to end. FBIL access is unresolved (LH-080). Next: R2 account (LH-006, manual) to write to the real bucket; NSE spike (LH-012) and loader (LH-017). A mid-project evaluation demo is due within days, so Week 2 tasks are ordered to reach a working ingest-to-R2 slice first.
+- **Week 2 (in progress):** project documentation (LH-005), Python scaffold with tooling (LH-007) and core module (LH-011), the AMFI source spike (LH-013) and the raw-zone storage client (LH-015) the AMFI loader (LH-019) and the `ingest`/`backfill` commands (LH-021) done, so AMFI data can be ingested end to end. the NSE source spike (LH-012) is done too: bhavcopy, security master and corporate actions are reachable from a home network, and old-format files give a held-out case. FBIL access is unresolved (LH-080). Next: NSE bhavcopy loader (LH-017); R2 account (LH-006, manual) to write to the real bucket. A mid-project evaluation demo is due within days, so Week 2 tasks are ordered to reach a working ingest-to-R2 slice first.
 
 ## Open questions
 
-1. Can NSE archives be reached reliably from GitHub Actions runners, or do cloud IP ranges get blocked? (Week 2 data spike)
+1. Can NSE archives be reached reliably from GitHub Actions runners, or do cloud IP ranges get blocked? From a home network they are reachable with a browser-like User-Agent (LH-012); runners are still untested, so this is checked when `pipeline.yml` is built (LH-033).
 2. How can FBIL reference rates be retrieved at all, and how much history is there? The site is a JavaScript application behind reCAPTCHA with no plain file URL (LH-013). To be resolved by hand in a browser, then recorded (LH-080).
 3. Does Elementary run correctly on DuckDB and MotherDuck? (Week 3 spike; fallback is custom statistical tests in dbt)
 4. Which venue to target for the research paper? (Decided after the build)
@@ -157,6 +158,7 @@ Resolved: fix scope outside dbt (D-14), hosting (D-16).
 | Risk | Impact | Mitigation |
 |---|---|---|
 | Source sites block automated or cloud traffic | Ingestion fails in CI | Polite headers and rates, caching, fallback to running ingestion locally and syncing to R2 |
+| NSE security master has no history before an unknown date | Backfilled dates may include instruments missing from the master, so silver conformance leaves gaps | Capture the master daily from now on; conform with the latest master and flag unmatched symbols instead of dropping rows |
 | FBIL offers no scriptable download | The third feed cannot be ingested as planned | Look for a documented download or API route (LH-080); otherwise agree a replacement rate feed with the guide, keeping the NSE and AMFI feeds as the core of the demo |
 | Free LLM tiers change or tighten | Agents or benchmark stall | Provider abstraction with fallback; benchmark runs batched and resumable |
 | MotherDuck compute allowance runs out | Live pipeline paused until the monthly reset | Incremental models; benchmark and experiments on local DuckDB; usage checked weekly |
