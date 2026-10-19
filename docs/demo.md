@@ -36,6 +36,15 @@ lh ingest amfi --date 2026-10-16 && lh ingest nse --date 2026-10-16 \
 rm -rf .data/demo .data/dev.duckdb      # reset
 ```
 
+**Optional: keep a history of every download in Postgres.** It adds about a minute to the setup and one moment to step 3. Skip it if you are short on time, and never export `DATABASE_URL` unless Postgres is running, because ingestion stops with an error when the log cannot be written.
+
+```bash
+make up                                  # starts Postgres, about ten seconds
+export DATABASE_URL=postgresql+psycopg://lineageheal:lineageheal@localhost:5433/lineageheal
+lh db upgrade                            # creates the log table
+docker compose exec -T postgres psql -U lineageheal -d lineageheal -qc "truncate ingestion_log restart identity"   # an empty log to start
+```
+
 **Pre-load the second day** (used for the schema-drift bonus), after the reset:
 
 ```bash
@@ -101,6 +110,14 @@ You see `stored` for each of the three NSE datasets (the price file, the instrum
 find .data/demo -type f
 ```
 
+*Optional, if you set up the log:*
+
+```bash
+lh log
+```
+
+You see one line per attempt, newest first: `stored`, `unchanged`, `no_data`, with size, hash and time. Say: every download attempt is recorded, including failures and empty days. This is how the pipeline will later tell a late file from a missing one, and pick the latest version of a file that was republished.
+
 Point at the SHA-256 prefix in each file name. Point out the third kind of file: the NSE zip is stored exactly as published under `raw/`, and an unzipped copy sits beside it under `staged/`. Say: the warehouse tool cannot read zip files, so the pipeline derives a copy for it and never touches the original. Storage is a setting (`RAW_ZONE_BACKEND`). This demo uses a local folder; a cloud bucket is supported in code but is not switched on (see the questions below).
 
 ### 4. What the real data taught us (1 min)
@@ -150,7 +167,7 @@ Say: AMFI republishes a report, and one NAV is missing.
 lh dev inject-fault amfi --fault blank-nav --date 2026-10-16
 ```
 
-You see `injected blank-nav (nulls) into amfi/navall 2026-10-16: raw/source=...`. Say: this adds a second, damaged version of the file. The good one is untouched, because storage is write-once. The command works only on a local folder and refuses to run against R2, so test faults can never reach real data.
+You see `injected blank-nav (nulls) into amfi/navall 2026-10-16: raw/source=...`. Say: this adds a second, damaged version of the file (with the log on, `lh log --limit 1` shows it as a new stored version). The good one is untouched, because storage is write-once. The command works only on a local folder and refuses to run against R2, so test faults can never reach real data.
 
 ```bash
 dbtb
@@ -186,9 +203,10 @@ Say: Week 3 finishes the warehouse layers and the daily schedule. Week 4 builds 
 |---|---|
 | Polite loaders for AMFI and three NSE datasets (bhavcopy, security master, corporate actions), with retries | The FBIL loader |
 | Write-once, content-addressed raw storage on local disk | Cloud storage in use: the R2 code is unit-tested against a fake client but has not run on a real bucket |
+| Ingestion log in Postgres: every attempt, with outcome, hash and arrival time | Using the log to pick the latest version of a republished file (silver) |
 | dbt project with bronze models for AMFI and three NSE datasets, and 56 quality checks | Silver and gold layers, and the FBIL bronze model |
 | Five fault injectors, each proven to trip its check | Unit-change faults and the full corpus of about 100 |
-| CI on every pull request, about 190 automated tests | Dagster schedule, lineage graph, agents, dashboard |
+| CI on every pull request, over 300 automated tests | Dagster schedule, lineage graph, agents, dashboard |
 
 Be direct about the gaps. FBIL's site sits behind a reCAPTCHA with no plain download, so we are looking for a documented route or agreeing a replacement feed (LH-080).
 
@@ -216,6 +234,7 @@ Be direct about the gaps. FBIL's site sits behind a reCAPTCHA with no plain down
 
 - **No network, or a source is slow:** skip step 3 and say the files were pre-loaded. Run `lh ingest amfi --date 2026-10-16` during your dry run instead, and everything from step 5 works offline.
 - **`no_data` for a date:** the source has nothing for that day. Use `2026-10-16` and `2026-10-15`, which are verified trading days.
+- **`error: Could not write to the ingestion log`:** Postgres is not running but `DATABASE_URL` is set. Run `make up`, or `unset DATABASE_URL` to carry on without the log.
 - **A command is slow the first time:** dbt takes a few seconds to start. Fill the time with the talking points.
 - **To redo the faults:** `rm -rf .data/demo .data/dev.duckdb`, then re-run the setup ingests.
 

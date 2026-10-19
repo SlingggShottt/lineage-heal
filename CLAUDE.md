@@ -116,12 +116,15 @@ uv run lineageheal ingest amfi --date 2026-10-15
 uv run lineageheal ingest nse --date 2026-10-15
 uv run lineageheal ingest nse --dataset security_master --date 2026-10-15   # or corporate_actions
 uv run lineageheal backfill amfi --start 2026-10-01 --end 2026-10-15
+uv run lineageheal db upgrade                    # needs DATABASE_URL and `make up`
+uv run lineageheal log --limit 10                # recent ingestion attempts
 uv run lineageheal dev inject-fault amfi --fault blank-nav --date 2026-10-15   # local raw zone only
 
 # Quality gates — all must pass before proposing a commit
 uv run ruff format . && uv run ruff check .
 uv run mypy src
 uv run pytest
+make test-integration                # tests that need the local Postgres (start it with `make up`)
 uv run dbt build --project-dir dbt --profiles-dir dbt --target dev
 pnpm --dir web lint && pnpm --dir web typecheck && pnpm --dir web test
 ```

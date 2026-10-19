@@ -8,7 +8,7 @@ import enum
 from collections import Counter
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 from typing import Annotated
 
 import typer
@@ -19,6 +19,13 @@ from lineageheal.core.logging import configure_logging
 from lineageheal.core.settings import get_settings
 from lineageheal.ingestion.amfi import AmfiNavLoader, report_filename
 from lineageheal.ingestion.http import PoliteFetcher
+from lineageheal.ingestion.log import (
+    AttemptRecorder,
+    attempt_from_failure,
+    attempt_from_injection,
+    attempt_from_result,
+    open_recorder,
+)
 from lineageheal.ingestion.nse import (
     NSE_BROWSER_HEADERS,
     NseBhavcopyLoader,
@@ -29,6 +36,9 @@ from lineageheal.ingestion.object_stores import LocalObjectStore
 from lineageheal.ingestion.raw_zone import RawZone, open_store
 from lineageheal.ingestion.staging import ZipStager
 from lineageheal.ingestion.types import IngestionOutcome, IngestionResult, Loader
+from lineageheal.store.database import create_db_engine
+from lineageheal.store.ingestion_log import IngestionAttempt, IngestionLogRepository
+from lineageheal.store.migrate import current_revision, head_revision, upgrade_database
 
 # India has no daylight saving, so a fixed offset is exact and avoids needing tzdata.
 IST = timezone(timedelta(hours=5, minutes=30), "IST")
@@ -41,6 +51,8 @@ dev_app = typer.Typer(
     no_args_is_help=True, help="Developer tools that only ever touch a local sandbox, never R2."
 )
 app.add_typer(dev_app, name="dev")
+db_app = typer.Typer(no_args_is_help=True, help="The application database (Postgres).")
+app.add_typer(db_app, name="db")
 
 
 class Source(enum.StrEnum):
@@ -116,6 +128,39 @@ def _open_loader(source: Source, dataset: str) -> Iterator[Loader]:
 
 
 @contextmanager
+def _open_recorder() -> Iterator[AttemptRecorder]:
+    """Open the ingestion log if a database is configured, closing it afterwards."""
+    recorder = open_recorder(get_settings())
+    try:
+        yield recorder
+    finally:
+        recorder.close()
+
+
+def _load_and_record(loader: Loader, recorder: AttemptRecorder, day: date) -> IngestionResult:
+    """Run one ingestion and log the attempt, whether it succeeds or fails."""
+    started_at = datetime.now(UTC)
+    try:
+        result = loader.load(day)
+    except LineageHealError as exc:
+        recorder.record(
+            attempt_from_failure(
+                source=loader.source,
+                dataset=loader.dataset,
+                trade_date=day,
+                error=exc,
+                started_at=started_at,
+                finished_at=datetime.now(UTC),
+            )
+        )
+        raise
+    recorder.record(
+        attempt_from_result(result, started_at=started_at, finished_at=datetime.now(UTC))
+    )
+    return result
+
+
+@contextmanager
 def _exit_on_project_errors() -> Iterator[None]:
     """Turn a project error into a one-line message and exit code 1 instead of a traceback."""
     try:
@@ -148,8 +193,12 @@ def ingest(
     """Download one day of a feed and store it unchanged in the raw zone."""
     chosen = _resolve_dataset(source, dataset)
     day = trade_date.date() if trade_date else today_ist()
-    with _exit_on_project_errors(), _open_loader(source, chosen) as loader:
-        typer.echo(_describe(loader.load(day)))
+    with (
+        _exit_on_project_errors(),
+        _open_recorder() as recorder,
+        _open_loader(source, chosen) as loader,
+    ):
+        typer.echo(_describe(_load_and_record(loader, recorder, day)))
 
 
 @app.command()
@@ -186,11 +235,15 @@ def backfill(
 
     outcomes: Counter[IngestionOutcome] = Counter()
     failed: list[date] = []
-    with _exit_on_project_errors(), _open_loader(source, chosen) as loader:
+    with (
+        _exit_on_project_errors(),
+        _open_recorder() as recorder,
+        _open_loader(source, chosen) as loader,
+    ):
         for offset in range((last - first).days + 1):
             day = first + timedelta(days=offset)
             try:
-                result = loader.load(day)
+                result = _load_and_record(loader, recorder, day)
             except LineageHealError as exc:
                 failed.append(day)
                 typer.echo(f"{day} {source.value}/{chosen} failed: {exc}", err=True)
@@ -232,7 +285,8 @@ def inject_fault(
 
     day = trade_date.date()
     spec = AMFI_FAULTS[fault]
-    with _exit_on_project_errors():
+    with _exit_on_project_errors(), _open_recorder() as recorder:
+        started_at = datetime.now(UTC)
         settings = get_settings()
         if settings.raw_zone_backend != "local":
             raise ConfigurationError(
@@ -254,5 +308,78 @@ def inject_fault(
             filename=report_filename(day),
             content=spec.apply(zone.read(keys[0])),
         )
+        recorder.record(
+            attempt_from_injection(
+                source=AmfiNavLoader.source,
+                dataset=AmfiNavLoader.dataset,
+                trade_date=day,
+                stored=stored,
+                started_at=started_at,
+                finished_at=datetime.now(UTC),
+            )
+        )
         verb = "injected" if stored.created else "already injected"
         typer.echo(f"{verb} {fault} ({spec.fault_class}) into amfi/navall {day}: {stored.key}")
+
+
+@db_app.command("upgrade")
+def db_upgrade() -> None:
+    """Create or update the application database's tables (reads DATABASE_URL)."""
+    with _exit_on_project_errors():
+        url = get_settings().require_database_url()
+        upgrade_database(url)
+        typer.echo(f"database is at revision {current_revision(url)}")
+
+
+@db_app.command("status")
+def db_status() -> None:
+    """Show which migration the database is at and whether it is up to date."""
+    with _exit_on_project_errors():
+        url = get_settings().require_database_url()
+        current, head = current_revision(url), head_revision()
+        if current is None:
+            typer.echo(f"no migrations applied; run `lineageheal db upgrade` (latest is {head})")
+        elif current == head:
+            typer.echo(f"database is at revision {current}, which is up to date")
+        else:
+            typer.echo(
+                f"database is at revision {current}, behind {head}; run `lineageheal db upgrade`"
+            )
+
+
+def _describe_attempt(attempt: IngestionAttempt) -> str:
+    when = attempt.finished_at.strftime("%Y-%m-%d %H:%M:%S")
+    head = (
+        f"{attempt.id:>5}  {when}Z  {attempt.source}/{attempt.dataset}  "
+        f"{attempt.trade_date}  {attempt.outcome:<9}"
+    )
+    if attempt.outcome in ("stored", "unchanged"):
+        return f"{head} {attempt.size_bytes} bytes {attempt.object_key}"
+    if attempt.outcome == "failed":
+        return f"{head} {attempt.error}"
+    return f"{head} http {attempt.http_status}"
+
+
+@app.command("log")
+def show_log(
+    limit: Annotated[int, typer.Option("--limit", min=1, help="How many attempts to show.")] = 20,
+    source: Annotated[str | None, typer.Option("--source", help="Only this source.")] = None,
+    dataset: Annotated[str | None, typer.Option("--dataset", help="Only this dataset.")] = None,
+    outcome: Annotated[
+        str | None,
+        typer.Option("--outcome", help="Only this outcome: stored, unchanged, no_data or failed."),
+    ] = None,
+) -> None:
+    """Show recent ingestion attempts, newest first (reads DATABASE_URL)."""
+    with _exit_on_project_errors():
+        engine = create_db_engine(get_settings().require_database_url())
+        try:
+            attempts = IngestionLogRepository(engine).recent(
+                limit=limit, source=source, dataset=dataset, outcome=outcome
+            )
+        finally:
+            engine.dispose()
+    if not attempts:
+        typer.echo("no ingestion attempts recorded")
+    for attempt in attempts:
+        typer.echo(_describe_attempt(attempt))
