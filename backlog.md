@@ -47,7 +47,7 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 | LH-016 | Per-source calendars as seeds (NSE, AMFI, FBIL; 2024 onwards) | FR-ING-07 | Todo | |
 | LH-017 | NSE CM-UDiFF bhavcopy loader | FR-ING-01, FR-ING-10 | Todo | |
 | LH-018 | NSE security master and corporate actions loaders | FR-ING-02 | Todo | |
-| LH-019 | AMFI NAVAll loader | FR-ING-03 | Todo | |
+| LH-019 | AMFI NAVAll loader | FR-ING-03 | Done | 2 |
 | LH-020 | FBIL reference rates loader | FR-ING-04 | Todo | |
 | LH-021 | `lineageheal` CLI: `ingest` and `backfill` commands | FR-ING-08, FR-ORC-05 | Todo | |
 | LH-080 | Data spike: FBIL reference rates access. The site is a JavaScript app behind reCAPTCHA; find a documented download or API route, or agree a replacement feed. Blocks LH-020 | IF-SW-01, FR-ING-04 | Todo | |
@@ -145,3 +145,4 @@ A running record of completed work, used for the weekly diary.
 | 2 | LH-011 | Core module: typed settings with R2 credentials accessor, structlog setup with secret redaction, error hierarchy |
 | 2 | LH-013 | AMFI spike: history report is date-addressable, live NAVAll is a snapshot, layouts differ; fixtures added; FBIL split out to LH-080 |
 | 2 | LH-015 | Raw-zone storage client: content-addressed write-once keys, checksum-verified reads, R2 and local backends |
+| 2 | LH-019 | AMFI loader: polite fetcher with retries and rate limit, per-date report download, no-data handling, verified live |

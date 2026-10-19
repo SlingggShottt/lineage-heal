@@ -15,8 +15,10 @@ requires-python = ">=3.12,<3.13"
 # package in this list has a reason that can be traced to a backlog item.
 dependencies = [
     "boto3>=1.43.114",
+    "httpx>=0.28.1",
     "pydantic-settings>=2.16.0",
     "structlog>=26.1.0",
+    "tenacity>=9.2.1",
 ]
 
 [dependency-groups]
@@ -25,6 +27,7 @@ dev = [
     "pre-commit>=4.0",
     "pytest>=8.3",
     "pytest-cov>=6.0",
+    "respx>=0.23.1",
     "ruff>=0.8",
 ]
 
