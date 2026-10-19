@@ -16,7 +16,7 @@ git checkout main && git pull
 uv sync --all-extras
 ```
 
-Open these tabs so nothing loads live: the repository **Actions** tab (a green check on `main`), the README architecture diagram, and, if you have set it up, the Cloudflare R2 bucket.
+Open these tabs so nothing loads live: the repository **Actions** tab (a green check on `main`), and the README architecture diagram.
 
 Use two terminals side by side, with a large font. In both, paste this block once. It uses a separate demo folder, so your development data and the injected faults never mix.
 
@@ -30,7 +30,9 @@ dbts() { uv run dbt show  --project-dir dbt --profiles-dir dbt --target dev --no
 **Dry run once**, then reset, so any problem shows up now and not on stage:
 
 ```bash
-lh ingest amfi --date 2026-10-16 && lh ingest nse --date 2026-10-16 && dbtb | tail -3
+lh ingest amfi --date 2026-10-16 && lh ingest nse --date 2026-10-16 \
+  && lh ingest nse --dataset security_master --date 2026-10-16 \
+  && lh ingest nse --dataset corporate_actions --date 2026-10-16 && dbtb | tail -3
 rm -rf .data/demo .data/dev.duckdb      # reset
 ```
 
@@ -84,11 +86,13 @@ You see one line: `2026-10-16 amfi/navall stored 1190057 bytes raw/source=amfi/d
 
 ```bash
 lh ingest nse --date 2026-10-16
+lh ingest nse --dataset security_master --date 2026-10-16
+lh ingest nse --dataset corporate_actions --date 2026-10-16
 lh ingest amfi --date 2026-10-16        # the same file again
 lh ingest nse --date 2026-10-17         # a Saturday
 ```
 
-You see `stored` for NSE, then `unchanged` for the repeat, then `no_data` for the weekend. Say:
+You see `stored` for each of the three NSE datasets (the price file, the instrument list and the day's corporate actions), then `unchanged` for the repeat, then `no_data` for the weekend. Say:
 
 - Files are stored exactly as published. The key contains the file's SHA-256, so an identical file is never stored twice and a changed file becomes a new object. Nothing is overwritten.
 - Requests are spaced three seconds apart, retried with backoff, and a missing file on a weekend is not an error.
@@ -97,7 +101,7 @@ You see `stored` for NSE, then `unchanged` for the repeat, then `no_data` for th
 find .data/demo -type f
 ```
 
-Point at the SHA-256 prefix in each file name. Point out the third kind of file: the NSE zip is stored exactly as published under `raw/`, and an unzipped copy sits beside it under `staged/`. Say: the warehouse tool cannot read zip files, so the pipeline derives a copy for it and never touches the original. If you have R2 set up, switch the storage with one setting (`RAW_ZONE_BACKEND=r2`) and show the same file in the Cloudflare dashboard.
+Point at the SHA-256 prefix in each file name. Point out the third kind of file: the NSE zip is stored exactly as published under `raw/`, and an unzipped copy sits beside it under `staged/`. Say: the warehouse tool cannot read zip files, so the pipeline derives a copy for it and never touches the original. Storage is a setting (`RAW_ZONE_BACKEND`). This demo uses a local folder; a cloud bucket is supported in code but is not switched on (see the questions below).
 
 ### 4. What the real data taught us (1 min)
 
@@ -112,6 +116,7 @@ Say any two of these, they are real findings from this project:
   ```
 
   Thirteen columns against thirty-four, every name changed, dates from `05-JUL-2024` to `2024-07-05`.
+- **NSE publishes par value in paise.** RELIANCE shows 1000 for a Rs 10 face value. I confirmed it against the corporate actions feed, which uses rupees: every instrument I checked was exactly 100 times larger. A silent switch to rupees would still pass every basic check, because the values stay valid numbers. That is a real unit-change fault waiting to happen, and catching it needs a cross-feed check later.
 - **A rule that looks obvious was wrong.** I expected every NAV to be positive. About 100 schemes publish exactly 0 on an ordinary day, so that check would have raised a false alarm every day.
 - **NSE rejects an honest client.** It resets connections from a client that identifies itself as this project, so loaders send browser-like headers.
 
@@ -121,7 +126,7 @@ Say any two of these, they are real findings from this project:
 dbtb
 ```
 
-You see `Done. PASS=36 WARN=0 ERROR=0`: two models and 34 checks. Say: dbt reads the stored files, drops the blank lines and headings the AMFI report mixes in, matches columns by name, types them, then runs the checks. For NSE the checks include that a day's high is never below its low and that the close lies between them.
+You see `Done. PASS=60 WARN=0 ERROR=0`: four models and 56 checks. Say: dbt reads the stored files, drops the blank lines and headings the AMFI report mixes in, matches columns by name, types them, then runs the checks. For NSE the checks include that a day's high is never below its low and that the close lies between them.
 
 ```bash
 dbts --limit 5 --inline "select scheme_code, left(scheme_name, 44) as scheme_name, plan_name, nav_inr, nav_date from {{ ref('brz_amfi__navall') }} where _trade_date = '2026-10-16' order by scheme_code"
@@ -151,7 +156,7 @@ You see `injected blank-nav (nulls) into amfi/navall 2026-10-16: raw/source=...`
 dbtb
 ```
 
-You see `FAIL 1 not_null_brz_amfi__navall_nav_inr`, `Got 1 result, configured to fail if != 0` and `Done. PASS=35 WARN=0 ERROR=1`. Say: one missing value in about nine thousand rows, caught by a check.
+You see `FAIL 1 not_null_brz_amfi__navall_nav_inr`, `Got 1 result, configured to fail if != 0` and `Done. PASS=59 WARN=0 ERROR=1`. Say: one missing value in about nine thousand rows, caught by a check.
 
 ```bash
 dbts --limit 5 --inline "select scheme_code, left(scheme_name, 40) as scheme_name, nav_inr, _trade_date, regexp_extract(_source_file, '([0-9a-f]{16})__', 1) as file_version from {{ ref('brz_amfi__navall') }} where nav_inr is null"
@@ -179,9 +184,9 @@ Say: Week 3 finishes the warehouse layers and the daily schedule. Week 4 builds 
 
 | Built and working | Not built yet |
 |---|---|
-| Polite loaders for AMFI and three NSE datasets (bhavcopy, security master, corporate actions), with retries | Bronze models for the NSE security master and corporate actions; the FBIL loader |
-| Write-once, content-addressed raw storage (local, R2 ready) | Reading raw files from R2 in the warehouse |
-| dbt project with AMFI and NSE bronze models and 36 quality checks | Silver and gold layers |
+| Polite loaders for AMFI and three NSE datasets (bhavcopy, security master, corporate actions), with retries | The FBIL loader |
+| Write-once, content-addressed raw storage on local disk | Cloud storage in use: the R2 code is unit-tested against a fake client but has not run on a real bucket |
+| dbt project with bronze models for AMFI and three NSE datasets, and 56 quality checks | Silver and gold layers, and the FBIL bronze model |
 | Five fault injectors, each proven to trip its check | Unit-change faults and the full corpus of about 100 |
 | CI on every pull request, about 190 automated tests | Dagster schedule, lineage graph, agents, dashboard |
 
@@ -199,7 +204,9 @@ Be direct about the gaps. FBIL's site sits behind a reCAPTCHA with no plain down
 
 **Is the data real?** Yes, public end-of-day files from NSE and AMFI, downloaded live in step 3.
 
-**Does it cost anything?** No. Everything runs on free tiers.
+**Does it cost anything?** No. Everything runs on free tiers or locally.
+
+**Is it deployed, and does it use cloud storage?** No, on purpose. The demo runs locally. Cloud storage (Cloudflare R2) is supported in code and unit-tested against a fake client, but it is not switched on, because even its free tier needs a payment method on file. The same code path writes to either.
 
 **What happens if NSE ships the old file format again?** The model rejects it, because the column names do not match. This is tested with NSE's real pre-July-2024 file: alone it fails the model, and next to a healthy file it shows up as missing values. That is the July 2024 change in miniature, and it is the held-out case for the benchmark.
 

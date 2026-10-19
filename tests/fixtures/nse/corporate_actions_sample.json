@@ -30,5 +30,37 @@
     "series": "EQ",
     "subject": "Special Dividend - Rs 21 Per Share",
     "symbol": "HINDCOMPOS"
+  },
+  {
+    "bcEndDate": "-",
+    "bcStartDate": "-",
+    "caBroadcastDate": null,
+    "comp": "Canara Robeco Asset Management Company Limited",
+    "exDate": "16-Oct-2026",
+    "faceVal": "10",
+    "ind": "-",
+    "isin": "INE218I01013",
+    "ndEndDate": "-",
+    "ndStartDate": "-",
+    "recDate": "16-Oct-2026",
+    "series": "EQ",
+    "subject": "Interim Dividend - Rs 2 Per Share",
+    "symbol": "CRAMC"
+  },
+  {
+    "bcEndDate": "-",
+    "bcStartDate": "-",
+    "caBroadcastDate": null,
+    "comp": "HCL Technologies Limited",
+    "exDate": "16-Oct-2026",
+    "faceVal": "2",
+    "ind": "-",
+    "isin": "INE860A01027",
+    "ndEndDate": "-",
+    "ndStartDate": "-",
+    "recDate": "16-Oct-2026",
+    "series": "EQ",
+    "subject": "Interim Dividend - Rs 12 Per Share",
+    "symbol": "HCLTECH"
   }
 ]
