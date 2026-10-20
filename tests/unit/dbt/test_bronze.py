@@ -1,30 +1,27 @@
 """FR-WH-01 and FR-WH-04: bronze models read stored files and their tests catch faults.
 
-Each test stores a file in a temporary raw zone, runs `dbt build` for one model against a
-temporary DuckDB file, and inspects which models and tests passed. Damaged files are often
-stored as a second version of the same trade date, the way a bad republication would arrive.
+Each test stores a file in a temporary raw zone, runs `dbt build` for one model and inspects
+which models and tests passed (the shared machinery is in conftest.py). Damaged files are
+often stored as a second version of the same trade date, the way a bad republication would
+arrive.
 """
 
+from __future__ import annotations
+
 import csv
-import gzip
 import json
-import zipfile
 from collections.abc import Callable
-from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
-from io import BytesIO
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import duckdb
 import pytest
-import yaml
-from dbt.cli.main import dbtRunner
 
 from lineageheal.benchmark.faults import AMFI_FAULTS
-from lineageheal.ingestion.object_stores import LocalObjectStore
-from lineageheal.ingestion.raw_zone import RawZone
-from lineageheal.ingestion.staging import ZipStager
+
+if TYPE_CHECKING:
+    from conftest import Workspace
 
 REPO_ROOT = Path(__file__).parents[3]
 DBT_DIR = REPO_ROOT / "dbt"
@@ -45,113 +42,6 @@ ACTIONS_MODEL = "brz_nse__corporate_actions"
 REFERENCE_DATE = date(2026, 10, 16)
 MASTER_FIXTURE = NSE_DIR / "security_master_sample.csv"
 ACTIONS_FIXTURE = NSE_DIR / "corporate_actions_sample.json"
-
-
-@dataclass
-class BuildResult:
-    success: bool
-    statuses: dict[str, str]  # node name -> pass, fail, success, error or skipped
-    database: Path
-
-    def query(self, sql: str) -> list[tuple[object, ...]]:
-        # dbt keeps its own connection to the file open in this process, and DuckDB only
-        # allows a second one with identical settings, so this cannot be read-only.
-        connection = duckdb.connect(str(self.database))
-        try:
-            return connection.sql(sql).fetchall()
-        finally:
-            connection.close()
-
-    def failed(self) -> set[str]:
-        return {name for name, status in self.statuses.items() if status in ("fail", "error")}
-
-
-@dataclass
-class Workspace:
-    zone: RawZone
-    stager: ZipStager
-    build: Callable[[str], BuildResult]  # builds one model and its tests
-
-    def store_amfi(self, content: bytes) -> None:
-        self.zone.put_if_absent(
-            source="amfi",
-            dataset="navall",
-            trade_date=TRADE_DATE,
-            filename="NAVHistoryReport151026.txt",
-            content=content,
-        )
-
-    def store_nse(self, csv_content: bytes) -> None:
-        """Store a bhavcopy zip in the raw zone and stage it, as the loader does."""
-        buffer = BytesIO()
-        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-            archive.writestr(NSE_FILENAME, csv_content)
-        stored = self.zone.put_if_absent(
-            source="nse",
-            dataset="cm_bhavcopy",
-            trade_date=NSE_TRADE_DATE,
-            filename=f"{NSE_FILENAME}.zip",
-            content=buffer.getvalue(),
-        )
-        self.stager.stage(stored.key)
-
-    def store_security_master(self, csv_content: bytes) -> None:
-        self.zone.put_if_absent(
-            source="nse",
-            dataset="security_master",
-            trade_date=REFERENCE_DATE,
-            filename="NSE_CM_security_16102026.csv.gz",
-            content=gzip.compress(csv_content),
-        )
-
-    def store_corporate_actions(self, json_content: bytes) -> None:
-        self.zone.put_if_absent(
-            source="nse",
-            dataset="corporate_actions",
-            trade_date=REFERENCE_DATE,
-            filename="corporate_actions_20261016.json",
-            content=json_content,
-        )
-
-
-@pytest.fixture
-def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Workspace:
-    raw_dir = tmp_path / "raw_zone"
-    monkeypatch.setenv("RAW_ZONE_DIR", str(raw_dir))
-    monkeypatch.chdir(REPO_ROOT)
-
-    profiles_dir = tmp_path / "profiles"
-    profiles_dir.mkdir()
-    database = tmp_path / "test.duckdb"
-    profile = {
-        "lineageheal": {
-            "target": "ci",
-            "outputs": {"ci": {"type": "duckdb", "path": str(database), "threads": 1}},
-        }
-    }
-    (profiles_dir / "profiles.yml").write_text(yaml.safe_dump(profile))
-
-    def build(model: str) -> BuildResult:
-        result = dbtRunner().invoke(
-            [
-                "build",
-                "--select", model,
-                "--project-dir", str(DBT_DIR),
-                "--profiles-dir", str(profiles_dir),
-                "--target-path", str(tmp_path / "target"),
-                "--log-path", str(tmp_path / "logs"),
-                "--no-version-check",
-                "--quiet",
-            ]
-        )  # fmt: skip
-        statuses = {
-            r.node.name: str(r.status.value)
-            for r in (result.result.results if result.result else [])  # type: ignore[union-attr]
-        }
-        return BuildResult(result.success, statuses, database)
-
-    store = LocalObjectStore(raw_dir)
-    return Workspace(RawZone(store), ZipStager(store), build)
 
 
 def healthy_report() -> bytes:

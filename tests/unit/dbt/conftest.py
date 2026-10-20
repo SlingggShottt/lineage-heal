@@ -1,0 +1,157 @@
+"""Shared machinery for the dbt scenario tests.
+
+Each test stores files in a temporary raw zone, runs `dbt build` for some models against a
+temporary DuckDB file, and inspects which models and tests passed. Test modules import the
+`Workspace` type only for annotations, so they do not need to import this module.
+"""
+
+import gzip
+import os
+import zipfile
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import date
+from io import BytesIO
+from pathlib import Path
+
+import duckdb
+import pytest
+import yaml
+from dbt.cli.main import dbtRunner
+
+from lineageheal.ingestion.object_stores import LocalObjectStore
+from lineageheal.ingestion.raw_zone import RawZone, StoredObject
+from lineageheal.ingestion.staging import ZipStager
+
+REPO_ROOT = Path(__file__).parents[3]
+DBT_DIR = REPO_ROOT / "dbt"
+
+# Where each dataset's files are stored unless a test says otherwise.
+AMFI_DATE = date(2026, 10, 15)
+BHAVCOPY_DATE = date(2024, 7, 5)
+REFERENCE_DATE = date(2026, 10, 16)
+BHAVCOPY_NAME = "BhavCopy_NSE_CM_0_0_0_20240705_F_0000.csv"
+
+
+@dataclass
+class BuildResult:
+    success: bool
+    statuses: dict[str, str]  # node name -> pass, fail, success, error or skipped
+    database: Path
+
+    def query(self, sql: str) -> list[tuple[object, ...]]:
+        # dbt keeps its own connection to the file open in this process, and DuckDB only
+        # allows a second one with identical settings, so this cannot be read-only.
+        connection = duckdb.connect(str(self.database))
+        try:
+            return connection.sql(sql).fetchall()
+        finally:
+            connection.close()
+
+    def failed(self) -> set[str]:
+        return {name for name, status in self.statuses.items() if status in ("fail", "error")}
+
+
+@dataclass
+class Workspace:
+    raw_dir: Path
+    zone: RawZone
+    stager: ZipStager
+    build: Callable[..., BuildResult]  # builds the named models and their tests
+
+    def _arrive(self, stored: StoredObject, arrived_at: float | None) -> StoredObject:
+        """Set when a stored file arrived, so tests control which version is the latest."""
+        if arrived_at is not None:
+            os.utime(self.raw_dir / stored.key, (arrived_at, arrived_at))
+        return stored
+
+    def store_amfi(
+        self, content: bytes, *, trade_date: date = AMFI_DATE, arrived_at: float | None = None
+    ) -> StoredObject:
+        stored = self.zone.put_if_absent(
+            source="amfi",
+            dataset="navall",
+            trade_date=trade_date,
+            filename=f"NAVHistoryReport{trade_date:%d%m%y}.txt",
+            content=content,
+        )
+        return self._arrive(stored, arrived_at)
+
+    def store_nse(self, csv_content: bytes, *, arrived_at: float | None = None) -> StoredObject:
+        """Store a bhavcopy zip in the raw zone and stage it, as the loader does."""
+        buffer = BytesIO()
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(BHAVCOPY_NAME, csv_content)
+        stored = self.zone.put_if_absent(
+            source="nse",
+            dataset="cm_bhavcopy",
+            trade_date=BHAVCOPY_DATE,
+            filename=f"{BHAVCOPY_NAME}.zip",
+            content=buffer.getvalue(),
+        )
+        self.stager.stage(stored.key)
+        return self._arrive(stored, arrived_at)
+
+    def store_security_master(
+        self, csv_content: bytes, *, arrived_at: float | None = None
+    ) -> StoredObject:
+        stored = self.zone.put_if_absent(
+            source="nse",
+            dataset="security_master",
+            trade_date=REFERENCE_DATE,
+            filename="NSE_CM_security_16102026.csv.gz",
+            content=gzip.compress(csv_content),
+        )
+        return self._arrive(stored, arrived_at)
+
+    def store_corporate_actions(
+        self, json_content: bytes, *, arrived_at: float | None = None
+    ) -> StoredObject:
+        stored = self.zone.put_if_absent(
+            source="nse",
+            dataset="corporate_actions",
+            trade_date=REFERENCE_DATE,
+            filename="corporate_actions_20261016.json",
+            content=json_content,
+        )
+        return self._arrive(stored, arrived_at)
+
+
+@pytest.fixture
+def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Workspace:
+    raw_dir = tmp_path / "raw_zone"
+    monkeypatch.setenv("RAW_ZONE_DIR", str(raw_dir))
+    monkeypatch.chdir(REPO_ROOT)
+
+    profiles_dir = tmp_path / "profiles"
+    profiles_dir.mkdir()
+    database = tmp_path / "test.duckdb"
+    profile = {
+        "lineageheal": {
+            "target": "ci",
+            "outputs": {"ci": {"type": "duckdb", "path": str(database), "threads": 1}},
+        }
+    }
+    (profiles_dir / "profiles.yml").write_text(yaml.safe_dump(profile))
+
+    def build(*models: str) -> BuildResult:
+        result = dbtRunner().invoke(
+            [
+                "build",
+                "--select", *models,
+                "--project-dir", str(DBT_DIR),
+                "--profiles-dir", str(profiles_dir),
+                "--target-path", str(tmp_path / "target"),
+                "--log-path", str(tmp_path / "logs"),
+                "--no-version-check",
+                "--quiet",
+            ]
+        )  # fmt: skip
+        statuses = {
+            r.node.name: str(r.status.value)
+            for r in (result.result.results if result.result else [])  # type: ignore[union-attr]
+        }
+        return BuildResult(result.success, statuses, database)
+
+    store = LocalObjectStore(raw_dir)
+    return Workspace(raw_dir, RawZone(store), ZipStager(store), build)

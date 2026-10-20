@@ -61,7 +61,7 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 | LH-022 | dbt project scaffold: profiles with dev/ci/bench/prod targets, schema macro, guard tests. Packages and sqlfluff are added with the first models that need them (LH-024, LH-027) | FR-WH-06 | Done | 2 |
 | LH-023 | Raw-zone sources in local-path mode for non-prod targets. The DuckDB R2 secret for prod moved to LH-082 | FR-WH-01 | Done | 2 |
 | LH-024 | Bronze models (5) with docs and tests. AMFI, NSE bhavcopy (zips are staged, D-22), NSE security master and NSE corporate actions done; only FBIL remains, blocked by LH-080 | FR-WH-01, FR-WH-04 | In progress | |
-| LH-025 | Silver models (5) with docs and tests | FR-WH-02, FR-WH-04 | Todo | |
+| LH-025 | Silver models (5) with docs and tests. Done: the version-selection model and macro, and `slv_amfi__nav`. Remaining: NSE securities, corporate actions and equity end-of-day (with cross-feed checks such as par value against face value), and FBIL (blocked by LH-080) | FR-WH-02, FR-WH-04 | In progress | |
 | LH-026 | Gold models (4) with docs and tests, including cross-feed summary | FR-WH-03, FR-WH-04 | Todo | |
 | LH-027 | Elementary spike and anomaly monitors (fallback: custom z-score tests) | FR-WH-05 | Todo | |
 | LH-028 | Domain quality checks: price ranges, unexplained price jumps, NAV and FX bounds | FR-WH-04 | Todo | |
@@ -74,6 +74,7 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 | LH-035 | Historical backfill from January 2024 to R2 and MotherDuck | FR-ING-08 | Todo | |
 | LH-082 | DuckDB R2 secret and httpfs for the prod target: read the raw zone from R2 instead of a local path | FR-WH-01 | Todo | |
 | LH-085 | Speed up the dbt scenario tests by parsing the project once and reusing the manifest (measured: builds take about 0.75 s instead of 1.5 s); do it when the suite passes about three minutes | NFR-MAINT-02 | Todo | |
+| LH-086 | Reconcile raw file arrival times with the ingestion log, as a Detector signal and a test: file times can be reset by copying or restoring a raw zone, the log cannot | FR-DET-01 | Todo | |
 
 ## Week 4 — Lineage, detection and investigation
 
@@ -163,3 +164,4 @@ A running record of completed work, used for the weekly diary.
 | 2 | LH-024 | Bronze, two of five models: AMFI NAVs and the NSE bhavcopy, with 36 checks. NSE zips are unzipped into a derived staged area (D-22); a file in the pre-July-2024 format is rejected by the model |
 | 2 | LH-010 | Docker Compose with Postgres 17 and pgvector (loopback only, healthchecked, named volume) and a pinned, non-root application image of 852 MB; guard tests for the configuration |
 | 2 | LH-014 | Postgres store: SQLAlchemy models, hand-written Alembic migration and an `ingestion_log` table whose rules the database enforces; every ingest, backfill and injected fault is logged when `DATABASE_URL` is set; `db upgrade`, `db status` and `log` commands; `stored_versions` orders a republished day's files by arrival |
+| 2 | LH-025 | Silver, part one: `brz_meta__raw_file_versions` and the `latest_version_rows` macro choose each day's latest version by arrival time, and `slv_amfi__nav` conforms plan and option; verified on the real republished AMFI report, in both arrival orders |

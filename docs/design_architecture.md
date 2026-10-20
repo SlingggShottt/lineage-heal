@@ -210,6 +210,16 @@ The staged key is derived from the raw key, so the hash prefix still says which 
 - NSE writes `-` where a corporate action field does not apply, which bronze turns into null. The action's meaning stays as free text in `subject`; classifying it is silver's job.
 - A day with no corporate actions has no file, and a model whose source has no files at all fails (for example a fresh environment where nothing was ingested); that is deliberate, since a missing source is a real failure.
 
+**Silver: choosing a version (D-21, D-26).** A day's file can be republished, and bronze keeps every version. Silver keeps one: the version that arrived last.
+
+- `brz_meta__raw_file_versions` has one row per stored raw file: source, dataset, trade date, the 16-character hash that names the version, size, and `arrived_at`. Arrival time is the file's modification time, read in SQL from the storage layer without opening the file. Raw objects are write-once, so that is when the version was stored. Only raw objects are listed, never the staged copies.
+- The macro `latest_version_rows` joins a bronze model to the latest version of each trade date. Bronze rows carry their version in `_source_file` (the `<hash>__` prefix).
+- **Why file times and not the Postgres log:** `dbt build` stays independent of a database (CI, and the benchmark sandbox, which must not depend on a server), and a metadata-only read of 60 files took 0.03 s. The ingestion log records the same fact and remains the authoritative record; reconciling the two is LH-086. The weakness of file times is that copying or restoring a raw zone resets them.
+- **Fail-open:** a trade date missing from the versions model keeps all its rows instead of losing them, so a stale versions model shows up as duplicate keys in the uniqueness tests rather than as missing data.
+- **Gating:** `dbt build` skips models downstream of a failed test, so a bad republication that fails a bronze check never reaches silver. A bad version that passes bronze would be chosen if it is the latest.
+
+`slv_amfi__nav` is the first silver model: one row per scheme per date from the latest version, with plan and option conformed to a small vocabulary (`direct` or `regular`; `growth`, `idcw` or `bonus`). Only unambiguous text is mapped. 662 of 10,056 real rows (6.6%) publish no plan, and silver leaves them null rather than guess from the scheme name, because a name such as "Regular Savings Fund - Direct Plan" contains both words.
+
 The dbt project lives in `dbt/`. Its profile has four targets: `dev` (local DuckDB file), `ci` (in-memory DuckDB), `bench` (a separate local file) and `prod` (MotherDuck, with the token read from `MOTHERDUCK_TOKEN`). Only `prod` is remote, and a test guards that the benchmark target can never be. Each layer builds into a schema of the same name (`bronze`, `silver`, `gold`) on every target, through a `generate_schema_name` override.
 
 `gld_market_daily_summary` deliberately joins all three feeds (for example equity turnover, NAV coverage and USD/INR per day), so lineage paths cross sources and the agents must reason about which feed a failure came from.

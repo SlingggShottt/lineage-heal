@@ -159,3 +159,23 @@ sources:
             description: Face value in rupees, as text.
           - name: ind
             description: Indicator, or "-" when none.
+
+  - name: raw_zone
+    description: >
+      The raw zone itself: one row per stored file, with its size and the time it was written.
+      No file contents are read.
+    tables:
+      - name: files
+        meta:
+          external_location: >
+            read_blob('{{ env_var("RAW_ZONE_DIR", ".data/raw") }}/raw/source=*/dataset=*/trade_date=*/*')
+        description: >
+          File metadata from the storage layer. last_modified is when the object was stored; raw
+          objects are write-once, so it is the arrival time of that version.
+        columns:
+          - name: filename
+            description: Full path of the stored file.
+          - name: size
+            description: Size in bytes.
+          - name: last_modified
+            description: When the file was written.

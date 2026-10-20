@@ -254,3 +254,45 @@ models:
         description: Path of the raw file the row came from.
         data_tests:
           - not_null
+
+  - name: brz_meta__raw_file_versions
+    description: >
+      One row per stored raw file with the time it arrived. This is what lets silver choose the
+      latest version of a republished file. Arrival time is the file's modification time, read
+      from the storage layer without opening the file; raw objects are write-once, so it is when
+      that version was stored. The ingestion log holds the same fact as the authoritative
+      record.
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [source, dataset, trade_date, version]
+    columns:
+      - name: source
+        description: Publisher, for example amfi.
+        data_tests:
+          - not_null
+      - name: dataset
+        description: Dataset, for example navall.
+        data_tests:
+          - not_null
+      - name: trade_date
+        description: The trade date the file was stored under.
+        data_tests:
+          - not_null
+      - name: version
+        description: The first 16 hex characters of the file's SHA-256, which name the version.
+        data_tests:
+          - not_null
+      - name: file_path
+        description: Full path of the stored file.
+        data_tests:
+          - not_null
+      - name: size_bytes
+        description: Size in bytes.
+        data_tests:
+          - not_null
+          - non_negative
+      - name: arrived_at
+        description: When the file was stored.
+        data_tests:
+          - not_null
