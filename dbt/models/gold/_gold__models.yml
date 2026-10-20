@@ -105,3 +105,116 @@ models:
         description: >
           Close against the previous close, in percent, after putting the previous close on the
           same share count. Null when there is no previous close.
+
+  - name: gld_mf_nav_daily
+    description: >
+      Mutual fund NAVs, one row per scheme per date, each beside the scheme's previous NAV and
+      the change between them. The previous NAV is the scheme's last date with a NAV, not
+      necessarily the day before, and `days_since_prev_nav` says how wide the gap is. Payouts
+      of dividends (IDCW) lower a NAV and are not adjusted for, so a change on a payout date
+      is a real fall.
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [nav_date, scheme_code]
+    columns:
+      - name: nav_date
+        description: The date the NAV applies to.
+        data_tests:
+          - not_null
+      - name: scheme_code
+        description: AMFI scheme code.
+        data_tests:
+          - not_null
+      - name: scheme_name
+        description: Scheme name as published.
+        data_tests:
+          - not_null
+      - name: plan
+        description: "`direct` or `regular`. Null when the report does not say."
+      - name: option_type
+        description: "`growth`, `idcw` or `bonus`. Null when the report does not say."
+      - name: isin_div_payout_or_growth
+        description: ISIN for dividend payout or growth units. Null when none.
+      - name: isin_div_reinvestment
+        description: ISIN for dividend reinvestment units. Null when none.
+      - name: nav_inr
+        description: NAV per unit as published, in rupees.
+        data_tests:
+          - not_null
+          - non_negative
+      - name: prev_nav_date
+        description: The scheme's previous date with a NAV. Null for its first date.
+      - name: prev_nav_inr
+        description: The NAV on that date, in rupees. Null for the first date.
+        data_tests:
+          - non_negative
+      - name: days_since_prev_nav
+        description: Calendar days between the previous NAV and this one. Null for the first date.
+        data_tests:
+          - positive
+      - name: nav_change_pct
+        description: >
+          NAV against the previous NAV, in percent. Null for the first date and when the
+          previous NAV is 0, which some schemes publish on ordinary days.
+
+  - name: gld_market_daily_summary
+    description: >
+      One row per date across both feeds: NSE equity totals and breadth beside AMFI NAV
+      coverage and movement. A date with only one feed keeps its row with the other feed's
+      figures null, and `has_equity_data` and `has_nav_data` say which are present, which is
+      what separates a weekend from a missing file. Equity totals cover every series; breadth
+      and the median return cover the EQ series only. Returns are the adjusted ones from
+      `gld_equity_daily_prices`, so a split day is not counted as a fall. Because it reads
+      both feeds, it is not built when either feed fails its checks.
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [summary_date]
+    columns:
+      - name: summary_date
+        description: The calendar date.
+        data_tests:
+          - not_null
+      - name: has_equity_data
+        description: True when NSE prices exist for the date.
+        data_tests:
+          - not_null
+      - name: has_nav_data
+        description: True when AMFI NAVs exist for the date.
+        data_tests:
+          - not_null
+      - name: equity_instruments
+        description: Number of instruments with a price, in every series. Null without equity data.
+        data_tests:
+          - non_negative
+      - name: equity_volume
+        description: Total traded quantity across every series. Null without equity data.
+        data_tests:
+          - non_negative
+      - name: equity_turnover_inr
+        description: Total traded value across every series, in rupees. Null without equity data.
+        data_tests:
+          - non_negative
+      - name: eq_advancers
+        description: EQ-series instruments whose adjusted return was above zero.
+        data_tests:
+          - non_negative
+      - name: eq_decliners
+        description: EQ-series instruments whose adjusted return was below zero.
+        data_tests:
+          - non_negative
+      - name: eq_unchanged
+        description: EQ-series instruments whose adjusted return was zero.
+        data_tests:
+          - non_negative
+      - name: eq_median_return_pct
+        description: Median adjusted return of the EQ series, in percent.
+      - name: nav_schemes_published
+        description: Number of schemes with a NAV for the date. Null without NAV data.
+        data_tests:
+          - non_negative
+      - name: nav_median_change_pct
+        description: >
+          Median NAV change across schemes that have a previous NAV, in percent. Null when no
+          scheme has one.
