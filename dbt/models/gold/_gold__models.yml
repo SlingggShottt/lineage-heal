@@ -1,0 +1,107 @@
+version: 2
+
+models:
+  - name: gld_equity_daily_prices
+    description: >
+      NSE end-of-day prices, one row per instrument per trading date, with prices put on a
+      common share count. A split or bonus changes how many shares a price refers to, so a
+      published price from before one cannot be compared with a price from after it.
+      `adj_close_price_inr` restates every close on the share count of the latest ex-date
+      known, and `daily_return_pct` compares each close with the previous one on the same
+      footing. Only splits and bonuses adjust: dividends do not change the share count, and
+      rights issues, demergers and buy-backs are flagged by `has_corporate_action` but not
+      adjusted. Corporate actions are known only for the ex-dates that have been ingested, so
+      a split on a day that was never fetched adjusts nothing.
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [price_date, symbol, series]
+    columns:
+      - name: price_date
+        description: The trading date.
+        data_tests:
+          - not_null
+      - name: symbol
+        description: Ticker symbol.
+        data_tests:
+          - not_null
+      - name: series
+        description: Series, such as EQ, BE or SM.
+        data_tests:
+          - not_null
+      - name: isin
+        description: ISIN. Null when absent.
+      - name: instrument_name
+        description: Instrument name as published.
+      - name: open_price_inr
+        description: Opening price as published, in rupees, not adjusted.
+        data_tests:
+          - not_null
+          - non_negative
+      - name: high_price_inr
+        description: Highest price of the day as published, in rupees, not adjusted.
+        data_tests:
+          - not_null
+          - non_negative
+      - name: low_price_inr
+        description: Lowest price of the day as published, in rupees, not adjusted.
+        data_tests:
+          - not_null
+          - non_negative
+      - name: close_price_inr
+        description: Closing price as published, in rupees, not adjusted.
+        data_tests:
+          - not_null
+          - non_negative
+      - name: prev_close_price_inr
+        description: >
+          Previous day's closing price as published, in rupees. NSE does not restate it for a
+          split or bonus.
+        data_tests:
+          - non_negative
+      - name: volume
+        description: Total traded quantity, as published.
+        data_tests:
+          - not_null
+          - non_negative
+      - name: turnover_inr
+        description: Total traded value, in rupees.
+        data_tests:
+          - not_null
+          - non_negative
+      - name: trades
+        description: Number of trades.
+        data_tests:
+          - not_null
+          - non_negative
+      - name: has_corporate_action
+        description: >
+          True when any corporate action of any kind has this date as its ex-date, so a reader
+          looking at a large move can see that something was announced.
+        data_tests:
+          - not_null
+      - name: action_factor
+        description: >
+          How many shares one share became on this date through a split or bonus: 5 for a split
+          from Rs 5 to Re 1, 2 for a bonus of 1:1. 1 when there was none. Null if a split or
+          bonus was announced but its numbers could not be read.
+        data_tests:
+          - not_null
+          - positive
+      - name: adjustment_factor
+        description: >
+          The number to multiply a published price by to put it on the share count of the
+          latest ex-date known: the reciprocal of all the split and bonus factors after this
+          date. 1 for the latest dates and for symbols with none.
+        data_tests:
+          - not_null
+          - positive
+      - name: adj_close_price_inr
+        description: Closing price on the common share count, in rupees.
+        data_tests:
+          - not_null
+          - non_negative
+      - name: daily_return_pct
+        description: >
+          Close against the previous close, in percent, after putting the previous close on the
+          same share count. Null when there is no previous close.

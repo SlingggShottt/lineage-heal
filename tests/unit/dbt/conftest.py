@@ -32,7 +32,6 @@ DBT_DIR = REPO_ROOT / "dbt"
 AMFI_DATE = date(2026, 10, 15)
 BHAVCOPY_DATE = date(2024, 7, 5)
 REFERENCE_DATE = date(2026, 10, 16)
-BHAVCOPY_NAME = "BhavCopy_NSE_CM_0_0_0_20240705_F_0000.csv"
 
 
 @dataclass
@@ -41,12 +40,12 @@ class BuildResult:
     statuses: dict[str, str]  # node name -> pass, fail, success, error or skipped
     database: Path
 
-    def query(self, sql: str) -> list[tuple[object, ...]]:
+    def query(self, sql: str, *parameters: object) -> list[tuple[object, ...]]:
         # dbt keeps its own connection to the file open in this process, and DuckDB only
         # allows a second one with identical settings, so this cannot be read-only.
         connection = duckdb.connect(str(self.database))
         try:
-            return connection.sql(sql).fetchall()
+            return connection.execute(sql, list(parameters)).fetchall()
         finally:
             connection.close()
 
@@ -79,16 +78,23 @@ class Workspace:
         )
         return self._arrive(stored, arrived_at)
 
-    def store_nse(self, csv_content: bytes, *, arrived_at: float | None = None) -> StoredObject:
+    def store_nse(
+        self,
+        csv_content: bytes,
+        *,
+        trade_date: date = BHAVCOPY_DATE,
+        arrived_at: float | None = None,
+    ) -> StoredObject:
         """Store a bhavcopy zip in the raw zone and stage it, as the loader does."""
+        name = f"BhavCopy_NSE_CM_0_0_0_{trade_date:%Y%m%d}_F_0000.csv"
         buffer = BytesIO()
         with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-            archive.writestr(BHAVCOPY_NAME, csv_content)
+            archive.writestr(name, csv_content)
         stored = self.zone.put_if_absent(
             source="nse",
             dataset="cm_bhavcopy",
-            trade_date=BHAVCOPY_DATE,
-            filename=f"{BHAVCOPY_NAME}.zip",
+            trade_date=trade_date,
+            filename=f"{name}.zip",
             content=buffer.getvalue(),
         )
         self.stager.stage(stored.key)
@@ -107,13 +113,17 @@ class Workspace:
         return self._arrive(stored, arrived_at)
 
     def store_corporate_actions(
-        self, json_content: bytes, *, arrived_at: float | None = None
+        self,
+        json_content: bytes,
+        *,
+        ex_date: date = REFERENCE_DATE,
+        arrived_at: float | None = None,
     ) -> StoredObject:
         stored = self.zone.put_if_absent(
             source="nse",
             dataset="corporate_actions",
-            trade_date=REFERENCE_DATE,
-            filename="corporate_actions_20261016.json",
+            trade_date=ex_date,
+            filename=f"corporate_actions_{ex_date:%Y%m%d}.json",
             content=json_content,
         )
         return self._arrive(stored, arrived_at)

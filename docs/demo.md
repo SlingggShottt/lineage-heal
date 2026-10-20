@@ -143,7 +143,7 @@ Say any two of these, they are real findings from this project:
 dbtb
 ```
 
-You see `Done. PASS=140 WARN=0 ERROR=0`: nine models and 131 checks. Say: dbt reads the stored files, drops the blank lines and headings the AMFI report mixes in, matches columns by name, types them, then runs the checks. For NSE the checks include that a day's high is never below its low and that the close lies between them. After bronze come four silver tables. They keep the latest version of each day's file, tidy AMFI's plan and option into a small vocabulary, convert NSE's par value from paise to rupees, and read NSE's free-text corporate action descriptions ("Bonus 1:1", "Dividend - Rs 5 Per Share") into a type and numbers. A cross-feed check compares the instrument list with corporate actions.
+You see `Done. PASS=168 WARN=0 ERROR=0`: ten models and 158 checks. Say: dbt reads the stored files, drops the blank lines and headings the AMFI report mixes in, matches columns by name, types them, then runs the checks. For NSE the checks include that a day's high is never below its low and that the close lies between them. After bronze come four silver tables. They keep the latest version of each day's file, tidy AMFI's plan and option into a small vocabulary, convert NSE's par value from paise to rupees, and read NSE's free-text corporate action descriptions ("Bonus 1:1", "Dividend - Rs 5 Per Share") into a type and numbers. A cross-feed check compares the instrument list with corporate actions. The last model is the first gold table, `gld_equity_daily_prices`: it restates prices for splits and bonuses so that a price from before a split can be compared with one after it, and a check proves it never loses or changes a published price. The sample day contains a real 5-to-1 split (BANSALWIRE), which silver shows as an 80% fall.
 
 ```bash
 dbts --limit 5 --inline "select scheme_code, left(scheme_name, 44) as scheme_name, plan_name, nav_inr, nav_date from {{ ref('brz_amfi__navall') }} where _trade_date = '2026-10-16' order by scheme_code"
@@ -156,6 +156,14 @@ dbts --limit 5 --inline "select symbol, series, close_price_inr, volume, turnove
 ```
 
 You see four large caps with real closing prices, volumes and turnover for 16 October.
+
+Then the gold layer, on the one real split in that day's data:
+
+```bash
+dbts --limit 1 --inline "select s.symbol, s.close_price_inr, s.prev_close_price_inr, s.change_pct as silver_change_pct, g.daily_return_pct as gold_return_pct from {{ ref('slv_nse__equity_eod') }} as s inner join {{ ref('gld_equity_daily_prices') }} as g on g.price_date = s.price_date and g.symbol = s.symbol and g.series = s.series where s.symbol = 'BANSALWIRE' and s.series = 'EQ'"
+```
+
+You see a close of 61.65 against a previous close of 315.60: `silver_change_pct` shows -80.466… and `gold_return_pct` shows -2.329…. Say: the company split each Rs 5 share into five Re 1 shares that day, so nothing crashed, but NSE does not restate its previous close, and the feed alone reads as an 80% fall. Gold reads the corporate actions feed, sees the 5-to-1 split and compares like with like. A price-jump alarm built on the raw feed would have fired on a healthy day.
 
 *Optional, if you have time:* in the second terminal run `uv run dbt docs generate --project-dir dbt --profiles-dir dbt --target dev && uv run dbt docs serve --project-dir dbt --profiles-dir dbt --target dev --port 8080`, open http://localhost:8080, open the `brz_amfi__navall` model and its lineage graph. It shows the raw source feeding the model. Say: this is table-level; the agents will use column-level lineage.
 
@@ -173,7 +181,7 @@ You see `injected blank-nav (nulls) into amfi/navall 2026-10-16: raw/source=...`
 dbtb
 ```
 
-You see `FAIL 1 not_null_brz_amfi__navall_nav_inr`, `Got 1 result, configured to fail if != 0` and `Done. PASS=128 WARN=0 ERROR=1 SKIP=11`. Say: one missing value in about nine thousand rows, caught by a check. The 11 skipped items are the AMFI silver table and its checks: the failure stopped the bad data from reaching the next layer, while the NSE side was unaffected and still built.
+You see `FAIL 1 not_null_brz_amfi__navall_nav_inr`, `Got 1 result, configured to fail if != 0` and `Done. PASS=156 WARN=0 ERROR=1 SKIP=11`. Say: one missing value in about nine thousand rows, caught by a check. The 11 skipped items are the AMFI silver table and its checks: the failure stopped the bad data from reaching the next layer, while the NSE side was unaffected and still built.
 
 ```bash
 dbts --limit 5 --inline "select scheme_code, left(scheme_name, 40) as scheme_name, nav_inr, _trade_date, regexp_extract(_source_file, '([0-9a-f]{16})__', 1) as file_version from {{ ref('brz_amfi__navall') }} where nav_inr is null"
@@ -204,7 +212,7 @@ Say: Week 3 finishes the warehouse layers and the daily schedule. Week 4 builds 
 | Polite loaders for AMFI and three NSE datasets (bhavcopy, security master, corporate actions), with retries | The FBIL loader |
 | Write-once, content-addressed raw storage on local disk | Cloud storage in use: the R2 code is unit-tested against a fake client but has not run on a real bucket |
 | Ingestion log in Postgres: every attempt, with outcome, hash and arrival time | Using the log to pick the latest version of a republished file (silver) |
-| dbt project with bronze models for AMFI and three NSE datasets, four silver models (latest version of each day, conformed units and vocabulary, parsed corporate actions, a cross-feed par-value check), and 131 quality checks | The gold layers, and the FBIL bronze and silver models |
+| dbt project with bronze models for AMFI and three NSE datasets, four silver models (latest version of each day, conformed units and vocabulary, parsed corporate actions, a cross-feed par-value check), the first gold table (split- and bonus-adjusted prices), and 158 quality checks | The NAV and market-summary gold tables, and the FBIL models |
 | Five fault injectors, each proven to trip its check | Unit-change faults and the full corpus of about 100 |
 | CI on every pull request, over 300 automated tests | Dagster schedule, lineage graph, agents, dashboard |
 
