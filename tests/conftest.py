@@ -1,7 +1,8 @@
 """Shared pytest configuration.
 
 Tests are marked by the directory they live in, so the markers in the style guide
-(unit, integration, e2e) never depend on someone remembering to add a decorator.
+(unit, integration, e2e, and dbt for the tests that run real dbt builds) never depend on
+someone remembering to add a decorator.
 """
 
 from collections.abc import Iterator
@@ -57,3 +58,5 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
             if layer in parts:
                 item.add_marker(getattr(pytest.mark, layer))
                 break
+        if "dbt" in parts:
+            item.add_marker(pytest.mark.dbt)
