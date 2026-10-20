@@ -28,8 +28,11 @@ lint: ## Lint without changing files
 typecheck: ## Static type check (strict)
 	uv run mypy src
 
-test: ## Run unit tests with coverage
-	uv run pytest --cov
+# The dbt scenarios exercise SQL, not our Python (that is covered by the tests next to it), and
+# coverage tracing doubles their run time, so they run as a second step without it.
+test: ## Run unit tests: Python with coverage, then the dbt scenarios
+	uv run pytest --cov -m "unit and not dbt"
+	uv run pytest -m "unit and dbt"
 
 test-integration: ## Run tests that need the local Postgres (start it with make up first)
 	uv run pytest -m integration

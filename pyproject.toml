@@ -112,6 +112,7 @@ markers = [
     "integration: needs Docker Compose services",
     "e2e: full-stack tests",
     "slow: long-running tests",
+    "dbt: run real dbt builds; kept out of the coverage run because tracing dbt doubles their time",
 ]
 
 [tool.coverage.run]

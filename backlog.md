@@ -73,7 +73,7 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 | LH-034 | Persist dbt artifacts and record failure signals per run | FR-WH-07, FR-ORC-04 | Todo | |
 | LH-035 | Historical backfill from January 2024 to R2 and MotherDuck | FR-ING-08 | Todo | |
 | LH-082 | DuckDB R2 secret and httpfs for the prod target: read the raw zone from R2 instead of a local path | FR-WH-01 | Todo | |
-| LH-085 | Speed up the dbt scenario tests by parsing the project once and reusing the manifest (measured: builds take about 0.75 s instead of 1.5 s); do it when the suite passes about three minutes | NFR-MAINT-02 | Todo | |
+| LH-085 | Speed up the dbt scenario tests: parse the project once and reuse it, and run them outside the coverage run | NFR-MAINT-02 | Done | 3 |
 | LH-086 | Reconcile raw file arrival times with the ingestion log, as a Detector signal and a test: file times can be reset by copying or restoring a raw zone, the log cannot | FR-DET-01 | Todo | |
 
 ## Week 4 — Lineage, detection and investigation
@@ -166,3 +166,4 @@ A running record of completed work, used for the weekly diary.
 | 2 | LH-014 | Postgres store: SQLAlchemy models, hand-written Alembic migration and an `ingestion_log` table whose rules the database enforces; every ingest, backfill and injected fault is logged when `DATABASE_URL` is set; `db upgrade`, `db status` and `log` commands; `stored_versions` orders a republished day's files by arrival |
 | 2 | LH-025 | Silver, part one: `brz_meta__raw_file_versions` and the `latest_version_rows` macro choose each day's latest version by arrival time, and `slv_amfi__nav` conforms plan and option; verified on the real republished AMFI report, in both arrival orders |
 | 2 | LH-025 | Silver, part two: `slv_nse__securities` (par value in rupees), `slv_nse__equity_eod` and `slv_nse__corporate_actions`, whose parser reads 25 real wording shapes and flags rewording; the par-value cross-feed check catches a paise-to-rupees switch that bronze cannot see |
+| 3 | LH-085 | Test suite from 3m50s to 50s: the dbt project is parsed once per session and reused (110 s to 39 s for 86 scenarios), and those scenarios run in a second step without coverage, which had doubled their time; 345 tests and 99.53% coverage unchanged |

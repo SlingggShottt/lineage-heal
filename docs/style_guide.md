@@ -133,7 +133,9 @@ The API and database layer are async. Loaders and the CLI may be synchronous. Ne
 - Layout mirrors `src/`: `tests/unit/ingestion/test_nse.py` tests `src/lineageheal/ingestion/nse.py`.
 - Name tests as behaviour: `test_identical_file_is_not_stored_twice`.
 - Arrange, act, assert, separated by blank lines.
-- Markers: `unit` (default), `integration` (needs Docker services), `e2e`, `slow`.
+- Markers: `unit` (default), `integration` (needs Docker services), `e2e`, `slow`, and `dbt` (the tests that run real dbt builds). Markers come from the folder a test lives in, not from decorators.
+- `make test` runs the Python tests with coverage and then the `dbt` tests without it: those exercise SQL rather than our Python, and coverage tracing doubles their run time.
+- dbt scenario tests share one parsed project per session (the `parsed_project` fixture in `tests/unit/dbt/conftest.py`). Each test gets an emptied raw-zone folder and its own database file, which must be named `test.duckdb`. Parsing once is what keeps about 90 builds fast.
 - Fixtures in `conftest.py` at the narrowest level that needs them; sample data in `tests/fixtures/`.
 - Reference requirement IDs in the docstring when a test verifies one: `"""FR-ING-05."""`
 

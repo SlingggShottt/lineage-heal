@@ -7,12 +7,14 @@ temporary DuckDB file, and inspects which models and tests passed. Test modules 
 
 import gzip
 import os
+import shutil
 import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 from io import BytesIO
 from pathlib import Path
+from typing import Any
 
 import duckdb
 import pytest
@@ -117,15 +119,9 @@ class Workspace:
         return self._arrive(stored, arrived_at)
 
 
-@pytest.fixture
-def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Workspace:
-    raw_dir = tmp_path / "raw_zone"
-    monkeypatch.setenv("RAW_ZONE_DIR", str(raw_dir))
-    monkeypatch.chdir(REPO_ROOT)
-
-    profiles_dir = tmp_path / "profiles"
-    profiles_dir.mkdir()
-    database = tmp_path / "test.duckdb"
+def write_profile(profiles_dir: Path, database: Path) -> None:
+    """A dbt profile that builds into one DuckDB file. Its file name sets dbt's database name."""
+    profiles_dir.mkdir(parents=True, exist_ok=True)
     profile = {
         "lineageheal": {
             "target": "ci",
@@ -134,8 +130,64 @@ def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Workspace:
     }
     (profiles_dir / "profiles.yml").write_text(yaml.safe_dump(profile))
 
-    def build(*models: str) -> BuildResult:
+
+@dataclass(frozen=True)
+class ParsedProject:
+    """The dbt project parsed once, and the raw-zone folder its sources were parsed against."""
+
+    raw_dir: Path
+    manifest: Any  # dbt's Manifest
+
+
+@pytest.fixture(scope="session")
+def parsed_project(tmp_path_factory: pytest.TempPathFactory) -> ParsedProject:
+    """Parse the dbt project once for the whole test session.
+
+    Parsing takes about as long as a small build, and it would otherwise happen in every test.
+    Source locations are fixed when the project is parsed (they come from RAW_ZONE_DIR), so every
+    test uses this one raw-zone folder, emptied before each test. Each test still gets its own
+    database file; those must all be named test.duckdb, because dbt takes its database name
+    from the file name and the parsed project already contains it.
+    """
+    root = tmp_path_factory.mktemp("dbt-parsed")
+    raw_dir = root / "raw_zone"
+    raw_dir.mkdir()
+    (root / "db").mkdir()
+    write_profile(root / "profiles", root / "db" / "test.duckdb")
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("RAW_ZONE_DIR", str(raw_dir))
         result = dbtRunner().invoke(
+            [
+                "parse",
+                "--project-dir", str(DBT_DIR),
+                "--profiles-dir", str(root / "profiles"),
+                "--target-path", str(root / "target"),
+                "--log-path", str(root / "logs"),
+                "--no-version-check",
+                "--quiet",
+            ]
+        )  # fmt: skip
+    assert result.success, result.exception
+    return ParsedProject(raw_dir, result.result)
+
+
+@pytest.fixture
+def workspace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, parsed_project: ParsedProject
+) -> Workspace:
+    raw_dir = parsed_project.raw_dir
+    shutil.rmtree(raw_dir)  # nothing from an earlier test may remain
+    raw_dir.mkdir()
+    monkeypatch.setenv("RAW_ZONE_DIR", str(raw_dir))
+    monkeypatch.chdir(REPO_ROOT)
+
+    profiles_dir = tmp_path / "profiles"
+    database = tmp_path / "test.duckdb"  # the name must stay test.duckdb, see parsed_project
+    write_profile(profiles_dir, database)
+
+    def build(*models: str) -> BuildResult:
+        result = dbtRunner(manifest=parsed_project.manifest).invoke(
             [
                 "build",
                 "--select", *models,
