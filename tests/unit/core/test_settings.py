@@ -92,3 +92,18 @@ def test_get_settings_is_cached() -> None:
     get_settings.cache_clear()
 
     assert get_settings() is get_settings()
+
+
+def test_the_database_url_is_optional_and_masked(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert make_settings().database_url is None
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://user:hunter2@host/db")
+
+    settings = make_settings()
+    assert "hunter2" not in repr(settings)
+    assert settings.require_database_url() == "postgresql+psycopg://user:hunter2@host/db"
+
+
+def test_a_missing_database_url_is_explained_by_name() -> None:
+    with pytest.raises(ConfigurationError, match="DATABASE_URL is not set"):
+        make_settings().require_database_url()

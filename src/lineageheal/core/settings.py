@@ -58,10 +58,26 @@ class Settings(BaseSettings):
     # Gap between requests to a source site (FR-ING-10). Raise it if a source pushes back.
     ingest_min_interval_seconds: float = Field(default=3.0, ge=0)
 
+    # Postgres for application state. Optional: without it ingestion still runs and simply
+    # keeps no log. A secret, because the URL carries the password.
+    database_url: SecretStr | None = None
+
     r2_account_id: str | None = None
     r2_access_key_id: SecretStr | None = None
     r2_secret_access_key: SecretStr | None = None
     r2_bucket: str | None = None
+
+    def require_database_url(self) -> str:
+        """Return the database URL, or explain that it is not set.
+
+        Raises:
+            ConfigurationError: DATABASE_URL is not set. The message names the variable.
+        """
+        if self.database_url is None:
+            raise ConfigurationError(
+                "DATABASE_URL is not set; start Postgres with `make up` and set it in .env"
+            )
+        return self.database_url.get_secret_value()
 
     def r2_credentials(self) -> R2Credentials:
         """Return the R2 credentials, or explain exactly which variables are missing.

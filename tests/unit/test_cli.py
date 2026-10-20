@@ -19,6 +19,9 @@ from lineageheal.core.errors import ConfigurationError
 from lineageheal.ingestion.amfi import AMFI_REPORT_URL
 from lineageheal.ingestion.object_stores import LocalObjectStore
 from lineageheal.ingestion.raw_zone import RawZone
+from lineageheal.store.database import create_db_engine
+from lineageheal.store.ingestion_log import IngestionAttempt, IngestionLogRepository
+from lineageheal.store.migrate import upgrade_database
 
 FIXTURES = Path(__file__).parents[1] / "fixtures" / "amfi"
 REPORT = (FIXTURES / "navall_history_2026-10-15_sample.txt").read_bytes()
@@ -457,3 +460,171 @@ def test_the_loader_registry_refuses_a_combination_it_has_no_loader_for() -> Non
         cli._open_loader(cli.Source.AMFI, "nope"),
     ):
         pass
+
+
+# --- the ingestion log -------------------------------------------------------------------
+
+
+@pytest.fixture
+def database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
+    """Point the CLI at a migrated SQLite database, as DATABASE_URL would point at Postgres."""
+    url = f"sqlite+pysqlite:///{tmp_path / 'log.db'}"
+    upgrade_database(url)
+    monkeypatch.setenv("DATABASE_URL", url)
+    return url
+
+
+def logged(url: str) -> list[IngestionAttempt]:
+    """Every attempt in the database, oldest first."""
+    engine = create_db_engine(url)
+    try:
+        return list(reversed(IngestionLogRepository(engine).recent(limit=100)))
+    finally:
+        engine.dispose()
+
+
+def test_db_upgrade_creates_the_tables_and_says_which_revision(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+pysqlite:///{tmp_path / 'new.db'}")
+
+    result = runner.invoke(app, ["db", "upgrade"])
+
+    assert result.exit_code == 0
+    assert result.stdout.strip() == "database is at revision 0001"
+
+
+def test_db_status_reports_missing_current_and_outdated_databases(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    url = f"sqlite+pysqlite:///{tmp_path / 'new.db'}"
+    monkeypatch.setenv("DATABASE_URL", url)
+
+    assert "no migrations applied" in runner.invoke(app, ["db", "status"]).stdout
+
+    upgrade_database(url)
+    assert "up to date" in runner.invoke(app, ["db", "status"]).stdout
+
+    monkeypatch.setattr(cli, "head_revision", lambda: "9999")
+    assert "behind 9999" in runner.invoke(app, ["db", "status"]).stdout
+
+
+@pytest.mark.parametrize("arguments", [["db", "upgrade"], ["db", "status"], ["log"]])
+def test_database_commands_name_the_missing_setting(arguments: list[str]) -> None:
+    result = runner.invoke(app, arguments)
+
+    assert result.exit_code == 1
+    assert "DATABASE_URL" in result.stderr
+
+
+@respx.mock
+def test_every_kind_of_attempt_is_logged(database: str) -> None:
+    respx.get(AMFI_REPORT_URL).mock(
+        side_effect=[report_response(), report_response(), httpx.Response(403)]
+    )
+    respx.get(NSE_URL).mock(return_value=httpx.Response(404))
+    date_args = ["--date", "2026-10-15"]
+
+    runner.invoke(app, ["ingest", "amfi", *date_args])  # stored
+    runner.invoke(app, ["ingest", "amfi", *date_args])  # unchanged
+    runner.invoke(app, ["ingest", "nse", "--date", "2024-07-05"])  # no data
+    failure = runner.invoke(app, ["ingest", "amfi", *date_args])  # failed
+
+    assert failure.exit_code == 1
+    attempts = logged(database)
+    assert [a.outcome for a in attempts] == ["stored", "unchanged", "no_data", "failed"]
+    stored_attempt, unchanged, no_data, failed = attempts
+    assert stored_attempt.object_key is not None
+    assert stored_attempt.size_bytes == len(REPORT)
+    assert stored_attempt.http_status == 200
+    assert unchanged.object_key == stored_attempt.object_key
+    assert (no_data.source, no_data.dataset, no_data.http_status) == ("nse", "cm_bhavcopy", 404)
+    assert failed.error is not None
+    assert "HTTP 403" in failed.error
+
+
+@respx.mock
+def test_a_backfill_logs_each_day_including_the_failed_one(database: str) -> None:
+    respx.get(AMFI_REPORT_URL).mock(
+        side_effect=[report_response(), httpx.Response(403), no_data_response()]
+    )
+
+    runner.invoke(app, ["backfill", "amfi", "--start", "2026-10-13", "--end", "2026-10-15"])
+
+    attempts = logged(database)
+    assert [a.trade_date.day for a in attempts] == [13, 14, 15]
+    assert [a.outcome for a in attempts] == ["stored", "failed", "no_data"]
+
+
+def test_an_injected_fault_is_logged_as_a_new_stored_version(tmp_path: Path, database: str) -> None:
+    store_report(tmp_path)
+
+    inject("blank-nav")
+
+    (attempt,) = logged(database)
+    assert attempt.outcome == "stored"
+    assert (attempt.source, attempt.dataset) == ("amfi", "navall")
+    assert attempt.http_status is None
+    assert attempt.object_key is not None
+    assert attempt.object_key.endswith("__NAVHistoryReport151026.txt")
+
+
+@respx.mock
+def test_the_log_command_lists_newest_first_and_can_filter(database: str) -> None:
+    respx.get(AMFI_REPORT_URL).mock(side_effect=[report_response(), httpx.Response(403)])
+    runner.invoke(app, ["ingest", "amfi", "--date", "2026-10-15"])
+    runner.invoke(app, ["ingest", "amfi", "--date", "2026-10-15"])
+
+    everything = runner.invoke(app, ["log"]).stdout.strip().splitlines()
+    failures = runner.invoke(app, ["log", "--outcome", "failed"]).stdout.strip().splitlines()
+    newest_only = runner.invoke(app, ["log", "--limit", "1"]).stdout.strip().splitlines()
+
+    assert len(everything) == 2
+    assert "failed" in everything[0]
+    assert "stored" in everything[1]
+    assert len(failures) == 1
+    assert "HTTP 403" in failures[0]
+    assert newest_only == everything[:1]
+
+
+@respx.mock
+def test_the_log_shows_the_status_for_a_day_with_no_data(database: str) -> None:
+    respx.get(NSE_URL).mock(return_value=httpx.Response(404))
+    runner.invoke(app, ["ingest", "nse", "--date", "2024-07-05"])
+
+    (line,) = runner.invoke(app, ["log"]).stdout.strip().splitlines()
+
+    assert "nse/cm_bhavcopy" in line
+    assert "no_data" in line
+    assert line.endswith("http 404")
+
+
+def test_the_log_command_says_so_when_there_is_nothing_to_show(database: str) -> None:
+    result = runner.invoke(app, ["log"])
+
+    assert result.exit_code == 0
+    assert result.stdout.strip() == "no ingestion attempts recorded"
+
+
+@respx.mock
+def test_a_database_that_cannot_be_written_stops_the_command_with_a_clear_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A gap in the log would hide late data later, so this is an error, not a warning."""
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:////no/such/folder/log.db")
+    respx.get(AMFI_REPORT_URL).mock(return_value=report_response())
+
+    result = runner.invoke(app, ["ingest", "amfi", "--date", "2026-10-15"])
+
+    assert result.exit_code == 1
+    assert "Could not write to the ingestion log" in result.stderr
+
+
+@respx.mock
+def test_without_a_database_ingestion_works_and_keeps_no_log() -> None:
+    respx.get(AMFI_REPORT_URL).mock(return_value=report_response())
+
+    result = runner.invoke(app, ["ingest", "amfi", "--date", "2026-10-15"])
+
+    assert result.exit_code == 0
+    assert "ingestion log" not in result.output

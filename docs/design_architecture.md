@@ -343,6 +343,32 @@ erDiagram
 
 Plus standalone tables: `ingestion_log`, `lineage_events`, LangGraph checkpoint tables, and Dagster's own schema.
 
+### Ingestion log
+
+`ingestion_log` (FR-ING-06) holds one row per ingestion attempt, successful or not:
+
+| Column | Meaning |
+|---|---|
+| `source`, `dataset`, `trade_date` | What was asked for |
+| `outcome` | `stored` (a new object), `unchanged` (an identical file was already there), `no_data` (the source had nothing) or `failed` |
+| `object_key`, `size_bytes`, `sha256` | The raw object, for `stored` and `unchanged` |
+| `http_status` | The source's answer, when there was one |
+| `error` | Why a `failed` attempt failed (truncated, never a secret) |
+| `started_at`, `finished_at` | Timezone-aware UTC timestamps |
+
+The database enforces the rules, not just the code: an unknown outcome, a stored file without its key, hash and size, and a failure without a reason are all rejected. Migrations are Alembic revisions written by hand, and a test fails if the models and the migrations ever describe different schemas.
+
+What the log is for:
+
+- **Choosing a version.** A day's file can be republished (AMFI did, repeatedly). `stored_versions(source, dataset, trade_date)` returns each stored object with the time it first arrived, oldest first, so silver can pick the latest version by arrival time (D-21). An `unchanged` re-ingest does not move a version, and failed or empty attempts add none.
+- **Late and missing data.** Together with the exchange calendars it distinguishes "no file expected" from "file missing" (FR-ING-07).
+
+How it is used:
+
+- It is optional. With no `DATABASE_URL`, ingestion works exactly as before and keeps no log. With one, `ingest` and `backfill` record every attempt, and a failure to write the log is an error, because a silent gap would hide exactly what the log exists to show (D-24).
+- Files written by a fault injector are logged as ordinary stored versions with no HTTP status, so the log matches what is actually in the raw zone.
+- `lineageheal db upgrade` and `db status` manage the schema; `lineageheal log` reads recent attempts.
+
 ### Incident lifecycle
 
 ```mermaid

@@ -3,7 +3,7 @@
 # Targets for Docker, dbt and the frontend are added by the tasks that introduce them.
 
 .DEFAULT_GOAL := help
-.PHONY: help setup up down fmt lint typecheck test check clean
+.PHONY: help setup up down fmt lint typecheck test test-integration check clean
 
 help: ## List available targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
@@ -30,6 +30,9 @@ typecheck: ## Static type check (strict)
 
 test: ## Run unit tests with coverage
 	uv run pytest --cov
+
+test-integration: ## Run tests that need the local Postgres (start it with make up first)
+	uv run pytest -m integration
 
 check: lint typecheck ## Formatting, linting and type checks
 

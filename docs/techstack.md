@@ -28,7 +28,7 @@
 | Agents | LangGraph + LangChain core, Postgres checkpointer | 1.x |
 | LLMs | Gemini (primary), Groq (fallback) | see [Models](#models) |
 | Retrieval | Postgres + pgvector, fastembed | Postgres 17 |
-| App database | SQLAlchemy 2.0, psycopg 3, Alembic | 2.x / 3.x |
+| App database | SQLAlchemy, psycopg 3, Alembic | 2.x / 3.x / 1.x |
 | API | FastAPI, Uvicorn, Pydantic v2 | latest |
 | Frontend | React, TypeScript, Vite, Tailwind CSS | React 19, Node 24 LTS |
 | Observability | LangSmith, structlog | — |
@@ -134,7 +134,7 @@ A cross-encoder reranker (also via fastembed) will be evaluated during the build
 | Tool | Role |
 |---|---|
 | **FastAPI** + **Uvicorn** | REST API with automatic OpenAPI schema |
-| **SQLAlchemy 2.0** (async) + **psycopg 3** | Database access |
+| **SQLAlchemy 2.0 style** + **psycopg 3** | Database access. Synchronous today, for the CLI and loaders; an async session factory over the same models arrives with the API (LH-058) |
 | **Alembic** | Schema migrations |
 | **Authlib** | GitHub sign-in through the GitHub App's user-authorisation flow |
 | **PyGithub** with a **GitHub App** | Branches, pull requests, issues and merges by the LineageHeal bot |
@@ -176,6 +176,16 @@ A cross-encoder reranker (also via fastembed) will be evaluated during the build
 Third-party actions are kept to a minimum and pinned to commit SHAs: `actions/checkout` and `astral-sh/setup-uv` (both MIT). The CI job installs the same uv version that created `uv.lock` and fails if the lockfile is out of date.
 
 Deployments: Render auto-deploys the API from `main`; Cloudflare Pages builds the dashboard from `main`. Dependabot keeps dependencies current.
+
+### Licences of the database packages
+
+| Package | Licence |
+|---|---|
+| SQLAlchemy | MIT |
+| Alembic | MIT |
+| psycopg 3 (with `psycopg-binary`) | LGPL-3.0 |
+
+psycopg is the project's only copyleft dependency. The LGPL permits using it as a library from code under another licence, as here, without affecting that code's licence; modifying psycopg itself would carry LGPL obligations.
 
 ### Container images
 

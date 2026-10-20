@@ -42,7 +42,7 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 | LH-011 | Core module: settings, structured logging, error hierarchy | FR-OBS-02 | Done | 2 |
 | LH-012 | Data spike: NSE bhavcopy, security master, corporate actions (URLs, headers, history, reachability from Actions) | IF-SW-01 | Done | 2 |
 | LH-013 | Data spike: AMFI NAVAll (URLs, history, formats). FBIL split out to LH-080 | IF-SW-01 | Done | 2 |
-| LH-014 | Postgres store foundation: SQLAlchemy, Alembic, `ingestion_log` table | FR-ING-06 | Todo | |
+| LH-014 | Postgres store foundation: SQLAlchemy, Alembic, `ingestion_log` table | FR-ING-06 | Done | 2 |
 | LH-015 | R2 storage client: content-addressed keys, put-if-absent, checksums | FR-ING-05, IF-SW-02 | Done | 2 |
 | LH-016 | Per-source calendars as seeds (NSE, AMFI, FBIL; 2024 onwards) | FR-ING-07 | Todo | |
 | LH-017 | NSE CM-UDiFF bhavcopy loader | FR-ING-01, FR-ING-10 | Done | 2 |
@@ -162,3 +162,4 @@ A running record of completed work, used for the weekly diary.
 | 2 | LH-018 | NSE security master and corporate actions loaders on a shared base with the bhavcopy loader; `--dataset` option on ingest and backfill; corrected an earlier misreading of the security master as ragged |
 | 2 | LH-024 | Bronze, two of five models: AMFI NAVs and the NSE bhavcopy, with 36 checks. NSE zips are unzipped into a derived staged area (D-22); a file in the pre-July-2024 format is rejected by the model |
 | 2 | LH-010 | Docker Compose with Postgres 17 and pgvector (loopback only, healthchecked, named volume) and a pinned, non-root application image of 852 MB; guard tests for the configuration |
+| 2 | LH-014 | Postgres store: SQLAlchemy models, hand-written Alembic migration and an `ingestion_log` table whose rules the database enforces; every ingest, backfill and injected fault is logged when `DATABASE_URL` is set; `db upgrade`, `db status` and `log` commands; `stored_versions` orders a republished day's files by arrival |
