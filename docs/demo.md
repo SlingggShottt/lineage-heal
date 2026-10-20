@@ -133,7 +133,7 @@ Say any two of these, they are real findings from this project:
   ```
 
   Thirteen columns against thirty-four, every name changed, dates from `05-JUL-2024` to `2024-07-05`.
-- **NSE publishes par value in paise.** RELIANCE shows 1000 for a Rs 10 face value. I confirmed it against the corporate actions feed, which uses rupees: every instrument I checked was exactly 100 times larger. A silent switch to rupees would still pass every basic check, because the values stay valid numbers. That is a real unit-change fault waiting to happen, and catching it needs a cross-feed check later.
+- **NSE publishes par value in paise.** RELIANCE shows 1000 for a Rs 10 face value. I confirmed it against the corporate actions feed, which uses rupees: every instrument I checked was exactly 100 times larger. A silent switch to rupees would still pass every basic check, because the values stay valid numbers. That is a real unit-change fault waiting to happen. The warehouse's silver layer catches it by comparing the two feeds, and I have a test where the paise value is switched to rupees: the basic checks stay green and the cross-feed check fails.
 - **A rule that looks obvious was wrong.** I expected every NAV to be positive. About 100 schemes publish exactly 0 on an ordinary day, so that check would have raised a false alarm every day.
 - **NSE rejects an honest client.** It resets connections from a client that identifies itself as this project, so loaders send browser-like headers.
 
@@ -143,7 +143,7 @@ Say any two of these, they are real findings from this project:
 dbtb
 ```
 
-You see `Done. PASS=81 WARN=0 ERROR=0`: six models and 75 checks. Say: dbt reads the stored files, drops the blank lines and headings the AMFI report mixes in, matches columns by name, types them, then runs the checks. For NSE the checks include that a day's high is never below its low and that the close lies between them. After bronze comes the first silver table, which keeps the latest version of each day's AMFI report and tidies plan and option into a small vocabulary.
+You see `Done. PASS=140 WARN=0 ERROR=0`: nine models and 131 checks. Say: dbt reads the stored files, drops the blank lines and headings the AMFI report mixes in, matches columns by name, types them, then runs the checks. For NSE the checks include that a day's high is never below its low and that the close lies between them. After bronze come four silver tables. They keep the latest version of each day's file, tidy AMFI's plan and option into a small vocabulary, convert NSE's par value from paise to rupees, and read NSE's free-text corporate action descriptions ("Bonus 1:1", "Dividend - Rs 5 Per Share") into a type and numbers. A cross-feed check compares the instrument list with corporate actions.
 
 ```bash
 dbts --limit 5 --inline "select scheme_code, left(scheme_name, 44) as scheme_name, plan_name, nav_inr, nav_date from {{ ref('brz_amfi__navall') }} where _trade_date = '2026-10-16' order by scheme_code"
@@ -173,7 +173,7 @@ You see `injected blank-nav (nulls) into amfi/navall 2026-10-16: raw/source=...`
 dbtb
 ```
 
-You see `FAIL 1 not_null_brz_amfi__navall_nav_inr`, `Got 1 result, configured to fail if != 0` and `Done. PASS=69 WARN=0 ERROR=1 SKIP=11`. Say: one missing value in about nine thousand rows, caught by a check. The 11 skipped items are the silver table and its checks: the failure stopped the bad data from reaching the next layer.
+You see `FAIL 1 not_null_brz_amfi__navall_nav_inr`, `Got 1 result, configured to fail if != 0` and `Done. PASS=128 WARN=0 ERROR=1 SKIP=11`. Say: one missing value in about nine thousand rows, caught by a check. The 11 skipped items are the AMFI silver table and its checks: the failure stopped the bad data from reaching the next layer, while the NSE side was unaffected and still built.
 
 ```bash
 dbts --limit 5 --inline "select scheme_code, left(scheme_name, 40) as scheme_name, nav_inr, _trade_date, regexp_extract(_source_file, '([0-9a-f]{16})__', 1) as file_version from {{ ref('brz_amfi__navall') }} where nav_inr is null"
@@ -204,7 +204,7 @@ Say: Week 3 finishes the warehouse layers and the daily schedule. Week 4 builds 
 | Polite loaders for AMFI and three NSE datasets (bhavcopy, security master, corporate actions), with retries | The FBIL loader |
 | Write-once, content-addressed raw storage on local disk | Cloud storage in use: the R2 code is unit-tested against a fake client but has not run on a real bucket |
 | Ingestion log in Postgres: every attempt, with outcome, hash and arrival time | Using the log to pick the latest version of a republished file (silver) |
-| dbt project with bronze models for AMFI and three NSE datasets, a first silver model that keeps the latest version of each day's AMFI report, and 75 quality checks | Silver models for NSE, the gold layers, and the FBIL bronze model |
+| dbt project with bronze models for AMFI and three NSE datasets, four silver models (latest version of each day, conformed units and vocabulary, parsed corporate actions, a cross-feed par-value check), and 131 quality checks | The gold layers, and the FBIL bronze and silver models |
 | Five fault injectors, each proven to trip its check | Unit-change faults and the full corpus of about 100 |
 | CI on every pull request, over 300 automated tests | Dagster schedule, lineage graph, agents, dashboard |
 
@@ -230,7 +230,7 @@ Be direct about the gaps. FBIL's site sits behind a reCAPTCHA with no plain down
 
 **What happens if NSE ships the old file format again?** The model rejects it, because the column names do not match. This is tested with NSE's real pre-July-2024 file: alone it fails the model, and next to a healthy file it shows up as missing values. That is the July 2024 change in miniature, and it is the held-out case for the benchmark.
 
-**Why did the unit-change fault not appear?** Bronze checks cannot see it, because the values are still valid numbers. It needs the price and NAV jump checks planned for the next phase.
+**Why is there no unit-change fault in the live demo?** Bronze checks cannot see one, because the values are still valid numbers. Silver catches the one we know about (NSE's par value in paise against corporate actions' face value in rupees), and that is proved in the tests. A command to inject it live, and the price and NAV jump checks that catch the rest, come next.
 
 ## If something goes wrong
 

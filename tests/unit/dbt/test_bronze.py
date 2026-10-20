@@ -497,12 +497,12 @@ def test_an_added_security_master_column_is_tolerated(workspace: Workspace) -> N
 def test_par_value_switching_from_paise_to_rupees_is_invisible_to_bronze(
     workspace: Workspace,
 ) -> None:
-    """A known limit, written down on purpose: the values stay valid numbers.
+    """A known limit of bronze, written down on purpose: the values stay valid numbers.
 
-    NSE publishes par value in paise (1000 means Rs 10). A silent switch to rupees would
-    shrink every value by 100 and still pass every bronze check. Catching it needs corporate
-    actions' face value (in rupees) as a reference, which is a cross-feed check for silver
-    (LH-028) and a unit-change fault for the benchmark.
+    NSE publishes par value in paise (1000 means Rs 10). A silent switch to rupees would shrink
+    every value by 100 and still pass every bronze check. Silver catches it by comparing the
+    master with corporate actions' face value, which is in rupees
+    (assert_par_value_matches_corporate_action_face_value, tested in test_silver.py).
     """
     workspace.store_security_master(edit_master(healthy_master(), "RELIANCE", sets(ParVal="10")))
 
