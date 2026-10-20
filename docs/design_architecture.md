@@ -235,9 +235,22 @@ The staged key is derived from the raw key, so the hash prefix still says which 
 - **Limits.** Corporate actions are known only for the ex-dates that were ingested, so a split on a day that was never fetched adjusts nothing; the adjustment is as complete as the backfill. A model whose corporate-actions source has no files at all fails at bronze, which stops gold too, by design.
 - **Checks.** `assert_gld_equity_daily_prices_match_silver` proves gold loses, invents or changes no silver price (a fan-out from a bad join shows up here); `action_factor` and `adjustment_factor` must be present and positive, which also catches a split whose numbers could not be read. That case is stopped earlier still, because the silver "fully parsed" check fails and `dbt build` skips gold.
 
+**Gold: `gld_mf_nav_daily`.** One row per scheme per date: the published NAV beside the scheme's previous NAV, the number of calendar days between them (`days_since_prev_nav`) and the change in percent.
+
+- The previous NAV is the scheme's last date with a NAV, not the day before. On real data most are one day apart, but 8,012 of 53,722 rows follow a weekend (3 days) and 106 follow a gap of 2, and AMFI publishes only about 600 to 700 schemes on a Saturday or Sunday against about 8,700 on a weekday. `days_since_prev_nav` makes a change over a gap readable.
+- A scheme with a NAV of 0 (108 on the last real day) has no change computed from it, because nothing can be compared with zero. A NAV that falls to 0 is shown as -100, which is what the feed says. Dividend (IDCW) payouts lower a NAV and are not adjusted for.
+- `assert_gld_mf_nav_daily_match_silver` proves no silver NAV is lost, invented or changed; a duplicating window or join would show up there.
+
+**Gold: `gld_market_daily_summary` (D-28).** One row per calendar date across the equity and fund feeds, which is the model whose lineage crosses sources. Equity totals (instruments, volume, turnover) cover every series; advancers, decliners, unchanged and the median return cover the EQ series only and use the adjusted returns, so a split day is not a crash. Beside them: how many schemes published a NAV and the median NAV change.
+
+- A date with only one feed keeps its row with the other feed's figures null (not zero, which would claim nothing traded), and `has_equity_data` and `has_nav_data` say which feeds are present. That is what separates a weekend, where only the fund feed has data, from a missing file; the late-data detection (FR-ING-07, LH-016) can build on it.
+- Because it reads both feeds, `dbt build` skips it when either feed fails a check, so the summary never publishes a day with one side wrong. The other feed's own gold table still builds.
+- `assert_gld_market_daily_summary_reconciles_with_sources` compares its counts and totals with the silver tables rather than the gold tables it reads, so the check does not trust the model it checks; a second check keeps advancers, decliners and unchanged within the instrument count.
+- FX turnover or USD/INR per day joins here once the FBIL feed exists (LH-080).
+
 The dbt project lives in `dbt/`. Its profile has four targets: `dev` (local DuckDB file), `ci` (in-memory DuckDB), `bench` (a separate local file) and `prod` (MotherDuck, with the token read from `MOTHERDUCK_TOKEN`). Only `prod` is remote, and a test guards that the benchmark target can never be. Each layer builds into a schema of the same name (`bronze`, `silver`, `gold`) on every target, through a `generate_schema_name` override.
 
-`gld_market_daily_summary` deliberately joins all three feeds (for example equity turnover, NAV coverage and USD/INR per day), so lineage paths cross sources and the agents must reason about which feed a failure came from.
+`gld_market_daily_summary` deliberately joins the feeds (equity turnover and breadth beside NAV coverage, and USD/INR per day once FBIL is available), so lineage paths cross sources and the agents must reason about which feed a failure came from.
 
 Seeds hold per-source calendars (`seed_calendar_nse`, `seed_calendar_amfi`, `seed_calendar_fbil`), used for expected-file checks (FR-ING-07) and late-data detection.
 
