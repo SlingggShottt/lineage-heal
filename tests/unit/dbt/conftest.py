@@ -139,6 +139,9 @@ def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Workspace:
             [
                 "build",
                 "--select", *models,
+                # A test that reads several models runs only when all of them are selected;
+                # otherwise it would query a table that was never built.
+                "--indirect-selection", "cautious",
                 "--project-dir", str(DBT_DIR),
                 "--profiles-dir", str(profiles_dir),
                 "--target-path", str(tmp_path / "target"),

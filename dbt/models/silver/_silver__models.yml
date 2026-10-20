@@ -53,3 +53,240 @@ models:
         description: Path of the raw file the row came from.
         data_tests:
           - not_null
+
+  - name: slv_nse__securities
+    description: >
+      NSE's instrument list, one snapshot per day, taken from the latest stored version of each
+      day's security master. Par value is converted from the published paise to rupees. Only
+      days with a stored master have a snapshot: NSE serves none for older dates.
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [as_of_date, instrument_id]
+      - unique_combination:
+          arguments:
+            columns: [as_of_date, symbol, series]
+    columns:
+      - name: as_of_date
+        description: The date of the snapshot.
+        data_tests:
+          - not_null
+      - name: instrument_id
+        description: NSE's numeric instrument id.
+        data_tests:
+          - not_null
+      - name: symbol
+        description: Ticker symbol.
+        data_tests:
+          - not_null
+      - name: series
+        description: Series, such as EQ, BE or SM.
+        data_tests:
+          - not_null
+      - name: instrument_name
+        description: Instrument name as published.
+        data_tests:
+          - not_null
+      - name: isin
+        description: ISIN. Null when absent.
+      - name: board_lot_qty
+        description: Board lot size.
+        data_tests:
+          - not_null
+          - non_negative
+      - name: par_value_inr
+        description: Par (face) value in rupees, converted from the published paise.
+        data_tests:
+          - not_null
+          - non_negative
+      - name: issued_capital_shares
+        description: Issued capital in shares. Null when not published.
+        data_tests:
+          - non_negative
+      - name: issue_date
+        description: Issue date. Null when not set.
+      - name: listing_date
+        description: Listing date. Null when not set.
+      - name: security_type_flag
+        description: Security type flag as published.
+      - name: _file_version
+        description: Hash prefix of the raw file version the row came from.
+        data_tests:
+          - not_null
+      - name: _source_file
+        description: Path of the raw file the row came from.
+        data_tests:
+          - not_null
+
+  - name: slv_nse__corporate_actions
+    description: >
+      NSE corporate actions, one row per action, taken from the latest stored version of each
+      ex-date's file. The free-text description is parsed into a type and the numbers that type
+      needs: a cash amount for dividends and distributions, old and new face value for splits,
+      a ratio for bonus and rights issues. A dividend announced together with a special dividend
+      has its payments added. Wording the parser does not recognise becomes `other`.
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [ex_date, symbol, series, subject]
+    columns:
+      - name: ex_date
+        description: The date the share trades without the entitlement.
+        data_tests:
+          - not_null
+      - name: symbol
+        description: Ticker symbol.
+        data_tests:
+          - not_null
+      - name: series
+        description: Series, such as EQ.
+        data_tests:
+          - not_null
+      - name: isin
+        description: ISIN. Null when absent.
+      - name: company_name
+        description: Company name as published.
+      - name: subject
+        description: The description as published.
+        data_tests:
+          - not_null
+      - name: action_type
+        description: "dividend, distribution, interest, split, bonus, rights, buyback, demerger or other."
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [dividend, distribution, interest, split, bonus, rights, buyback, demerger, other]
+      - name: cash_amount_inr
+        description: Rupees per share (dividend) or per unit (distribution). Null for other types.
+        data_tests:
+          - non_negative
+      - name: split_old_face_value_inr
+        description: Face value before a split, in rupees.
+        data_tests:
+          - non_negative
+      - name: split_new_face_value_inr
+        description: Face value after a split, in rupees.
+        data_tests:
+          - non_negative
+      - name: ratio_new
+        description: New shares offered, for a bonus or rights issue (the first number of the ratio).
+        data_tests:
+          - non_negative
+      - name: ratio_held
+        description: Shares held, for a bonus or rights issue (the second number of the ratio).
+        data_tests:
+          - non_negative
+      - name: rights_premium_inr
+        description: Premium per share of a rights issue, in rupees.
+        data_tests:
+          - non_negative
+      - name: face_value_inr
+        description: Face value in rupees as published with the action. Null when not stated.
+        data_tests:
+          - non_negative
+      - name: record_date
+        description: The date the entitlement is decided. Null when not applicable.
+      - name: book_closure_start_date
+        description: Book closure start. Null when none.
+      - name: book_closure_end_date
+        description: Book closure end. Null when none.
+      - name: no_delivery_start_date
+        description: No-delivery period start. Null when none.
+      - name: no_delivery_end_date
+        description: No-delivery period end. Null when none.
+      - name: _file_version
+        description: Hash prefix of the raw file version the row came from.
+        data_tests:
+          - not_null
+      - name: _source_file
+        description: Path of the raw file the row came from.
+        data_tests:
+          - not_null
+
+  - name: slv_nse__equity_eod
+    description: >
+      NSE end-of-day prices for every cash-market instrument, one row per instrument per date,
+      from the latest stored version of each day's file. Adds the change from the previous
+      close, in percent. NSE does not adjust that previous close for splits, so a split day
+      shows a large move.
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [price_date, symbol, series]
+    columns:
+      - name: price_date
+        description: The trading date.
+        data_tests:
+          - not_null
+      - name: symbol
+        description: Ticker symbol.
+        data_tests:
+          - not_null
+      - name: series
+        description: Series, such as EQ, BE or SM.
+        data_tests:
+          - not_null
+      - name: isin
+        description: ISIN. Null when absent.
+      - name: instrument_id
+        description: NSE's numeric instrument id.
+      - name: instrument_name
+        description: Instrument name as published.
+      - name: open_price_inr
+        description: Opening price, in rupees.
+        data_tests:
+          - not_null
+          - non_negative
+      - name: high_price_inr
+        description: Highest price of the day, in rupees.
+        data_tests:
+          - not_null
+          - non_negative
+      - name: low_price_inr
+        description: Lowest price of the day, in rupees.
+        data_tests:
+          - not_null
+          - non_negative
+      - name: close_price_inr
+        description: Closing price, in rupees.
+        data_tests:
+          - not_null
+          - non_negative
+      - name: last_price_inr
+        description: Last traded price, in rupees.
+        data_tests:
+          - non_negative
+      - name: prev_close_price_inr
+        description: Previous day's closing price, in rupees, not adjusted for splits.
+        data_tests:
+          - non_negative
+      - name: settlement_price_inr
+        description: Settlement price, in rupees. Null when not published.
+        data_tests:
+          - non_negative
+      - name: volume
+        description: Total traded quantity.
+        data_tests:
+          - not_null
+          - non_negative
+      - name: turnover_inr
+        description: Total traded value, in rupees.
+        data_tests:
+          - not_null
+          - non_negative
+      - name: trades
+        description: Number of trades.
+        data_tests:
+          - not_null
+          - non_negative
+      - name: change_pct
+        description: Close against previous close, in percent. Null when there is no previous close.
+      - name: _file_version
+        description: Hash prefix of the raw file version the row came from.
+        data_tests:
+          - not_null
+      - name: _source_file
+        description: Path of the staged file the row came from.
+        data_tests:
+          - not_null

@@ -61,10 +61,10 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 | LH-022 | dbt project scaffold: profiles with dev/ci/bench/prod targets, schema macro, guard tests. Packages and sqlfluff are added with the first models that need them (LH-024, LH-027) | FR-WH-06 | Done | 2 |
 | LH-023 | Raw-zone sources in local-path mode for non-prod targets. The DuckDB R2 secret for prod moved to LH-082 | FR-WH-01 | Done | 2 |
 | LH-024 | Bronze models (5) with docs and tests. AMFI, NSE bhavcopy (zips are staged, D-22), NSE security master and NSE corporate actions done; only FBIL remains, blocked by LH-080 | FR-WH-01, FR-WH-04 | In progress | |
-| LH-025 | Silver models (5) with docs and tests. Done: the version-selection model and macro, and `slv_amfi__nav`. Remaining: NSE securities, corporate actions and equity end-of-day (with cross-feed checks such as par value against face value), and FBIL (blocked by LH-080) | FR-WH-02, FR-WH-04 | In progress | |
+| LH-025 | Silver models (5) with docs and tests. Done: version selection, `slv_amfi__nav`, `slv_nse__securities`, `slv_nse__corporate_actions` (parsed) and `slv_nse__equity_eod`, with the par-value cross-feed check. Remaining: FBIL (blocked by LH-080) | FR-WH-02, FR-WH-04 | In progress | |
 | LH-026 | Gold models (4) with docs and tests, including cross-feed summary | FR-WH-03, FR-WH-04 | Todo | |
 | LH-027 | Elementary spike and anomaly monitors (fallback: custom z-score tests) | FR-WH-05 | Todo | |
-| LH-028 | Domain quality checks: price ranges, unexplained price jumps, NAV and FX bounds | FR-WH-04 | Todo | |
+| LH-028 | Domain quality checks: price ranges, unexplained price jumps (use corporate actions: NSE does not adjust the previous close for splits), NAV and FX bounds. The par-value cross-feed check is done in LH-025 | FR-WH-04 | Todo | |
 | LH-029 | dbt build in CI against fixture data | NFR-MAINT-02 | Todo | |
 | LH-030 | Dagster raw assets with daily partitions | FR-ORC-01 | Todo | |
 | LH-031 | dagster-dbt integration | FR-ORC-01 | Todo | |
@@ -165,3 +165,4 @@ A running record of completed work, used for the weekly diary.
 | 2 | LH-010 | Docker Compose with Postgres 17 and pgvector (loopback only, healthchecked, named volume) and a pinned, non-root application image of 852 MB; guard tests for the configuration |
 | 2 | LH-014 | Postgres store: SQLAlchemy models, hand-written Alembic migration and an `ingestion_log` table whose rules the database enforces; every ingest, backfill and injected fault is logged when `DATABASE_URL` is set; `db upgrade`, `db status` and `log` commands; `stored_versions` orders a republished day's files by arrival |
 | 2 | LH-025 | Silver, part one: `brz_meta__raw_file_versions` and the `latest_version_rows` macro choose each day's latest version by arrival time, and `slv_amfi__nav` conforms plan and option; verified on the real republished AMFI report, in both arrival orders |
+| 2 | LH-025 | Silver, part two: `slv_nse__securities` (par value in rupees), `slv_nse__equity_eod` and `slv_nse__corporate_actions`, whose parser reads 25 real wording shapes and flags rewording; the par-value cross-feed check catches a paise-to-rupees switch that bronze cannot see |
