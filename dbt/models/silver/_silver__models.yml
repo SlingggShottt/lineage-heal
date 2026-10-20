@@ -1,0 +1,55 @@
+version: 2
+
+models:
+  - name: slv_amfi__nav
+    description: >
+      Mutual fund NAVs, one row per scheme per date, taken from the latest stored version of
+      each day's report. Plan and option are conformed to a small vocabulary; values that do
+      not map unambiguously are null. A bad republication reaches this table only if bronze
+      lets it through: a failed bronze test stops the build before silver runs.
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [scheme_code, nav_date]
+    columns:
+      - name: scheme_code
+        description: AMFI scheme code.
+        data_tests:
+          - not_null
+      - name: nav_date
+        description: The date the NAV applies to.
+        data_tests:
+          - not_null
+      - name: nav_inr
+        description: Net asset value per unit in rupees. Zero is valid.
+        data_tests:
+          - not_null
+          - non_negative
+      - name: scheme_name
+        description: Scheme name including plan and option, as published.
+        data_tests:
+          - not_null
+      - name: plan
+        description: "direct or regular. Null when the report does not say."
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [direct, regular]
+      - name: option_type
+        description: "growth, idcw (any dividend variant) or bonus. Null when unclear."
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [growth, idcw, bonus]
+      - name: isin_div_payout_or_growth
+        description: ISIN of the growth or dividend-payout option. Null when absent.
+      - name: isin_div_reinvestment
+        description: ISIN of the dividend-reinvestment option. Null when absent.
+      - name: _file_version
+        description: Hash prefix of the raw file version the row came from.
+        data_tests:
+          - not_null
+      - name: _source_file
+        description: Path of the raw file the row came from.
+        data_tests:
+          - not_null

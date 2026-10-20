@@ -124,7 +124,7 @@ Point at the SHA-256 prefix in each file name. Point out the third kind of file:
 
 Say any two of these, they are real findings from this project:
 
-- **AMFI corrects past reports.** The 16 October report grew by about 2 KB between two downloads hours apart, and on another day AMFI changed one scheme's plan from blank to "Direct Plan". Past data is not immutable, which is why storage is write-once.
+- **AMFI corrects past reports.** The 16 October report grew by about 2 KB between two downloads hours apart, and on another day AMFI changed one scheme's plan from blank to "Direct Plan". Past data is not immutable, which is why storage is write-once, and why the silver layer keeps only the latest version of each day (I tested that on this real corrected report, in both arrival orders).
 - **NSE publishes two formats side by side.** The old format was served until 5 July 2024 and UDiFF is available back to January 2024. For 5 July the two files match row for row, so we have a ground-truth pair for the July 2024 change. Show it:
 
   ```bash
@@ -143,7 +143,7 @@ Say any two of these, they are real findings from this project:
 dbtb
 ```
 
-You see `Done. PASS=60 WARN=0 ERROR=0`: four models and 56 checks. Say: dbt reads the stored files, drops the blank lines and headings the AMFI report mixes in, matches columns by name, types them, then runs the checks. For NSE the checks include that a day's high is never below its low and that the close lies between them.
+You see `Done. PASS=81 WARN=0 ERROR=0`: six models and 75 checks. Say: dbt reads the stored files, drops the blank lines and headings the AMFI report mixes in, matches columns by name, types them, then runs the checks. For NSE the checks include that a day's high is never below its low and that the close lies between them. After bronze comes the first silver table, which keeps the latest version of each day's AMFI report and tidies plan and option into a small vocabulary.
 
 ```bash
 dbts --limit 5 --inline "select scheme_code, left(scheme_name, 44) as scheme_name, plan_name, nav_inr, nav_date from {{ ref('brz_amfi__navall') }} where _trade_date = '2026-10-16' order by scheme_code"
@@ -173,7 +173,7 @@ You see `injected blank-nav (nulls) into amfi/navall 2026-10-16: raw/source=...`
 dbtb
 ```
 
-You see `FAIL 1 not_null_brz_amfi__navall_nav_inr`, `Got 1 result, configured to fail if != 0` and `Done. PASS=59 WARN=0 ERROR=1`. Say: one missing value in about nine thousand rows, caught by a check.
+You see `FAIL 1 not_null_brz_amfi__navall_nav_inr`, `Got 1 result, configured to fail if != 0` and `Done. PASS=69 WARN=0 ERROR=1 SKIP=11`. Say: one missing value in about nine thousand rows, caught by a check. The 11 skipped items are the silver table and its checks: the failure stopped the bad data from reaching the next layer.
 
 ```bash
 dbts --limit 5 --inline "select scheme_code, left(scheme_name, 40) as scheme_name, nav_inr, _trade_date, regexp_extract(_source_file, '([0-9a-f]{16})__', 1) as file_version from {{ ref('brz_amfi__navall') }} where nav_inr is null"
@@ -191,7 +191,7 @@ dbtb
 dbts --limit 10 --inline "select _trade_date, regexp_extract(_source_file, '([0-9a-f]{16})__', 1) as file_version, count(*) as rows_missing_nav from {{ ref('brz_amfi__navall') }} where nav_inr is null group by 1, 2 order by 3"
 ```
 
-You see `FAIL 8748` and a table with two rows: 1 row missing a NAV on 16 October, and 8,747 on 15 October. Say: the same check fires, but the numbers tell the story. One bad value is a data problem. Every row failing at once is a changed schema, and the Investigator should trace it to the renamed column in the raw file.
+You see `FAIL 8748` and a table with two rows: 1 row missing a NAV on 16 October, and 8,747 on 15 October. Say: the same check fires (and silver is skipped again), but the numbers tell the story. One bad value is a data problem. Every row failing at once is a changed schema, and the Investigator should trace it to the renamed column in the raw file.
 
 ### 8. Roadmap and questions (1 min)
 
@@ -204,7 +204,7 @@ Say: Week 3 finishes the warehouse layers and the daily schedule. Week 4 builds 
 | Polite loaders for AMFI and three NSE datasets (bhavcopy, security master, corporate actions), with retries | The FBIL loader |
 | Write-once, content-addressed raw storage on local disk | Cloud storage in use: the R2 code is unit-tested against a fake client but has not run on a real bucket |
 | Ingestion log in Postgres: every attempt, with outcome, hash and arrival time | Using the log to pick the latest version of a republished file (silver) |
-| dbt project with bronze models for AMFI and three NSE datasets, and 56 quality checks | Silver and gold layers, and the FBIL bronze model |
+| dbt project with bronze models for AMFI and three NSE datasets, a first silver model that keeps the latest version of each day's AMFI report, and 75 quality checks | Silver models for NSE, the gold layers, and the FBIL bronze model |
 | Five fault injectors, each proven to trip its check | Unit-change faults and the full corpus of about 100 |
 | CI on every pull request, over 300 automated tests | Dagster schedule, lineage graph, agents, dashboard |
 
@@ -221,6 +221,8 @@ Be direct about the gaps. FBIL's site sits behind a reCAPTCHA with no plain down
 **How will you measure success?** A benchmark of about 100 injected faults over five classes (schema drift, nulls, duplicates, unit changes, late data), compared with a rule-based baseline and a plain-LLM baseline, plus the held-out July 2024 NSE change.
 
 **Is the data real?** Yes, public end-of-day files from NSE and AMFI, downloaded live in step 3.
+
+**What happens when a source publishes a corrected file?** Bronze keeps every version. Silver keeps the one that arrived last, decided by when each file was stored. A correction replaces the old values; a bad republication that fails a bronze check stops the build before silver.
 
 **Does it cost anything?** No. Everything runs on free tiers or locally.
 
