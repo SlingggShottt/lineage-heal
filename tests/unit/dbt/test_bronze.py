@@ -180,6 +180,7 @@ def test_an_added_column_is_tolerated(workspace: Workspace) -> None:
 
 NSE_RANGE_TEST = "assert_brz_nse__cm_bhavcopy_prices_within_day_range"
 NSE_DATE_TEST = "assert_brz_nse__cm_bhavcopy_dates_match_their_file"
+NSE_TRADED_PRICE_TEST = "assert_brz_nse__cm_bhavcopy_traded_instruments_have_a_price"
 NSE_UNIQUE_TEST = "unique_combination_brz_nse__cm_bhavcopy_trade_date__symbol__series___source_file"
 NSE_CLOSE_NULL_TEST = "not_null_brz_nse__cm_bhavcopy_close_price_inr"
 NSE_CLOSE_NEGATIVE_TEST = "non_negative_brz_nse__cm_bhavcopy_close_price_inr"
@@ -252,6 +253,23 @@ def test_bhavcopy_rows_are_typed_and_renamed(workspace: Workspace) -> None:
             lambda c: c.replace(b"3197.00,3096.00,", b"3096.00,3197.00,"),
             {NSE_RANGE_TEST},
             id="high below low",
+        ),
+        pytest.param(
+            lambda c: c.replace(b"3107.65,3197.00,", b"3300.00,3197.00,"),
+            {NSE_RANGE_TEST},
+            id="open above high",
+        ),
+        pytest.param(
+            lambda c: c.replace(b"3177.25,3189.90,", b"3177.25,3250.00,"),
+            {NSE_RANGE_TEST},
+            id="last price above high",
+        ),
+        pytest.param(
+            lambda c: c.replace(
+                b"3107.65,3197.00,3096.00,3177.25,3189.90,", b"0.00,0.00,0.00,0.00,0.00,"
+            ),
+            {NSE_TRADED_PRICE_TEST},
+            id="prices zeroed but volume kept",
         ),
         pytest.param(
             lambda c: c.replace(reliance_row(c) + b"\n", (reliance_row(c) + b"\n") * 2),

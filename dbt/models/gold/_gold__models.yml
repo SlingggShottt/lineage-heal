@@ -16,6 +16,22 @@ models:
       - unique_combination:
           arguments:
             columns: [price_date, symbol, series]
+      # Prices a hundred times too large or small, with no corporate action to explain it.
+      - unexplained_price_move:
+          name: gld_equity_daily_prices_no_change_of_scale
+          arguments:
+            rise_pct: 400
+            fall_pct: 80
+      # Beyond the widest price band of the main series. Real data had none in the EQ series
+      # (the largest moves were in other series, which this leaves out).
+      - unexplained_price_move:
+          name: gld_equity_daily_prices_no_unexplained_large_move
+          arguments:
+            rise_pct: 25
+            fall_pct: 25
+            series: EQ
+          config:
+            severity: warn
     columns:
       - name: price_date
         description: The trading date.
@@ -117,6 +133,18 @@ models:
       - unique_combination:
           arguments:
             columns: [nav_date, scheme_code]
+      - implausible_nav_move:
+          name: gld_mf_nav_daily_no_change_of_scale
+          arguments:
+            rise_pct: 400
+            fall_pct: 80
+      - implausible_nav_move:
+          name: gld_mf_nav_daily_no_large_move
+          arguments:
+            rise_pct: 25
+            fall_pct: 25
+          config:
+            severity: warn
     columns:
       - name: nav_date
         description: The date the NAV applies to.
