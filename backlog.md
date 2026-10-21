@@ -64,7 +64,7 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 | LH-025 | Silver models (5) with docs and tests. Done: version selection, `slv_amfi__nav`, `slv_nse__securities`, `slv_nse__corporate_actions` (parsed) and `slv_nse__equity_eod`, with the par-value cross-feed check. Remaining: FBIL (blocked by LH-080) | FR-WH-02, FR-WH-04 | In progress | |
 | LH-026 | Gold models (4) with docs and tests, including cross-feed summary. Done: `gld_equity_daily_prices`, `gld_mf_nav_daily` and `gld_market_daily_summary`. Remaining: `gld_fx_reference_rates` (blocked by LH-080) | FR-WH-03, FR-WH-04 | In progress | |
 | LH-027 | Elementary spike and anomaly monitors. The spike found Elementary unsuitable for calendar-shaped data (D-29), so the monitors are project-defined generic tests | FR-WH-05 | Done | 3 |
-| LH-028 | Domain quality checks: price ranges, unexplained price jumps (use corporate actions: NSE does not adjust the previous close for splits), NAV and FX bounds. The par-value cross-feed check is done in LH-025 | FR-WH-04 | Todo | |
+| LH-028 | Domain quality checks: price ranges, unexplained price jumps (corporate actions explain splits and other events), NAV jumps. The par-value cross-feed check is done in LH-025; the FX band moved to LH-087 | FR-WH-04 | Done | 3 |
 | LH-029 | dbt build in CI against fixture data | NFR-MAINT-02 | Todo | |
 | LH-030 | Dagster raw assets with daily partitions | FR-ORC-01 | Todo | |
 | LH-031 | dagster-dbt integration | FR-ORC-01 | Todo | |
@@ -75,6 +75,7 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 | LH-082 | DuckDB R2 secret and httpfs for the prod target: read the raw zone from R2 instead of a local path | FR-WH-01 | Todo | |
 | LH-085 | Speed up the dbt scenario tests: parse the project once and reuse it, and run them outside the coverage run | NFR-MAINT-02 | Done | 3 |
 | LH-086 | Reconcile raw file arrival times with the ingestion log, as a Detector signal and a test: file times can be reset by copying or restoring a raw zone, the log cannot | FR-DET-01 | Todo | |
+| LH-087 | FX rate plausibility check: a band for each FBIL rate, in the style of the NAV and price jump checks (D-30). Blocked by LH-080 | FR-WH-04 | Todo | |
 
 ## Week 4 — Lineage, detection and investigation
 
@@ -170,3 +171,4 @@ A running record of completed work, used for the weekly diary.
 | 3 | LH-026 | Gold, part one: `gld_equity_daily_prices` restates prices for splits and bonuses (a real 5-to-1 split read -80.5% in silver and -2.3% in gold), keeps the published prices beside the adjusted close, and a check proves no silver row is lost, invented or changed; 10 scenarios, each broken model mutation caught |
 | 3 | LH-026 | Gold, part two: `gld_mf_nav_daily` (each NAV beside the scheme's previous one, with the gap in days) and `gld_market_daily_summary` (equity totals and breadth beside fund coverage, one row per date, null rather than zero for a missing feed, skipped when either feed fails); built on 8 real days (8,769 schemes, 3,700 instruments a day) and every deliberate breakage caught |
 | 3 | LH-027 | Elementary spike (runs on DuckDB, but missed a halved file and mis-trained its seasonal mode, so not adopted) and project-defined monitors: volume, distribution and freshness, comparing each date with the same kind of recent dates; a partial file, a duplicated file and prices a hundred times too large are each caught, holidays are not zeros, nothing depends on the clock; quiet on 8 real days; every deliberate breakage caught |
+| 3 | LH-028 | Domain checks: open, close and last price within the day's range and a price for every traded instrument (no violations in 22,049 real rows); price and NAV jump tests in two tiers, a scale-sized move fails the build and an unusual one in the EQ series warns, with corporate actions explaining moves; quiet on 6 real days; every deliberate breakage caught |
