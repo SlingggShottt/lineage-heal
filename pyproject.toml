@@ -16,6 +16,9 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "alembic>=1.20.0",
     "boto3>=1.43.114",
+    "dagster>=1.13.26",
+    "dagster-dbt>=0.29.26",
+    "dagster-webserver>=1.13.26",
     "dbt-duckdb>=1.11.0",
     "httpx>=0.28.1",
     "psycopg[binary]>=3.3.6",
@@ -107,6 +110,13 @@ testpaths = ["tests"]
 # the others are opt-in via `-m`. Style guide 3.7 defines the markers.
 # importlib mode lets test files in different folders share a name without __init__.py files.
 addopts = "-ra --strict-markers --strict-config --import-mode=importlib -m 'not integration and not e2e and not slow'"
+# Two warnings from third-party code we cannot change are silenced, so they do not bury others:
+# Dagster's compatibility layer reads a Pydantic attribute that Pydantic 2 deprecated, and
+# dagster-dbt requires sqlglot[rs], whose sqlglotrs add-on is deprecated (revisit in LH-039).
+filterwarnings = [
+    "ignore:The `__fields__` attribute is deprecated:DeprecationWarning",
+    "ignore:sqlglotrs is deprecated:DeprecationWarning",
+]
 markers = [
     "unit: fast, isolated tests (default)",
     "integration: needs Docker Compose services",

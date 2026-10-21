@@ -77,6 +77,10 @@ dbt/.user.yml
 # Local instance storage when not pointed at Postgres (run logs, compute logs, schedules).
 .dagster_home/
 .tmp_dagster_home_*/
+# The instance folder is dagster_home/: its settings (dagster.yaml) are committed, and the
+# run history and logs Dagster writes beside it are not.
+dagster_home/*
+!dagster_home/dagster.yaml
 
 # ---------------------------------------------------------------------------
 # Benchmark

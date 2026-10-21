@@ -17,24 +17,11 @@ from lineageheal.benchmark.faults import AMFI_FAULTS
 from lineageheal.core.errors import BenchmarkError, ConfigurationError, LineageHealError
 from lineageheal.core.logging import configure_logging
 from lineageheal.core.settings import get_settings
+from lineageheal.ingestion import runner
 from lineageheal.ingestion.amfi import AmfiNavLoader, report_filename
-from lineageheal.ingestion.http import PoliteFetcher
-from lineageheal.ingestion.log import (
-    AttemptRecorder,
-    attempt_from_failure,
-    attempt_from_injection,
-    attempt_from_result,
-    open_recorder,
-)
-from lineageheal.ingestion.nse import (
-    NSE_BROWSER_HEADERS,
-    NseBhavcopyLoader,
-    NseCorporateActionsLoader,
-    NseSecurityMasterLoader,
-)
+from lineageheal.ingestion.log import AttemptRecorder, attempt_from_injection, open_recorder
 from lineageheal.ingestion.object_stores import LocalObjectStore
-from lineageheal.ingestion.raw_zone import RawZone, open_store
-from lineageheal.ingestion.staging import ZipStager
+from lineageheal.ingestion.raw_zone import RawZone
 from lineageheal.ingestion.types import IngestionOutcome, IngestionResult, Loader
 from lineageheal.store.database import create_db_engine
 from lineageheal.store.ingestion_log import IngestionAttempt, IngestionLogRepository
@@ -43,8 +30,6 @@ from lineageheal.store.migrate import current_revision, head_revision, upgrade_d
 # India has no daylight saving, so a fixed offset is exact and avoids needing tzdata.
 IST = timezone(timedelta(hours=5, minutes=30), "IST")
 DATE_FORMAT = "%Y-%m-%d"
-# FR-ING-08: backfills start no earlier than this.
-EARLIEST_BACKFILL = date(2024, 1, 1)
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 dev_app = typer.Typer(
@@ -63,13 +48,10 @@ class Source(enum.StrEnum):
 
 
 # The datasets each source offers; the first is the default.
+EARLIEST_BACKFILL = runner.EARLIEST_BACKFILL
+
 DATASETS: dict[Source, tuple[str, ...]] = {
-    Source.AMFI: (AmfiNavLoader.dataset,),
-    Source.NSE: (
-        NseBhavcopyLoader.dataset,
-        NseSecurityMasterLoader.dataset,
-        NseCorporateActionsLoader.dataset,
-    ),
+    Source(source): datasets for source, datasets in runner.DATASETS.items()
 }
 
 SourceArgument = Annotated[Source, typer.Argument(help="Data feed: amfi or nse.")]
@@ -107,24 +89,8 @@ def main() -> None:
 @contextmanager
 def _open_loader(source: Source, dataset: str) -> Iterator[Loader]:
     """Build the loader for a source's dataset on the configured raw zone, closing it afterwards."""
-    settings = get_settings()
-    store = open_store(settings)
-    zone = RawZone(store)
-    headers = NSE_BROWSER_HEADERS if source is Source.NSE else None
-    with PoliteFetcher.create(
-        min_interval_seconds=settings.ingest_min_interval_seconds, headers=headers
-    ) as fetcher:
-        match (source, dataset):
-            case (Source.AMFI, AmfiNavLoader.dataset):
-                yield AmfiNavLoader(fetcher, zone)
-            case (Source.NSE, NseBhavcopyLoader.dataset):
-                yield NseBhavcopyLoader(fetcher, zone, ZipStager(store))
-            case (Source.NSE, NseSecurityMasterLoader.dataset):
-                yield NseSecurityMasterLoader(fetcher, zone)
-            case (Source.NSE, NseCorporateActionsLoader.dataset):
-                yield NseCorporateActionsLoader(fetcher, zone)
-            case _:
-                raise ConfigurationError(f"No loader for {source.value}/{dataset}")
+    with runner.open_loader(get_settings(), source.value, dataset) as loader:
+        yield loader
 
 
 @contextmanager
@@ -139,25 +105,7 @@ def _open_recorder() -> Iterator[AttemptRecorder]:
 
 def _load_and_record(loader: Loader, recorder: AttemptRecorder, day: date) -> IngestionResult:
     """Run one ingestion and log the attempt, whether it succeeds or fails."""
-    started_at = datetime.now(UTC)
-    try:
-        result = loader.load(day)
-    except LineageHealError as exc:
-        recorder.record(
-            attempt_from_failure(
-                source=loader.source,
-                dataset=loader.dataset,
-                trade_date=day,
-                error=exc,
-                started_at=started_at,
-                finished_at=datetime.now(UTC),
-            )
-        )
-        raise
-    recorder.record(
-        attempt_from_result(result, started_at=started_at, finished_at=datetime.now(UTC))
-    )
-    return result
+    return runner.load_and_record(loader, recorder, day)
 
 
 @contextmanager

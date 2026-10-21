@@ -66,10 +66,10 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 | LH-027 | Elementary spike and anomaly monitors. The spike found Elementary unsuitable for calendar-shaped data (D-29), so the monitors are project-defined generic tests | FR-WH-05 | Done | 3 |
 | LH-028 | Domain quality checks: price ranges, unexplained price jumps (corporate actions explain splits and other events), NAV jumps. The par-value cross-feed check is done in LH-025; the FX band moved to LH-087 | FR-WH-04 | Done | 3 |
 | LH-029 | dbt build in CI against fixture data. Done as a scenario inside `make test`, which CI already runs, so no workflow change was needed | NFR-MAINT-02 | Done | 3 |
-| LH-030 | Dagster raw assets with daily partitions | FR-ORC-01 | Todo | |
+| LH-030 | Dagster raw assets with daily partitions | FR-ORC-01 | Done | 3 |
 | LH-031 | dagster-dbt integration | FR-ORC-01 | Todo | |
-| LH-032 | Dagster run storage on Postgres; Compose services for webserver and daemon | FR-ORC-03 | Todo | |
-| LH-033 | `pipeline.yml`: scheduled and manual runs on MotherDuck | FR-ORC-02, FR-ORC-05 | Todo | |
+| LH-032 | Dagster run storage on Postgres; Compose services for webserver and daemon. Deferred while everything runs locally (D-23): `dagster-postgres` needs a second Postgres driver and the Neon database | FR-ORC-03 | Todo | |
+| LH-033 | `pipeline.yml`: scheduled and manual runs on MotherDuck. Edits CI, so needs approval; deferred with the cloud accounts (D-23) | FR-ORC-02, FR-ORC-05 | Todo | |
 | LH-034 | Persist dbt artifacts and record failure signals per run | FR-WH-07, FR-ORC-04 | Todo | |
 | LH-035 | Historical backfill from January 2024 to R2 and MotherDuck | FR-ING-08 | Todo | |
 | LH-082 | DuckDB R2 secret and httpfs for the prod target: read the raw zone from R2 instead of a local path | FR-WH-01 | Todo | |
@@ -173,3 +173,4 @@ A running record of completed work, used for the weekly diary.
 | 3 | LH-027 | Elementary spike (runs on DuckDB, but missed a halved file and mis-trained its seasonal mode, so not adopted) and project-defined monitors: volume, distribution and freshness, comparing each date with the same kind of recent dates; a partial file, a duplicated file and prices a hundred times too large are each caught, holidays are not zeros, nothing depends on the clock; quiet on 8 real days; every deliberate breakage caught |
 | 3 | LH-028 | Domain checks: open, close and last price within the day's range and a price for every traded instrument (no violations in 22,049 real rows); price and NAV jump tests in two tiers, a scale-sized move fails the build and an unusual one in the EQ series warns, with corporate actions explaining moves; quiet on 6 real days; every deliberate breakage caught |
 | 3 | LH-029 | Whole-project build in CI: one scenario stores all four feeds' fixtures and runs `dbt build --target ci` with the repository's own profile over every model and check, so a broken reference, a cross-layer failure or a mistake in the `ci` target is caught; part of `make test`, so the CI workflow needed no change |
+| 3 | LH-030 | Dagster raw assets: one daily-partitioned asset per dataset keyed by the dbt source it feeds, built on loader and ingestion-log code now shared with the CLI (`ingestion.runner`); a holiday is a success marked `no_data`, the file hash is the data version, and all four share a one-at-a-time pool; verified live (stored, unchanged, no_data) and in the UI |

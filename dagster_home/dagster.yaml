@@ -1,0 +1,20 @@
+# dagster.yaml
+# Settings for the local Dagster instance. DAGSTER_HOME points at this folder (`make dagster`
+# sets it); Dagster keeps its run history and logs here too, but only this file is committed.
+
+# Anonymous usage statistics are off, as they are for dbt.
+telemetry:
+  enabled: false
+
+concurrency:
+  pools:
+    # One step at a time in every pool. The raw assets share the "ingestion" pool, so a
+    # backfill of many dates fetches them one after another and stays within the polite
+    # request spacing the loaders keep (CLAUDE.md, Data).
+    default_limit: 1
+
+# A run that fails is retried once, which covers a source that was briefly unavailable. The
+# loaders already retry each request, so this is for the rest of an outage, not a rapid loop.
+run_retries:
+  enabled: true
+  max_retries: 1
