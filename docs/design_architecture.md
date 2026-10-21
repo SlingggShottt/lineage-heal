@@ -272,7 +272,11 @@ Seeds hold per-source calendars (`seed_calendar_nse`, `seed_calendar_amfi`, `see
 
 ## 6. Orchestration
 
-- **Raw assets** are daily-partitioned Dagster assets, one per dataset, backed by the loaders.
+- **Raw assets** (`orchestration/assets.py`) are daily-partitioned Dagster assets, one per dataset, backed by the loaders.
+  - **Keys and partitions.** An asset's key is the name of the dbt source that reads its files (`raw_amfi/navall`, `raw_nse/cm_bhavcopy`, `raw_nse/security_master`, `raw_nse/corporate_actions`), so `dagster-dbt` can link the bronze models to them without a mapping (LH-031); a test compares the two lists. A partition is a trade date from 2024-01-01, in Asia/Kolkata, and the latest is the day before today because a day's files are published after it closes.
+  - **What a run does.** It calls `ingestion.runner` (the same loader construction and ingestion-log entry as `lineageheal ingest`), so a download from the command line and from Dagster are indistinguishable. The materialisation records the outcome (`stored`, `unchanged` or `no_data`), the HTTP status and the object key, size and hash. A date with no file is a success marked `no_data`, not an error. The file's hash is the asset's data version, so a re-ingest of an identical file does not mark anything downstream stale.
+  - **Politeness.** All raw assets share one Dagster pool, limited to one step at a time in `dagster_home/dagster.yaml`, so a backfill of many dates fetches them one after another and the sources see the same request spacing as from the command line. A failed run is retried once by the daemon.
+  - **Verified live** against a scratch raw zone: an AMFI weekday stored a file, a repeat reported `unchanged` with the same data version, and an NSE Saturday finished as `no_data` with HTTP 404.
 - **dbt assets** come from the dbt manifest via `dagster-dbt`, so Dagster's graph matches dbt's.
 - **Run storage** uses `dagster-postgres` on Neon, so the local Dagster UI can browse runs executed in Actions.
 - **Scheduling:** `pipeline.yml` runs on a cron (default early morning IST) for the previous trade date, after all three feeds have published. It materialises the day's partition, uploads dbt artifacts, and records signals.

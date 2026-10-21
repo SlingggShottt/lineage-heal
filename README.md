@@ -160,6 +160,7 @@ make up                   # Postgres with pgvector (more services as they are bu
 | `uv run lineageheal ingest nse --dataset security_master --date 2026-10-15` | Load another NSE dataset (`security_master` or `corporate_actions`; the default is `cm_bhavcopy`) |
 | `uv run lineageheal backfill amfi --start 2026-10-01` | Load a date range (from 2024-01-01); safe to re-run |
 | `uv run dbt build --project-dir dbt --profiles-dir dbt --target dev` | Build the warehouse layers from the raw zone and run their quality tests |
+| `make dagster` | Start the Dagster UI and daemon (http://localhost:3000). Pick a raw asset and a date partition to ingest it with the same loaders and ingestion log as `lineageheal ingest`; a date the source published nothing for is a success marked `no_data` |
 | `uv run lineageheal dev inject-fault amfi --fault blank-nav --date 2026-10-16` | Store a damaged copy of an ingested report in the local raw zone, to rehearse a failure (refuses to run against R2) |
 | `uv run lineageheal db upgrade` | Create or update the Postgres tables (needs `DATABASE_URL` and `make up`) |
 | `uv run lineageheal log` | Show recent ingestion attempts, newest first (`--outcome failed`, `--limit 5`) |

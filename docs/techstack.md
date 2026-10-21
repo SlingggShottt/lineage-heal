@@ -84,6 +84,17 @@ DuckDB reads raw files directly from R2 using its R2 secret type, so no separate
 
 **Dagster OSS** with **dagster-dbt** models every loader output and dbt model as a software-defined asset, so the Dagster asset graph mirrors the lakehouse layers. Scheduled runs execute in **GitHub Actions**. Run history is persisted with **dagster-postgres**, so the local Dagster UI can browse scheduled runs.
 
+| Package | Version | Licence | Purpose |
+|---|---|---|---|
+| `dagster` | 1.13 | Apache-2.0 | Assets, partitions, runs, the schedule daemon |
+| `dagster-webserver` | 1.13 | Apache-2.0 | The UI |
+| `dagster-dbt` | 0.29 | Apache-2.0 | dbt models as assets (LH-031). Needs `dbt-core>=1.7,<1.13` |
+| `dagster-postgres` | — | Apache-2.0, needs `psycopg2-binary` (LGPL) | Not added yet: run history is kept in `dagster_home/` until the cloud accounts exist (D-23) |
+
+Adding the three installed packages brought 74 packages in all (grpcio, protobuf, jinja2, rich and others), every one permissively licensed apart from three under MPL-2.0 (certifi, orjson, tqdm), a file-level licence that does not affect this project. The application image grew from 852 MB to 1.21 GB (measured; it still starts, loads the four assets and runs the CLI).
+
+`dagster-dbt` requires `sqlglot[rs]`, and sqlglot's Rust add-on `sqlglotrs` is now deprecated in favour of `sqlglotc`. It works, and the test warning is silenced; the lineage builder (LH-039) uses sqlglot directly and should choose the add-on deliberately.
+
 **Considered:** Airflow (heavier to run, task-centric rather than asset-centric), Prefect (capable, but its asset model is less mature for layered tables), Dagster+ (hosted; paid after a trial).
 
 ## Lineage
