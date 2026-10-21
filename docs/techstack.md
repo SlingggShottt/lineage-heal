@@ -167,7 +167,7 @@ A cross-encoder reranker (also via fastembed) will be evaluated during the build
 
 | Workflow | Trigger | Does |
 |---|---|---|
-| `ci.yml` | Every pull request and push to `main` | Python lint, types and tests; dbt build on DuckDB with fixtures; frontend lint, types, tests and build |
+| `ci.yml` | Every pull request and push to `main` | Python lint, types and tests, with the dbt scenarios (which include a build of the whole project on fixtures through the `ci` target) inside `make test`; frontend lint, types, tests and build |
 | `pipeline.yml` | Daily cron, manual | Ingest feeds, run dbt on MotherDuck |
 | `heal.yml` | Pipeline failure, manual, resume after review | Run the agent workflow on the new incident, or resume it from its checkpoint |
 | `benchmark.yml` | Manual only | Fault-injection benchmark on local DuckDB |
