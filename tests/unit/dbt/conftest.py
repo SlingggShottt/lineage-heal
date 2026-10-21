@@ -5,14 +5,17 @@ temporary DuckDB file, and inspects which models and tests passed. Test modules 
 `Workspace` type only for annotations, so they do not need to import this module.
 """
 
+import csv
 import gzip
+import json
 import os
 import shutil
 import zipfile
+import zlib
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
-from io import BytesIO
+from io import BytesIO, StringIO
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +35,65 @@ DBT_DIR = REPO_ROOT / "dbt"
 AMFI_DATE = date(2026, 10, 15)
 BHAVCOPY_DATE = date(2024, 7, 5)
 REFERENCE_DATE = date(2026, 10, 16)
+
+NSE_FIXTURES = REPO_ROOT / "tests" / "fixtures" / "nse"
+BHAVCOPY_SAMPLE = (NSE_FIXTURES / "cm_bhavcopy_udiff_2024-07-05_sample.csv").read_bytes()
+ACTION_TEMPLATE = json.loads((NSE_FIXTURES / "corporate_actions_sample.json").read_bytes())[1]
+
+# (symbol, series, close, previous close), all in rupees
+Price = tuple[str, str, str, str]
+
+
+def bhavcopy(day: date, prices: list[Price]) -> bytes:
+    """A bhavcopy for one day: the sample's real layout, with the given instruments.
+
+    Each row is a copy of a real one, so every column is present and typed realistically; open,
+    high and low equal the close, which keeps the intraday-range check satisfied.
+    """
+    reader = csv.DictReader(BHAVCOPY_SAMPLE.decode("utf-8").splitlines())
+    fieldnames = list(reader.fieldnames or [])
+    template = next(row for row in reader if row["TckrSymb"] == "TCS")
+    rows = []
+    for symbol, series, close, previous_close in prices:
+        identity = zlib.crc32(f"{symbol}{series}".encode())
+        rows.append(
+            {
+                **template,
+                "TradDt": day.isoformat(),
+                "BizDt": day.isoformat(),
+                "FinInstrmId": str(identity),
+                "ISIN": f"INE{identity:09d}",
+                "TckrSymb": symbol,
+                "SctySrs": series,
+                "FinInstrmNm": symbol,
+                "OpnPric": close,
+                "HghPric": close,
+                "LwPric": close,
+                "ClsPric": close,
+                "LastPric": close,
+                "PrvsClsgPric": previous_close,
+                "SttlmPric": close,
+            }
+        )
+    out = StringIO()
+    writer = csv.DictWriter(out, fieldnames=fieldnames, lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(rows)
+    return out.getvalue().encode("utf-8")
+
+
+def amfi_navs(day: date, navs: dict[int, str]) -> bytes:
+    """An AMFI report for one day with the given NAV text by scheme code."""
+    header = (
+        "Scheme Code;NAV Name;Plan;Option;ISIN Div Payout/ISIN Growth;ISIN Div Reinvestment;"
+        "Net Asset Value;Date"
+    )
+    lines = [header, "", "Open Ended Schemes ( Equity Scheme - Large Cap Fund )", ""]
+    lines += [
+        f"{code};Fund {code};Direct Plan;Growth Option;INF{code:06d}01;;{nav};{day:%d-%b-%Y}"
+        for code, nav in navs.items()
+    ]
+    return ("\r\n".join(lines) + "\r\n").encode("utf-8")
 
 
 @dataclass
@@ -58,7 +120,8 @@ class Workspace:
     raw_dir: Path
     zone: RawZone
     stager: ZipStager
-    build: Callable[..., BuildResult]  # builds the named models and their tests
+    # Builds the named models and their tests; `variables` are passed to dbt as --vars.
+    build: Callable[..., BuildResult]
 
     def _arrive(self, stored: StoredObject, arrived_at: float | None) -> StoredObject:
         """Set when a stored file arrived, so tests control which version is the latest."""
@@ -99,6 +162,31 @@ class Workspace:
         )
         self.stager.stage(stored.key)
         return self._arrive(stored, arrived_at)
+
+    def store_prices(self, days: dict[date, list[Price]]) -> None:
+        """Store a bhavcopy for each day, built from (symbol, series, close, previous close)."""
+        for day, prices in days.items():
+            self.store_nse(bhavcopy(day, prices), trade_date=day)
+
+    def store_navs(self, days: dict[date, dict[int, str]]) -> None:
+        """Store an AMFI report for each day, built from NAV text by scheme code."""
+        for day, navs in days.items():
+            self.store_amfi(amfi_navs(day, navs), trade_date=day)
+
+    def store_actions(self, ex_date: date, *announcements: tuple[str, str, str]) -> None:
+        """Store the corporate actions announced for one ex-date: (symbol, series, subject)."""
+        records = [
+            {
+                **ACTION_TEMPLATE,
+                "symbol": symbol,
+                "series": series,
+                "subject": subject,
+                "exDate": f"{ex_date:%d-%b-%Y}",
+                "recDate": f"{ex_date:%d-%b-%Y}",
+            }
+            for symbol, series, subject in announcements
+        ]
+        self.store_corporate_actions(json.dumps(records).encode("utf-8"), ex_date=ex_date)
 
     def store_security_master(
         self, csv_content: bytes, *, arrived_at: float | None = None
@@ -196,11 +284,12 @@ def workspace(
     database = tmp_path / "test.duckdb"  # the name must stay test.duckdb, see parsed_project
     write_profile(profiles_dir, database)
 
-    def build(*models: str) -> BuildResult:
+    def build(*models: str, variables: dict[str, str] | None = None) -> BuildResult:
         result = dbtRunner(manifest=parsed_project.manifest).invoke(
             [
                 "build",
                 "--select", *models,
+                "--vars", json.dumps(variables or {}),
                 # A test that reads several models runs only when all of them are selected;
                 # otherwise it would query a table that was never built.
                 "--indirect-selection", "cautious",

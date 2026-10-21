@@ -2,21 +2,12 @@
 
 from __future__ import annotations
 
-import csv
-import json
-import zlib
 from datetime import date
 from decimal import Decimal
-from io import StringIO
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from conftest import BuildResult, Workspace
-
-NSE_DIR = Path(__file__).parents[3] / "tests" / "fixtures" / "nse"
-BHAVCOPY_SAMPLE = (NSE_DIR / "cm_bhavcopy_udiff_2024-07-05_sample.csv").read_bytes()
-ACTION_TEMPLATE = json.loads((NSE_DIR / "corporate_actions_sample.json").read_bytes())[1]
 
 GOLD_PRICES = "gld_equity_daily_prices"
 PRICES_CHAIN = (
@@ -45,91 +36,9 @@ DAY_1, DAY_2, DAY_3 = date(2026, 10, 14), date(2026, 10, 15), date(2026, 10, 16)
 SPLIT_5_TO_1 = "Face Value Split (Sub-Division) - From Rs 5/- Per Share To Re 1/- Per Share"
 SPLIT_10_TO_5 = "Face Value Split (Sub-Division) - From Rs 10/- Per Share To Rs 5/- Per Share"
 
-# (symbol, series, close, previous close), all in rupees
-Price = tuple[str, str, str, str]
 # What gold says about one instrument on one day: (action factor, adjustment factor,
 # adjusted close, daily return in percent)
 GoldRow = tuple[Decimal, Decimal, Decimal, Decimal | None]
-
-
-def bhavcopy(day: date, prices: list[Price]) -> bytes:
-    """A bhavcopy for one day: the sample's real layout, with the given instruments.
-
-    Each row is a copy of a real one, so every column is present and typed realistically; open,
-    high and low equal the close, which keeps the intraday-range check satisfied.
-    """
-    reader = csv.DictReader(BHAVCOPY_SAMPLE.decode("utf-8").splitlines())
-    fieldnames = list(reader.fieldnames or [])
-    template = next(row for row in reader if row["TckrSymb"] == "TCS")
-    rows = []
-    for symbol, series, close, previous_close in prices:
-        identity = zlib.crc32(f"{symbol}{series}".encode())
-        rows.append(
-            {
-                **template,
-                "TradDt": day.isoformat(),
-                "BizDt": day.isoformat(),
-                "FinInstrmId": str(identity),
-                "ISIN": f"INE{identity:09d}",
-                "TckrSymb": symbol,
-                "SctySrs": series,
-                "FinInstrmNm": symbol,
-                "OpnPric": close,
-                "HghPric": close,
-                "LwPric": close,
-                "ClsPric": close,
-                "LastPric": close,
-                "PrvsClsgPric": previous_close,
-                "SttlmPric": close,
-            }
-        )
-    out = StringIO()
-    writer = csv.DictWriter(out, fieldnames=fieldnames, lineterminator="\n")
-    writer.writeheader()
-    writer.writerows(rows)
-    return out.getvalue().encode("utf-8")
-
-
-def amfi_navs(day: date, navs: dict[int, str]) -> bytes:
-    """An AMFI report for one day with the given NAV text by scheme code."""
-    header = (
-        "Scheme Code;NAV Name;Plan;Option;ISIN Div Payout/ISIN Growth;ISIN Div Reinvestment;"
-        "Net Asset Value;Date"
-    )
-    lines = [header, "", "Open Ended Schemes ( Equity Scheme - Large Cap Fund )", ""]
-    lines += [
-        f"{code};Fund {code};Direct Plan;Growth Option;INF{code:06d}01;;{nav};{day:%d-%b-%Y}"
-        for code, nav in navs.items()
-    ]
-    return ("\r\n".join(lines) + "\r\n").encode("utf-8")
-
-
-def store_navs(workspace: Workspace, days: dict[date, dict[int, str]]) -> None:
-    for day, navs in days.items():
-        workspace.store_amfi(amfi_navs(day, navs), trade_date=day)
-
-
-def store_prices(workspace: Workspace, days: dict[date, list[Price]]) -> None:
-    for day, prices in days.items():
-        workspace.store_nse(bhavcopy(day, prices), trade_date=day)
-
-
-def store_actions(
-    workspace: Workspace, ex_date: date, *announcements: tuple[str, str, str]
-) -> None:
-    """Store the corporate actions announced for one ex-date: (symbol, series, subject)."""
-    records = [
-        {
-            **ACTION_TEMPLATE,
-            "symbol": symbol,
-            "series": series,
-            "subject": subject,
-            "exDate": f"{ex_date:%d-%b-%Y}",
-            "recDate": f"{ex_date:%d-%b-%Y}",
-        }
-        for symbol, series, subject in announcements
-    ]
-    workspace.store_corporate_actions(json.dumps(records).encode("utf-8"), ex_date=ex_date)
 
 
 def gold_rows(result: BuildResult, symbol: str, series: str = "EQ") -> dict[date, GoldRow]:
@@ -148,14 +57,13 @@ def gold_rows(result: BuildResult, symbol: str, series: str = "EQ") -> dict[date
 
 
 def test_a_dividend_is_flagged_but_does_not_adjust_prices(workspace: Workspace) -> None:
-    store_prices(
-        workspace,
+    workspace.store_prices(
         {
             DAY_1: [("ABC", "EQ", "100.00", "100.00")],
             DAY_2: [("ABC", "EQ", "98.00", "100.00")],
         },
     )
-    store_actions(workspace, DAY_2, ("ABC", "EQ", "Dividend - Rs 2 Per Share"))
+    workspace.store_actions(DAY_2, ("ABC", "EQ", "Dividend - Rs 2 Per Share"))
 
     result = workspace.build(*PRICES_CHAIN)
 
@@ -172,8 +80,8 @@ def test_a_dividend_is_flagged_but_does_not_adjust_prices(workspace: Workspace) 
 
 
 def test_the_published_prices_are_carried_through_untouched(workspace: Workspace) -> None:
-    store_prices(workspace, {DAY_1: [("ABC", "EQ", "123.45", "120.00")]})
-    store_actions(workspace, DAY_2, ("ABC", "EQ", "Dividend - Rs 2 Per Share"))
+    workspace.store_prices({DAY_1: [("ABC", "EQ", "123.45", "120.00")]})
+    workspace.store_actions(DAY_2, ("ABC", "EQ", "Dividend - Rs 2 Per Share"))
 
     result = workspace.build(*PRICES_CHAIN)
 
@@ -188,8 +96,8 @@ def test_the_published_prices_are_carried_through_untouched(workspace: Workspace
 
 
 def test_a_zero_previous_close_gives_no_return_instead_of_an_error(workspace: Workspace) -> None:
-    store_prices(workspace, {DAY_1: [("ABC", "EQ", "100.00", "0.00")]})
-    store_actions(workspace, DAY_1, ("XYZ", "EQ", "Dividend - Rs 2 Per Share"))
+    workspace.store_prices({DAY_1: [("ABC", "EQ", "100.00", "0.00")]})
+    workspace.store_actions(DAY_1, ("XYZ", "EQ", "Dividend - Rs 2 Per Share"))
 
     result = workspace.build(*PRICES_CHAIN)
 
@@ -205,15 +113,14 @@ def test_a_zero_previous_close_gives_no_return_instead_of_an_error(workspace: Wo
 def test_a_split_restates_earlier_prices_and_the_move_on_the_ex_date_is_not_a_crash(
     workspace: Workspace,
 ) -> None:
-    store_prices(
-        workspace,
+    workspace.store_prices(
         {
             DAY_1: [("ABC", "EQ", "500.00", "500.00"), ("XYZ", "EQ", "50.00", "50.00")],
             DAY_2: [("ABC", "EQ", "100.00", "500.00"), ("XYZ", "EQ", "50.00", "50.00")],
             DAY_3: [("ABC", "EQ", "102.00", "100.00"), ("XYZ", "EQ", "50.00", "50.00")],
         },
     )
-    store_actions(workspace, DAY_2, ("ABC", "EQ", SPLIT_5_TO_1))
+    workspace.store_actions(DAY_2, ("ABC", "EQ", SPLIT_5_TO_1))
 
     result = workspace.build(*PRICES_CHAIN)
 
@@ -233,14 +140,13 @@ def test_a_split_restates_earlier_prices_and_the_move_on_the_ex_date_is_not_a_cr
 
 
 def test_a_bonus_issue_adjusts_by_the_enlarged_share_count(workspace: Workspace) -> None:
-    store_prices(
-        workspace,
+    workspace.store_prices(
         {
             DAY_1: [("ONE", "EQ", "200.00", "200.00"), ("SEVEN", "EQ", "100.00", "100.00")],
             DAY_2: [("ONE", "EQ", "100.00", "200.00"), ("SEVEN", "EQ", "70.00", "100.00")],
         },
     )
-    store_actions(workspace, DAY_2, ("ONE", "EQ", "Bonus 1:1"), ("SEVEN", "EQ", "Bonus 3:7"))
+    workspace.store_actions(DAY_2, ("ONE", "EQ", "Bonus 1:1"), ("SEVEN", "EQ", "Bonus 3:7"))
 
     result = workspace.build(*PRICES_CHAIN)
 
@@ -259,16 +165,15 @@ def test_a_bonus_issue_adjusts_by_the_enlarged_share_count(workspace: Workspace)
 def test_changes_on_different_dates_compound_for_the_days_before_both(
     workspace: Workspace,
 ) -> None:
-    store_prices(
-        workspace,
+    workspace.store_prices(
         {
             DAY_1: [("ABC", "EQ", "1000.00", "1000.00")],
             DAY_2: [("ABC", "EQ", "200.00", "1000.00")],
             DAY_3: [("ABC", "EQ", "100.00", "200.00")],
         },
     )
-    store_actions(workspace, DAY_2, ("ABC", "EQ", SPLIT_5_TO_1))
-    store_actions(workspace, DAY_3, ("ABC", "EQ", "Bonus 1:1"))
+    workspace.store_actions(DAY_2, ("ABC", "EQ", SPLIT_5_TO_1))
+    workspace.store_actions(DAY_3, ("ABC", "EQ", "Bonus 1:1"))
 
     result = workspace.build(*PRICES_CHAIN)
 
@@ -281,14 +186,13 @@ def test_changes_on_different_dates_compound_for_the_days_before_both(
 
 
 def test_two_changes_on_the_same_ex_date_compound(workspace: Workspace) -> None:
-    store_prices(
-        workspace,
+    workspace.store_prices(
         {
             DAY_1: [("ABC", "EQ", "400.00", "400.00")],
             DAY_2: [("ABC", "EQ", "100.00", "400.00")],
         },
     )
-    store_actions(workspace, DAY_2, ("ABC", "EQ", SPLIT_10_TO_5), ("ABC", "EQ", "Bonus 1:1"))
+    workspace.store_actions(DAY_2, ("ABC", "EQ", SPLIT_10_TO_5), ("ABC", "EQ", "Bonus 1:1"))
 
     result = workspace.build(*PRICES_CHAIN)
 
@@ -302,14 +206,13 @@ def test_two_changes_on_the_same_ex_date_compound(workspace: Workspace) -> None:
 def test_an_announcement_listed_under_two_series_counts_once_and_covers_both(
     workspace: Workspace,
 ) -> None:
-    store_prices(
-        workspace,
+    workspace.store_prices(
         {
             DAY_1: [("ABC", "EQ", "500.00", "500.00"), ("ABC", "BE", "495.00", "495.00")],
             DAY_2: [("ABC", "EQ", "100.00", "500.00"), ("ABC", "BE", "99.00", "495.00")],
         },
     )
-    store_actions(workspace, DAY_2, ("ABC", "EQ", SPLIT_5_TO_1), ("ABC", "BE", SPLIT_5_TO_1))
+    workspace.store_actions(DAY_2, ("ABC", "EQ", SPLIT_5_TO_1), ("ABC", "BE", SPLIT_5_TO_1))
 
     result = workspace.build(*PRICES_CHAIN)
 
@@ -325,15 +228,14 @@ def test_an_announcement_listed_under_two_series_counts_once_and_covers_both(
 
 
 def test_actions_outside_the_price_history_change_nothing(workspace: Workspace) -> None:
-    store_prices(
-        workspace,
+    workspace.store_prices(
         {
             DAY_2: [("ABC", "EQ", "100.00", "100.00")],
             DAY_3: [("ABC", "EQ", "101.00", "100.00")],
         },
     )
-    store_actions(workspace, DAY_1, ("ABC", "EQ", SPLIT_5_TO_1))  # before every price
-    store_actions(workspace, DAY_2, ("GHOST", "EQ", SPLIT_5_TO_1))  # no prices for it
+    workspace.store_actions(DAY_1, ("ABC", "EQ", SPLIT_5_TO_1))  # before every price
+    workspace.store_actions(DAY_2, ("GHOST", "EQ", SPLIT_5_TO_1))  # no prices for it
 
     result = workspace.build(*PRICES_CHAIN)
 
@@ -350,15 +252,13 @@ def test_a_split_whose_numbers_cannot_be_read_stops_the_build_before_gold(
     workspace: Workspace,
 ) -> None:
     """Silver fails loudly, so gold never publishes prices that quietly skipped the split."""
-    store_prices(
-        workspace,
+    workspace.store_prices(
         {
             DAY_1: [("ABC", "EQ", "500.00", "500.00")],
             DAY_2: [("ABC", "EQ", "100.00", "500.00")],
         },
     )
-    store_actions(
-        workspace,
+    workspace.store_actions(
         DAY_2,
         ("ABC", "EQ", "Face Value Split (Sub-Division) - From Rs 5/- Per Share"),
     )
@@ -385,8 +285,7 @@ def nav_rows(result: BuildResult, scheme_code: int) -> dict[date, NavRow]:
 
 
 def test_each_nav_is_compared_with_the_same_schemes_previous_nav(workspace: Workspace) -> None:
-    store_navs(
-        workspace,
+    workspace.store_navs(
         {
             DAY_1: {1: "100.0000", 2: "50.0000"},
             DAY_2: {1: "102.0000", 2: "50.0000"},
@@ -409,8 +308,7 @@ def test_each_nav_is_compared_with_the_same_schemes_previous_nav(workspace: Work
 def test_a_gap_in_the_reports_is_visible_in_days_since_the_previous_nav(
     workspace: Workspace,
 ) -> None:
-    store_navs(
-        workspace,
+    workspace.store_navs(
         {DAY_1: {1: "100.0000"}, DAY_2: {2: "10.0000"}, DAY_3: {1: "110.0000"}},
     )
 
@@ -425,8 +323,7 @@ def test_a_gap_in_the_reports_is_visible_in_days_since_the_previous_nav(
 def test_a_zero_nav_gives_no_change_from_it_and_a_fall_to_zero_is_reported(
     workspace: Workspace,
 ) -> None:
-    store_navs(
-        workspace,
+    workspace.store_navs(
         {
             DAY_1: {1: "0.0000", 2: "10.0000"},
             DAY_2: {1: "10.0000", 2: "0.0000"},
@@ -441,7 +338,7 @@ def test_a_zero_nav_gives_no_change_from_it_and_a_fall_to_zero_is_reported(
 
 
 def test_published_navs_are_carried_through_untouched(workspace: Workspace) -> None:
-    store_navs(workspace, {DAY_1: {1: "100.1234", 2: "7.0001"}, DAY_2: {1: "100.5000"}})
+    workspace.store_navs({DAY_1: {1: "100.1234", 2: "7.0001"}, DAY_2: {1: "100.5000"}})
 
     result = workspace.build(*NAV_CHAIN)
 
@@ -461,8 +358,7 @@ def test_published_navs_are_carried_through_untouched(workspace: Workspace) -> N
 def test_the_summary_totals_each_feed_and_keeps_a_date_with_only_one(
     workspace: Workspace,
 ) -> None:
-    store_prices(
-        workspace,
+    workspace.store_prices(
         {
             DAY_1: [
                 ("AAA", "EQ", "110.00", "100.00"),  # +10
@@ -479,9 +375,8 @@ def test_the_summary_totals_each_feed_and_keeps_a_date_with_only_one(
             DAY_3: [("GGG", "EQ", "100.00", "100.00")],
         },
     )
-    store_actions(workspace, DAY_3, ("ZZZ", "EQ", "Dividend - Rs 2 Per Share"))
-    store_navs(
-        workspace,
+    workspace.store_actions(DAY_3, ("ZZZ", "EQ", "Dividend - Rs 2 Per Share"))
+    workspace.store_navs(
         {
             DAY_1: {1: "100.0000", 2: "50.0000"},
             DAY_2: {1: "101.0000", 2: "51.0000"},  # no NSE session on this date
@@ -511,15 +406,14 @@ def test_the_summary_totals_each_feed_and_keeps_a_date_with_only_one(
 
 
 def test_a_split_day_is_not_counted_as_a_decliner(workspace: Workspace) -> None:
-    store_prices(
-        workspace,
+    workspace.store_prices(
         {
             DAY_1: [("ABC", "EQ", "500.00", "500.00")],
             DAY_2: [("ABC", "EQ", "100.00", "500.00")],
         },
     )
-    store_actions(workspace, DAY_2, ("ABC", "EQ", SPLIT_5_TO_1))
-    store_navs(workspace, {DAY_1: {1: "100.0000"}})
+    workspace.store_actions(DAY_2, ("ABC", "EQ", SPLIT_5_TO_1))
+    workspace.store_navs({DAY_1: {1: "100.0000"}})
 
     result = workspace.build(*SUMMARY_CHAIN)
 
@@ -535,9 +429,9 @@ def test_a_failing_feed_stops_the_summary_but_not_the_other_feeds_gold_model(
     workspace: Workspace,
 ) -> None:
     """The summary reads both feeds, so it waits for both; the healthy side still builds."""
-    store_prices(workspace, {DAY_1: [("ABC", "EQ", "100.00", "100.00")]})
-    store_actions(workspace, DAY_1, ("ZZZ", "EQ", "Dividend - Rs 2 Per Share"))
-    store_navs(workspace, {DAY_1: {1: "100.0000", 2: ""}})  # one NAV is blank
+    workspace.store_prices({DAY_1: [("ABC", "EQ", "100.00", "100.00")]})
+    workspace.store_actions(DAY_1, ("ZZZ", "EQ", "Dividend - Rs 2 Per Share"))
+    workspace.store_navs({DAY_1: {1: "100.0000", 2: ""}})  # one NAV is blank
 
     result = workspace.build(*SUMMARY_CHAIN)
 
