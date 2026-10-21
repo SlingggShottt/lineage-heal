@@ -110,7 +110,7 @@ LineageHeal is evaluated on a benchmark of about 100 faults injected into NSE, A
 |---|---|
 | Ingestion | Python 3.12, httpx |
 | Storage | Cloudflare R2 |
-| Transformation and testing | dbt, DuckDB, MotherDuck, Elementary |
+| Transformation and testing | dbt, DuckDB, MotherDuck |
 | Orchestration | Dagster, GitHub Actions |
 | Lineage | OpenLineage, sqlglot |
 | Agents | LangGraph, LangChain |

@@ -22,7 +22,7 @@
 | Raw storage | Cloudflare R2 (S3-compatible) | — |
 | Warehouse | DuckDB (local), MotherDuck (shared) | DuckDB 1.x |
 | Transformation | dbt Core + dbt-duckdb | 1.x (latest supported by dbt-duckdb) |
-| Data quality | dbt tests, dbt_utils, dbt_expectations, Elementary | latest compatible |
+| Data quality | dbt tests, plus project-defined generic tests and anomaly monitors | — |
 | Orchestration | Dagster OSS + dagster-dbt | 1.x |
 | Lineage | OpenLineage, sqlglot, NetworkX | latest |
 | Agents | LangGraph + LangChain core, Postgres checkpointer | 1.x |
@@ -71,13 +71,12 @@ A local-directory backend sits behind the same interface for tests and sandboxes
 | **DuckDB** | Local development, CI tests and the benchmark sandbox |
 | **MotherDuck** | Shared, persistent warehouse for the live pipeline |
 | **dbt Core** + **dbt-duckdb** | Bronze, silver and gold models; one project, with `dev`, `ci`, `bench` and `prod` targets |
-| **dbt_utils**, **dbt_expectations** | Reusable generic tests |
-| **Elementary** | Anomaly detection (volume, freshness, column distributions) and test result history |
+| Project generic tests (`dbt/tests/generic/`) | `non_negative`, `positive`, `unique_combination`, and the monitors `volume_anomaly`, `distribution_anomaly` and `fresh_within` (LH-027). Written in the project instead of adding `dbt_utils` or `dbt_expectations`, because each is a few lines and needs no dependency |
 | **sqlfluff** | SQL linting with the dbt templater |
 
 DuckDB reads raw files directly from R2 using its R2 secret type, so no separate loading step is needed between storage and bronze.
 
-**Why dbt 1.x and not dbt 2.0:** dbt 2.0 (Rust engine, built-in DuckDB adapter) was released in September 2026. Dagster's dbt integration, OpenLineage's dbt integration, Elementary and sqlfluff's templater all target the Python engine, and LineageHeal depends on all four. We will revisit after the build.
+**Why dbt 1.x and not dbt 2.0:** dbt 2.0 (Rust engine, built-in DuckDB adapter) was released in September 2026. Dagster's dbt integration, OpenLineage's dbt integration and sqlfluff's templater all target the Python engine, and LineageHeal depends on all three. We will revisit after the build.
 
 **Considered:** BigQuery sandbox (vendor lock-in and sandbox restrictions), Snowflake (trial only), Postgres as the warehouse (row-oriented, not built for analytics).
 

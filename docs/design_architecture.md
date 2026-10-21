@@ -256,8 +256,13 @@ Seeds hold per-source calendars (`seed_calendar_nse`, `seed_calendar_amfi`, `see
 
 ### 5.4 Data quality
 
-- **Generic tests:** `unique`, `not_null`, `accepted_values`, `relationships`, plus range and row-count tests from `dbt_utils` and `dbt_expectations`.
-- **Anomaly monitors:** Elementary volume, freshness and column-distribution monitors on silver and gold (fallback: custom z-score tests if the Week 3 spike shows incompatibility).
+- **Generic tests:** `not_null`, `accepted_values` and the project's own `non_negative`, `positive` and `unique_combination` (in `dbt/tests/generic/`), checked one row or one key at a time.
+- **Anomaly monitors (D-29):** `volume_anomaly`, `distribution_anomaly` and `fresh_within`, on the silver tables. They look at a whole day rather than a row, so they catch what every value check accepts: a partial or duplicated file, or prices in the wrong unit.
+  - **How they judge.** Each date's row count (or median of a column) is compared with the median of the previous ten dates *of the same kind*, weekday or weekend, and judged anomalous beyond a tolerance (20% for NSE rows and prices, 35% for AMFI rows because Saturday and Sunday differ by 17%, 25% for NAVs). Only dates that exist are compared, so a holiday is a gap and not a zero. Nothing is judged until five earlier dates of the same kind exist. Only the latest three dates in the data are judged, and "now" is never read, so the same data gives the same verdict today, in CI and in a benchmark replay of a past date.
+  - **Real data.** On the latest real day the deviations were -0.14% (NSE rows), -2.1% (median close), -0.22% (AMFI rows) and -0.82% (median NAV), against tolerances of 20 to 35%, so the monitors are quiet on healthy data and a halved file (-50%) or prices a hundred times larger are far outside.
+  - **Severity.** Volume and distribution fail the build, so a half-empty or rescaled day does not reach gold (`dbt build` skips what is downstream of a failed test). `fresh_within` warns and does nothing unless the run supplies `as_of_date` (`--vars '{as_of_date: 2026-10-16}'`): a development database holds old data by design, and a missing file on a trading day is the exchange calendar's job (LH-016), not a clock comparison here.
+  - **Gold is not monitored separately** because it derives from silver and a failed silver monitor already stops it.
+  - **Why not Elementary (D-29).** The spike installed Elementary 0.26.1 and it ran on DuckDB: its 32 models built and its tests stored results. On a synthetic 80-day history with the last day halved, the default volume monitor did not flag it: weekends counted as zero-row buckets, so the 14-day training set had a mean of 2,511 and a standard deviation of 1,723 (a score of -0.4). Its day-of-week seasonality, which should fix that, produced a training set of 490 buckets with a mean of 419, which is wrong for weekday data on DuckDB; the cause was not pursued. Its windows also follow the wall clock unless `custom_run_started_at` is set. Getting useful detection from it meant fighting its model, with a package and 32 extra tables, so the project's own monitors were chosen. MotherDuck was not tested (D-23).
 - **Domain checks:** close price within high–low range; day-over-day price change beyond a threshold without a matching corporate action (catches unit changes); NAV not negative (zero is valid: about 100 segregated-portfolio schemes publish exactly 0 on an ordinary day); FX rate within a plausible band.
 
 ## 6. Orchestration
@@ -325,7 +330,7 @@ The graph state is a typed model holding: incident ID, signals, affected nodes, 
 
 Mostly deterministic, so its behaviour is predictable and testable:
 
-1. Parse `run_results.json`, Elementary results, the ingestion log and expected-file calendars into signals.
+1. Parse `run_results.json` (including the monitors' results), the ingestion log and expected-file calendars into signals.
 2. Map each signal to lineage nodes.
 3. Group signals whose nodes share a common upstream ancestor within a depth limit (FR-DET-02).
 4. Match against open incidents by root ancestor and fault fingerprint to avoid duplicates (FR-DET-05).

@@ -11,6 +11,18 @@ models:
       - unique_combination:
           arguments:
             columns: [scheme_code, nav_date]
+      # Weekday and weekend reports are judged apart (about 8,700 against 650 schemes), and
+      # Saturday and Sunday differ by about 17% on real data, hence the wide tolerance.
+      - volume_anomaly:
+          arguments:
+            date_column: nav_date
+            tolerance: 0.35
+      - fresh_within:
+          arguments:
+            date_column: nav_date
+            max_age_days: 3
+          config:
+            severity: warn
     columns:
       - name: scheme_code
         description: AMFI scheme code.
@@ -25,6 +37,10 @@ models:
         data_tests:
           - not_null
           - non_negative
+          - distribution_anomaly:
+              arguments:
+                date_column: nav_date
+                tolerance: 0.25
       - name: scheme_name
         description: Scheme name including plan and option, as published.
         data_tests:
@@ -214,6 +230,17 @@ models:
       - unique_combination:
           arguments:
             columns: [price_date, symbol, series]
+      # About 3,700 rows a day, within 1% of each other on real data.
+      - volume_anomaly:
+          arguments:
+            date_column: price_date
+            tolerance: 0.2
+      - fresh_within:
+          arguments:
+            date_column: price_date
+            max_age_days: 5
+          config:
+            severity: warn
     columns:
       - name: price_date
         description: The trading date.
@@ -253,6 +280,10 @@ models:
         data_tests:
           - not_null
           - non_negative
+          - distribution_anomaly:
+              arguments:
+                date_column: price_date
+                tolerance: 0.2
       - name: last_price_inr
         description: Last traded price, in rupees.
         data_tests:
