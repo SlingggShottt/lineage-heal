@@ -7,12 +7,16 @@
 #   prod   MotherDuck, for the scheduled pipeline
 #
 # dev, ci and bench must stay local: the benchmark never runs against prod.
+#
+# The DuckDB files live in DBT_DATA_DIR, which defaults to .data relative to the directory dbt
+# is started in. From the command line that is the repository root. Dagster starts dbt inside
+# dbt/ instead, so it passes an absolute DBT_DATA_DIR rather than rely on where it is run.
 lineageheal:
   target: dev # never default to prod
   outputs:
     dev:
       type: duckdb
-      path: .data/dev.duckdb # relative to the repository root, where dbt is run
+      path: "{{ env_var('DBT_DATA_DIR', '.data') }}/dev.duckdb"
       threads: 4
 
     ci:
@@ -22,7 +26,7 @@ lineageheal:
 
     bench:
       type: duckdb
-      path: .data/bench.duckdb
+      path: "{{ env_var('DBT_DATA_DIR', '.data') }}/bench.duckdb"
       threads: 4
 
     prod:

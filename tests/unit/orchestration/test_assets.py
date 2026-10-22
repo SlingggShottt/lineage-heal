@@ -186,9 +186,11 @@ def test_the_instance_config_limits_the_pool_to_one_and_turns_telemetry_off(tmp_
         assert instance.run_retries_max_retries == 1
 
 
-def test_the_definitions_load_with_the_ingestion_resource() -> None:
-    assert set(defs.resources) == {"ingestion"}
-    assert len(defs.resolve_all_asset_keys()) == len(DATASETS)
+def test_the_definitions_load_with_both_resources_and_the_raw_assets() -> None:
+    assert set(defs.resources) == {"ingestion", "dbt"}
+    assert {raw_asset_key(source, dataset) for source, dataset in DATASETS} <= set(
+        defs.resolve_all_asset_keys()
+    )
 
 
 # --- the real resource -------------------------------------------------------------------
