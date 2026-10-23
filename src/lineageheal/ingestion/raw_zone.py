@@ -31,7 +31,7 @@ _KEY_HASH_PREFIX = re.compile(rf"/([0-9a-f]{{{HASH_PREFIX_LENGTH}}})__[^/]+$")
 
 
 class ObjectStore(Protocol):
-    """The three operations the raw zone needs from a storage backend."""
+    """The operations the raw zone needs from a storage backend."""
 
     def exists(self, key: str) -> bool:
         """Return whether an object is stored under `key`."""
@@ -45,6 +45,10 @@ class ObjectStore(Protocol):
         """Return the bytes stored under `key`."""
         ...
 
+    def list_folder(self, folder: str) -> list[str]:
+        """List the keys stored directly under a folder key, oldest first."""
+        ...
+
 
 @dataclass(frozen=True)
 class StoredObject:
@@ -54,6 +58,18 @@ class StoredObject:
     sha256: str
     size_bytes: int
     created: bool  # False when an identical file was already stored
+
+
+def trade_date_folder(source: str, dataset: str, trade_date: date) -> str:
+    """The folder key under which every version of one trade date's file is stored.
+
+    Raises:
+        StorageError: A name is empty or contains characters that are not allowed.
+    """
+    for label, value in (("source", source), ("dataset", dataset)):
+        if not _NAME.fullmatch(value):
+            raise StorageError(f"Invalid {label} for raw zone key: {value!r}")
+    return f"raw/source={source}/dataset={dataset}/trade_date={trade_date.isoformat()}"
 
 
 def build_key(source: str, dataset: str, trade_date: date, filename: str, sha256: str) -> str:
@@ -73,19 +89,12 @@ def build_key(source: str, dataset: str, trade_date: date, filename: str, sha256
     Raises:
         StorageError: A name is empty or contains characters that are not allowed.
     """
-    for label, value in (("source", source), ("dataset", dataset)):
-        if not _NAME.fullmatch(value):
-            raise StorageError(f"Invalid {label} for raw zone key: {value!r}")
-
+    folder = trade_date_folder(source, dataset, trade_date)
     safe_name = _UNSAFE_FILENAME_CHARS.sub("_", PurePosixPath(filename.replace("\\", "/")).name)
     if safe_name.strip(".") == "":
         raise StorageError(f"Invalid file name for raw zone key: {filename!r}")
 
-    prefix = sha256[:HASH_PREFIX_LENGTH]
-    return (
-        f"raw/source={source}/dataset={dataset}/trade_date={trade_date.isoformat()}/"
-        f"{prefix}__{safe_name}"
-    )
+    return f"{folder}/{sha256[:HASH_PREFIX_LENGTH]}__{safe_name}"
 
 
 class RawZone:
@@ -131,6 +140,17 @@ class RawZone:
         self._store.put(key, content, metadata={"sha256": digest})
         log.info("file_stored", key=key, size_bytes=len(content), sha256=digest)
         return StoredObject(key=key, sha256=digest, size_bytes=len(content), created=True)
+
+    def stored_keys(self, *, source: str, dataset: str, trade_date: date) -> list[str]:
+        """List the keys of every version stored for one trade date, oldest first.
+
+        An empty list means nothing has been stored for that date: either it was never
+        fetched or the source published nothing.
+
+        Raises:
+            StorageError: A name is invalid or the backend failed.
+        """
+        return self._store.list_folder(trade_date_folder(source, dataset, trade_date))
 
     def read(self, key: str) -> bytes:
         """Return a stored file after checking it still matches the hash in its key.

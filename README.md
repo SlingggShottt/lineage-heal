@@ -158,7 +158,7 @@ make up                   # Postgres with pgvector (more services as they are bu
 | `uv run lineageheal ingest amfi --date 2026-10-15` | Download one day of AMFI NAVs into the raw zone |
 | `uv run lineageheal ingest nse --date 2026-10-15` | Download one day of the NSE UDiFF bhavcopy into the raw zone, and unzip a copy into the staged area dbt reads |
 | `uv run lineageheal ingest nse --dataset security_master --date 2026-10-15` | Load another NSE dataset (`security_master` or `corporate_actions`; the default is `cm_bhavcopy`) |
-| `uv run lineageheal backfill amfi --start 2026-10-01` | Load a date range (from 2024-01-01); safe to re-run |
+| `uv run lineageheal backfill amfi --start 2026-10-01` | Load a date range (from 2024-01-01). A re-run carries on where an interrupted one stopped and sends no request for days it already has; `--refresh` downloads them again (AMFI republishes corrected reports), `--skip-weekends` saves requests on the NSE feeds |
 | `uv run dbt build --project-dir dbt --profiles-dir dbt --target dev` | Build the warehouse layers from the raw zone and run their quality tests |
 | `make dagster` | Start the Dagster UI and daemon (http://localhost:3000). Pick a raw asset and a date partition to ingest it with the same loaders and ingestion log as `lineageheal ingest` (a date the source published nothing for is a success marked `no_data`), or materialise the dbt models, which run `dbt build` with every test as a check |
 | `uv run lineageheal dev inject-fault amfi --fault blank-nav --date 2026-10-16` | Store a damaged copy of an ingested report in the local raw zone, to rehearse a failure (refuses to run against R2) |

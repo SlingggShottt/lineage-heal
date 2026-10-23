@@ -456,6 +456,32 @@ def test_wording_the_parser_does_not_recognise_is_a_warning_not_a_failure(
     assert result.statuses[WORDING] == "warn"
 
 
+def test_old_unrecognised_wording_does_not_warn_on_every_build_for_ever(
+    workspace: Workspace,
+) -> None:
+    """Only the latest three ex-dates are looked at; real 'other' actions stay in the history."""
+    odd = action("ODD", "Scheme Of Arrangement - Bonus Ncrps 3:1", exDate="10-Oct-2026")
+    workspace.store_corporate_actions(actions_json([odd]), ex_date=date(2026, 10, 10))
+    for day in (13, 14, 15):
+        later = action("DIV", "Dividend - Rs 5 Per Share", exDate=f"{day}-Oct-2026")
+        workspace.store_corporate_actions(actions_json([later]), ex_date=date(2026, 10, day))
+
+    result = workspace.build(*ACTIONS_CHAIN)
+
+    assert result.success
+    assert result.statuses[WORDING] == "pass"
+
+
+def test_unrecognised_wording_in_a_recent_action_still_warns(workspace: Workspace) -> None:
+    for day in (12, 13, 14):
+        ok = action("DIV", "Dividend - Rs 5 Per Share", exDate=f"{day}-Oct-2026")
+        workspace.store_corporate_actions(actions_json([ok]), ex_date=date(2026, 10, day))
+    odd = action("ODD", "Scheme Of Arrangement - Bonus Ncrps 3:1", exDate="15-Oct-2026")
+    workspace.store_corporate_actions(actions_json([odd]), ex_date=date(2026, 10, 15))
+
+    assert workspace.build(*ACTIONS_CHAIN).statuses[WORDING] == "warn"
+
+
 @pytest.mark.parametrize(
     "subject",
     [

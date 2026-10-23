@@ -299,6 +299,54 @@ def test_each_bhavcopy_fault_is_caught_by_the_expected_check(
     assert result.failed() == expected_failures
 
 
+def large_bhavcopy(instruments: int, *, close_above_high: int = 0) -> bytes:
+    """A bhavcopy of many instruments, each a copy of RELIANCE under its own symbol.
+
+    The first `close_above_high` of them close above their day's high (3300 against 3197).
+    """
+    header, *_ = healthy_bhavcopy().split(b"\n")
+    template = reliance_row(healthy_bhavcopy())
+    rows = []
+    for index in range(instruments):
+        row = template.replace(b",RELIANCE,EQ,", f",SYM{index:04d},EQ,".encode())
+        if index < close_above_high:
+            row = row.replace(b"3177.25,3189.90,", b"3300.00,3189.90,")
+        rows.append(row)
+    return b"\n".join([header, *rows]) + b"\n"
+
+
+def test_one_odd_price_in_a_large_file_is_real_data_and_does_not_fail_the_build(
+    workspace: Workspace,
+) -> None:
+    """Over 13 weeks of real data exactly one row in 224,156 broke the range rule."""
+    workspace.store_nse(large_bhavcopy(400, close_above_high=1))
+
+    result = workspace.build(NSE_MODEL)
+
+    assert result.success
+    assert result.statuses[NSE_RANGE_TEST] == "pass"
+
+
+def test_the_range_rule_tolerates_up_to_half_a_percent_of_a_file(workspace: Workspace) -> None:
+    workspace.store_nse(large_bhavcopy(200, close_above_high=1))  # exactly 0.5%
+
+    assert workspace.build(NSE_MODEL).statuses[NSE_RANGE_TEST] == "pass"
+
+
+def test_just_over_half_a_percent_of_a_file_out_of_range_fails_it(workspace: Workspace) -> None:
+    workspace.store_nse(large_bhavcopy(199, close_above_high=1))  # 0.503%
+
+    result = workspace.build(NSE_MODEL)
+
+    assert result.failed() == {NSE_RANGE_TEST}
+
+
+def test_damaged_prices_across_a_large_file_fail_it(workspace: Workspace) -> None:
+    workspace.store_nse(large_bhavcopy(400, close_above_high=40))
+
+    assert workspace.build(NSE_MODEL).failed() == {NSE_RANGE_TEST}
+
+
 def test_a_renamed_price_column_breaks_the_model(workspace: Workspace) -> None:
     """The schema-drift case from the benchmark spec: ClsPric renamed to ClosePrice."""
     workspace.store_nse(healthy_bhavcopy().replace(b",ClsPric,", b",ClosePrice,"))

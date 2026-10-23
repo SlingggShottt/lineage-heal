@@ -44,7 +44,7 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 | LH-013 | Data spike: AMFI NAVAll (URLs, history, formats). FBIL split out to LH-080 | IF-SW-01 | Done | 2 |
 | LH-014 | Postgres store foundation: SQLAlchemy, Alembic, `ingestion_log` table | FR-ING-06 | Done | 2 |
 | LH-015 | R2 storage client: content-addressed keys, put-if-absent, checksums | FR-ING-05, IF-SW-02 | Done | 2 |
-| LH-016 | Per-source calendars as seeds (NSE, AMFI, FBIL; 2024 onwards) | FR-ING-07 | Todo | |
+| LH-016 | Per-source calendars as seeds (NSE, AMFI, FBIL; 2024 onwards). Also needed to tell a weekday market holiday, when AMFI publishes a weekend-sized report, from a truncated weekday report (D-34) | FR-ING-07 | Todo | |
 | LH-017 | NSE CM-UDiFF bhavcopy loader | FR-ING-01, FR-ING-10 | Done | 2 |
 | LH-018 | NSE security master and corporate actions loaders | FR-ING-02 | Done | 2 |
 | LH-019 | AMFI NAVAll loader | FR-ING-03 | Done | 2 |
@@ -71,11 +71,12 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 | LH-032 | Dagster run storage on Postgres; Compose services for webserver and daemon. Deferred while everything runs locally (D-23): `dagster-postgres` needs a second Postgres driver and the Neon database | FR-ORC-03 | Todo | |
 | LH-033 | `pipeline.yml`: scheduled and manual runs on MotherDuck. Edits CI, so needs approval; deferred with the cloud accounts (D-23) | FR-ORC-02, FR-ORC-05 | Todo | |
 | LH-034 | Persist dbt artifacts and record failure signals per run. Done as files under `runs/<run_id>/` (D-33); the starting of the healing workflow from a failed run is LH-057 | FR-WH-07, FR-ORC-04 | Done | 3 |
-| LH-035 | Historical backfill from January 2024 to R2 and MotherDuck | FR-ING-08 | Todo | |
+| LH-035 | Historical backfill. A resumable `backfill` and the last 13 weeks loaded locally; the run from January 2024 is LH-088 and the copy to R2 and MotherDuck waits for the accounts (D-23) | FR-ING-08 | Done | 3 |
 | LH-082 | DuckDB R2 secret and httpfs for the prod target: read the raw zone from R2 instead of a local path | FR-WH-01 | Todo | |
 | LH-085 | Speed up the dbt scenario tests: parse the project once and reuse it, and run them outside the coverage run | NFR-MAINT-02 | Done | 3 |
 | LH-086 | Reconcile raw file arrival times with the ingestion log, as a Detector signal and a test: file times can be reset by copying or restoring a raw zone, the log cannot | FR-DET-01 | Todo | |
 | LH-087 | FX rate plausibility check: a band for each FBIL rate, in the style of the NAV and price jump checks (D-30). Blocked by LH-080 | FR-WH-04 | Todo | |
+| LH-088 | Full backfill from 2024-01-01 to today, locally: about 2,500 requests, two hours at the default spacing and about 1.4 GB. Run `backfill amfi`, then `backfill nse` for `cm_bhavcopy` and `corporate_actions` with `--skip-weekends`; it resumes if interrupted | FR-ING-08 | Todo | |
 
 ## Week 4 — Lineage, detection and investigation
 
@@ -176,3 +177,4 @@ A running record of completed work, used for the weekly diary.
 | 3 | LH-030 | Dagster raw assets: one daily-partitioned asset per dataset keyed by the dbt source it feeds, built on loader and ingestion-log code now shared with the CLI (`ingestion.runner`); a holiday is a success marked `no_data`, the file hash is the data version, and all four share a one-at-a-time pool; verified live (stored, unchanged, no_data) and in the UI |
 | 3 | LH-031 | dagster-dbt integration: the 12 dbt models are Dagster assets joined to the four raw assets, grouped by layer, with all 187 dbt tests as asset checks, built by one `dbt build` per run; the manifest is parsed on demand; a first real run found that dbt, started inside `dbt/`, looked for its raw files and database in the wrong place, fixed by passing absolute paths and a `DBT_DATA_DIR` profile variable; verified on 8 real days |
 | 3 | LH-034 | Run artifacts and failure signals: after every dbt run, also a failed one, `manifest.json`, `run_results.json` and a `signals.json` summary are kept under `runs/<run_id>/`; failed tests, warnings, model errors and a run that never started become signals naming the model and column, with the skipped downstream models listed; the Dagster run is tagged and `lineageheal signals` prints them; verified with a damaged real report |
+| 3 | LH-035 | Resumable backfill (`backfill` skips days already stored, `--refresh` and `--skip-weekends`; R2 can list a folder) and the last 13 weeks loaded for real (91 AMFI days, 62 NSE trading days, 58 of corporate actions, 11 minutes, none failed); building the warehouse on them found a holiday false alarm in the monitors, a per-row range rule that one real row would fail for ever and a wording warning that never clears, all fixed |

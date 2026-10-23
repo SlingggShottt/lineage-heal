@@ -96,6 +96,10 @@ class S3Client(Protocol):
         """Upload an object."""
         ...
 
+    def list_objects_v2(self, **kwargs: Any) -> Any:
+        """List objects under a prefix, one page at a time."""
+        ...
+
     def get_object(self, **kwargs: Any) -> Any:
         """Download an object; the bytes are in the response's "Body"."""
         ...
@@ -148,6 +152,38 @@ class R2ObjectStore:
             self._client.put_object(Bucket=self._bucket, Key=key, Body=data, Metadata=metadata)
         except (ClientError, BotoCoreError) as exc:
             raise _storage_error("write", key, exc) from exc
+
+    def list_folder(self, folder: str) -> list[str]:
+        """List the keys stored directly under a folder key, oldest first.
+
+        Same contract as the local store: ordered by when each object was stored, then by
+        name, so the first key is the earliest stored version.
+
+        Raises:
+            StorageError: The bucket could not be listed.
+        """
+        prefix = folder.rstrip("/") + "/"
+        found: list[tuple[Any, str]] = []
+        token: str | None = None
+        try:
+            while True:
+                request: dict[str, Any] = {
+                    "Bucket": self._bucket,
+                    "Prefix": prefix,
+                    "Delimiter": "/",
+                }
+                if token is not None:
+                    request["ContinuationToken"] = token
+                response = self._client.list_objects_v2(**request)
+                found += [
+                    (item["LastModified"], item["Key"]) for item in response.get("Contents", [])
+                ]
+                if not response.get("IsTruncated"):
+                    break
+                token = response["NextContinuationToken"]
+        except (ClientError, BotoCoreError) as exc:
+            raise _storage_error("list", folder, exc) from exc
+        return [key for _, key in sorted(found)]
 
     def get(self, key: str) -> bytes:
         """Download the object's bytes."""

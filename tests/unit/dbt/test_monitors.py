@@ -218,3 +218,58 @@ def test_a_bad_report_stops_the_gold_table_that_reads_it(workspace: Workspace) -
 
     assert monitor_statuses(result)["volume_anomaly"] == "fail"
     assert result.statuses["gld_mf_nav_daily"] == "skipped"
+
+
+def test_a_weekday_report_that_looks_like_a_weekend_one_is_a_market_holiday_not_a_fault(
+    workspace: Workspace,
+) -> None:
+    """AMFI publishes a weekend-sized report on a weekday market holiday (Dussehra 2026).
+
+    On real data it had 714 schemes against 8,742 the day before, with a median NAV of 1,004
+    against 18.7. Both monitors used to fail the build on it.
+    """
+    reports = {}
+    for day in calendar_days(23):
+        if day.weekday() >= 5 or day == calendar_days(23)[-1]:  # the last day is a Tuesday
+            reports[day] = dict.fromkeys(range(3), "1000.0000")
+        else:
+            reports[day] = dict.fromkeys(range(20), "20.0000")
+    workspace.store_navs(reports)
+
+    result = workspace.build(*NAV_CHAIN)
+
+    assert result.success
+    assert monitor_statuses(result)["volume_anomaly"] == "pass"
+    assert monitor_statuses(result)["distribution_anomaly"] == "pass"
+
+
+def test_a_half_empty_weekday_report_is_still_caught_when_weekend_reports_exist(
+    workspace: Workspace,
+) -> None:
+    """Matching the weekend pattern excuses a date; matching neither pattern does not."""
+    reports = {}
+    for day in calendar_days(23):
+        if day.weekday() >= 5:
+            reports[day] = dict.fromkeys(range(3), "1000.0000")
+        elif day == calendar_days(23)[-1]:
+            reports[day] = dict.fromkeys(range(10), "20.0000")  # half of a normal weekday
+        else:
+            reports[day] = dict.fromkeys(range(20), "20.0000")
+    workspace.store_navs(reports)
+
+    result = workspace.build(*NAV_CHAIN)
+
+    assert monitor_statuses(result)["volume_anomaly"] == "fail"
+
+
+def test_a_weekday_that_looks_like_a_weekend_is_caught_when_the_feed_has_no_weekend_pattern(
+    workspace: Workspace,
+) -> None:
+    """NSE never publishes at weekends, so there is nothing a one-row day could be excused by."""
+    days = weekdays(9)
+    workspace.store_prices({day: day_prices(FULL_DAY) for day in days[:-1]})
+    workspace.store_prices({days[-1]: day_prices(1)})
+
+    result = workspace.build(*EOD_CHAIN)
+
+    assert monitor_statuses(result)["volume_anomaly"] == "fail"

@@ -258,15 +258,99 @@ def test_backfill_carries_on_past_a_failed_day_and_exits_nonzero(tmp_path: Path)
 
 
 @respx.mock
-def test_backfill_can_be_re_run_without_duplicating_data(tmp_path: Path) -> None:
-    respx.get(AMFI_REPORT_URL).mock(return_value=report_response())
+def test_a_re_run_does_not_ask_the_source_again_for_days_it_already_has(tmp_path: Path) -> None:
+    route = respx.get(AMFI_REPORT_URL).mock(return_value=report_response())
     arguments = ["backfill", "amfi", "--start", "2026-10-15", "--end", "2026-10-15"]
 
     runner.invoke(app, arguments)
     second = runner.invoke(app, arguments)
 
-    assert "1 unchanged" in second.stdout
+    assert route.call_count == 1  # the second run sent no request
+    assert second.stdout.strip().endswith(
+        "0 stored, 0 unchanged, 0 no_data, 1 already stored, 0 failed"
+    )
     assert len(stored_files(tmp_path)) == 1
+
+
+@respx.mock
+def test_refresh_downloads_stored_days_again_and_reports_them_unchanged(tmp_path: Path) -> None:
+    route = respx.get(AMFI_REPORT_URL).mock(return_value=report_response())
+    arguments = ["backfill", "amfi", "--start", "2026-10-15", "--end", "2026-10-15"]
+
+    runner.invoke(app, arguments)
+    second = runner.invoke(app, [*arguments, "--refresh"])
+
+    assert route.call_count == 2
+    assert "1 unchanged" in second.stdout
+    assert "already stored" not in second.stdout
+    assert len(stored_files(tmp_path)) == 1
+
+
+@respx.mock
+def test_refresh_picks_up_a_report_the_source_has_corrected(tmp_path: Path) -> None:
+    respx.get(AMFI_REPORT_URL).mock(
+        side_effect=[report_response(REPORT), report_response(REPORT + b"corrected;row\r\n")]
+    )
+    arguments = ["backfill", "amfi", "--start", "2026-10-15", "--end", "2026-10-15"]
+
+    runner.invoke(app, arguments)
+    second = runner.invoke(app, [*arguments, "--refresh"])
+
+    assert "1 stored" in second.stdout
+    assert len(stored_files(tmp_path)) == 2  # both versions kept, as the raw zone promises
+
+
+@respx.mock
+def test_an_interrupted_backfill_carries_on_with_only_the_missing_days(tmp_path: Path) -> None:
+    route = respx.get(AMFI_REPORT_URL).mock(return_value=report_response())
+    runner.invoke(app, ["backfill", "amfi", "--start", "2026-10-13", "--end", "2026-10-14"])
+    assert route.call_count == 2
+
+    resumed = runner.invoke(
+        app, ["backfill", "amfi", "--start", "2026-10-13", "--end", "2026-10-16"]
+    )
+
+    assert route.call_count == 4  # only the 15th and the 16th were requested
+    assert resumed.stdout.strip().endswith(
+        "2 stored, 0 unchanged, 0 no_data, 2 already stored, 0 failed"
+    )
+
+
+@respx.mock
+def test_a_day_with_no_file_is_asked_for_again_because_it_may_have_appeared_since() -> None:
+    route = respx.get(AMFI_REPORT_URL).mock(return_value=no_data_response())
+    arguments = ["backfill", "amfi", "--start", "2026-10-15", "--end", "2026-10-15"]
+
+    runner.invoke(app, arguments)
+    second = runner.invoke(app, arguments)
+
+    assert route.call_count == 2
+    assert "1 no_data" in second.stdout
+    assert "already stored" not in second.stdout
+
+
+@respx.mock
+def test_skip_weekends_asks_for_weekdays_only() -> None:
+    route = respx.get(AMFI_REPORT_URL).mock(return_value=report_response())
+
+    # Friday 16 October to Monday 19 October 2026
+    result = runner.invoke(
+        app, ["backfill", "amfi", "--start", "2026-10-16", "--end", "2026-10-19", "--skip-weekends"]
+    )
+
+    assert route.call_count == 2
+    assert result.stdout.strip().endswith(
+        "2 stored, 0 unchanged, 0 no_data, 2 weekend days skipped, 0 failed"
+    )
+
+
+def test_weekends_are_asked_for_unless_told_otherwise() -> None:
+    with respx.mock:
+        route = respx.get(AMFI_REPORT_URL).mock(return_value=report_response())
+
+        runner.invoke(app, ["backfill", "amfi", "--start", "2026-10-17", "--end", "2026-10-18"])
+
+    assert route.call_count == 2
 
 
 def test_backfill_refuses_dates_before_the_supported_window() -> None:
