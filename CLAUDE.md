@@ -81,7 +81,7 @@ lineage-heal/
 │   ├── core/                 Settings, logging, errors, shared types
 │   ├── ingestion/            Feed loaders (nse, amfi, fbil) and R2 storage client
 │   ├── orchestration/        Dagster assets, jobs, schedules, sensors
-│   ├── lineage/              OpenLineage collection, sqlglot parsing, lineage graph
+│   ├── lineage/              dbt artifact parsing, OpenLineage collection, sqlglot parsing, lineage graph
 │   ├── agents/               LangGraph graph, Detector/Investigator/Fixer nodes, tools, prompts
 │   ├── rag/                  Chunking, embeddings, hybrid retrieval over incidents and runbooks
 │   ├── llm/                  Provider abstraction (Gemini primary, Groq fallback)
@@ -119,6 +119,7 @@ uv run lineageheal ingest nse --dataset security_master --date 2026-10-15   # or
 uv run lineageheal backfill amfi --start 2026-10-01 --end 2026-10-15
 uv run lineageheal db upgrade                    # needs DATABASE_URL and `make up`
 uv run lineageheal log --limit 10                # recent ingestion attempts
+uv run lineageheal signals RUN_ID                # failure signals recorded for a pipeline run
 uv run lineageheal dev inject-fault amfi --fault blank-nav --date 2026-10-15   # local raw zone only
 
 # Quality gates — all must pass before proposing a commit

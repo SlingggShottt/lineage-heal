@@ -8,17 +8,26 @@ one `dbt build`, which builds a model, tests it, and skips what is downstream of
 
 import os
 from collections.abc import Iterator, Mapping
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from unittest import mock
 
 import dagster as dg
-from dagster_dbt import DagsterDbtTranslator, DbtCliResource, DbtProject, dbt_assets
+from dagster_dbt import (
+    DagsterDbtTranslator,
+    DbtCliInvocation,
+    DbtCliResource,
+    DbtProject,
+    dbt_assets,
+)
 
-from lineageheal.core.errors import ConfigurationError
+from lineageheal.core.errors import ConfigurationError, LineageHealError
 from lineageheal.core.settings import get_settings
+from lineageheal.ingestion.raw_zone import open_store
 from lineageheal.ingestion.runner import DATASETS
 from lineageheal.orchestration.assets import raw_asset_key
+from lineageheal.orchestration.run_artifacts import record_dbt_run, run_prefix
 
 # The repository root holds src/ and dbt/ side by side, in a checkout and in the container.
 DBT_DIR = Path(__file__).resolve().parents[3] / "dbt"
@@ -77,6 +86,42 @@ def dbt_environment() -> dict[str, str]:
     }
 
 
+def _keep_run_artifacts(
+    context: dg.AssetExecutionContext, invocation: DbtCliInvocation, *, raise_errors: bool
+) -> None:
+    """Keep the run's artifacts and signals, and tag the Dagster run with what was found.
+
+    If the run itself failed, a problem keeping the artifacts is logged instead of raised, so
+    it cannot hide the failure that matters.
+    """
+    try:
+        error = invocation.get_error()
+        summary = record_dbt_run(
+            open_store(get_settings()),
+            context.run_id,
+            invocation.target_path,
+            recorded_at=datetime.now(UTC),
+            error=str(error) if error else None,
+        )
+    except LineageHealError as exc:
+        if raise_errors:
+            raise
+        context.log.error(f"Could not keep the dbt run's artifacts: {exc}")
+        return
+    context.log.info(
+        f"Kept the dbt artifacts in {run_prefix(context.run_id)}: "
+        f"{len(summary.signals)} failure signal(s), {len(summary.skipped_models)} model(s) skipped"
+    )
+    # Tags let the UI, and later the healing workflow (LH-057), find the runs that need attention.
+    context.instance.add_run_tags(
+        context.run_id,
+        {
+            "lineageheal/signals": str(len(summary.signals)),
+            "lineageheal/has_failures": str(summary.has_failures).lower(),
+        },
+    )
+
+
 def _newest_project_file_time() -> float:
     """The latest modification time of any model, test, macro or configuration file."""
     return max(
@@ -127,4 +172,10 @@ def lineageheal_dbt_assets(context: dg.AssetExecutionContext, dbt: DbtCliResourc
     # paths are set for that moment only and the process's own environment is left as it was.
     with mock.patch.dict(os.environ, dbt_environment()):
         invocation = dbt.cli(["build"], context=context)
-    yield from invocation.stream()
+    finished = False
+    try:
+        yield from invocation.stream()
+        finished = True
+    finally:
+        # Also when the run failed: a failed run is exactly the one whose artifacts matter.
+        _keep_run_artifacts(context, invocation, raise_errors=finished)

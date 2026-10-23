@@ -16,9 +16,11 @@ from lineageheal import cli
 from lineageheal.benchmark.faults import blank_nav, negative_nav
 from lineageheal.cli import app, today_ist
 from lineageheal.core.errors import ConfigurationError
+from lineageheal.core.signals import RunSummary, Severity, Signal, SignalKind
 from lineageheal.ingestion.amfi import AMFI_REPORT_URL
 from lineageheal.ingestion.object_stores import LocalObjectStore
 from lineageheal.ingestion.raw_zone import RawZone
+from lineageheal.orchestration.run_artifacts import SUMMARY_FILE, run_prefix
 from lineageheal.store.database import create_db_engine
 from lineageheal.store.ingestion_log import IngestionAttempt, IngestionLogRepository
 from lineageheal.store.migrate import upgrade_database
@@ -628,3 +630,77 @@ def test_without_a_database_ingestion_works_and_keeps_no_log() -> None:
 
     assert result.exit_code == 0
     assert "ingestion log" not in result.output
+
+
+# --- failure signals ----------------------------------------------------------------------
+
+RUN_ID = "5b1f2c3e-1111-4222-8333-444455556666"
+
+
+def store_summary(
+    tmp_path: Path, *, signals: tuple[Signal, ...], skipped: tuple[str, ...] = ()
+) -> None:
+    summary = RunSummary(
+        run_id=RUN_ID,
+        generated_at=datetime(2026, 10, 22, 9, 40, tzinfo=UTC),
+        counts={"success": 9, "pass": 153, "fail": len(signals), "skipped": len(skipped)},
+        skipped_models=skipped,
+        signals=signals,
+    )
+    LocalObjectStore(tmp_path / "raw").put(
+        f"{run_prefix(RUN_ID)}/{SUMMARY_FILE}",
+        summary.model_dump_json().encode("utf-8"),
+        metadata={},
+    )
+
+
+def test_signals_lists_what_a_run_recorded(tmp_path: Path) -> None:
+    signal = Signal(
+        kind=SignalKind.TEST_FAILED,
+        severity=Severity.ERROR,
+        run_id=RUN_ID,
+        detected_at=datetime(2026, 10, 22, 9, 40, tzinfo=UTC),
+        name="not_null_brz_amfi__navall_nav_inr",
+        check_type="not_null",
+        models=("brz_amfi__navall",),
+        model="brz_amfi__navall",
+        column="nav_inr",
+        failures=1,
+        message="Got 1 result, configured to fail if != 0\nmore detail",
+    )
+    store_summary(tmp_path, signals=(signal,), skipped=("slv_amfi__nav",))
+
+    result = runner.invoke(app, ["signals", RUN_ID])
+
+    assert result.exit_code == 0
+    assert f"run {RUN_ID}: 1 fail, 153 pass, 1 skipped, 9 success" in result.output
+    assert "skipped because of an upstream failure: slv_amfi__nav" in result.output
+    assert (
+        "error test_failed not_null brz_amfi__navall.nav_inr (1 rows): "
+        "Got 1 result, configured to fail if != 0"
+    ) in result.output
+    assert "more detail" not in result.output
+
+
+def test_signals_says_so_when_a_run_raised_none(tmp_path: Path) -> None:
+    store_summary(tmp_path, signals=())
+
+    result = runner.invoke(app, ["signals", RUN_ID])
+
+    assert result.exit_code == 0
+    assert "no failure signals" in result.output
+
+
+def test_signals_for_a_run_that_was_never_recorded_is_a_one_line_error() -> None:
+    result = runner.invoke(app, ["signals", RUN_ID])
+
+    assert result.exit_code == 1
+    assert result.output.startswith("error:")
+    assert "Traceback" not in result.output
+
+
+def test_signals_refuses_a_run_id_that_is_not_a_plain_identifier() -> None:
+    result = runner.invoke(app, ["signals", "../etc"])
+
+    assert result.exit_code == 1
+    assert "usable run id" in result.output

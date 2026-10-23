@@ -284,7 +284,20 @@ Seeds hold per-source calendars (`seed_calendar_nse`, `seed_calendar_amfi`, `see
   - **The manifest** is parsed when it is missing or older than any project file, so a fresh checkout, the container and CI need no setup step and an edit to a model shows up on the next load. Parsing reads files only and takes about 12 seconds.
   - **Paths cross a process boundary.** dagster-dbt starts dbt inside `dbt/`, but the settings and the profile write their defaults (`.data/raw`, `.data/dev.duckdb`) relative to the repository root, where the loaders run. The asset therefore gives dbt absolute `RAW_ZONE_DIR` (resolved from the settings, as the loaders resolve it) and `DBT_DATA_DIR`, for that one subprocess only. A first real run exposed this: without it dbt looked for its database under `dbt/.data`, and with a relative `RAW_ZONE_DIR` it would have read an empty folder while the loaders wrote to the right one.
   - **One writer.** The dbt asset shares a `warehouse` pool, limited to one step like the ingestion pool, because DuckDB allows one writer.
-  - **Verified live** on 8 real days: 12 models materialised and 187 of 187 checks passed, with a relative `RAW_ZONE_DIR`.- **Run storage** uses `dagster-postgres` on Neon, so the local Dagster UI can browse runs executed in Actions.
+  - **Verified live** on 8 real days: 12 models materialised and 187 of 187 checks passed, with a relative `RAW_ZONE_DIR`.
+- **Run artifacts and failure signals** (FR-WH-07, `orchestration/run_artifacts.py`). After every dbt run, also a failed one, the asset keeps what dbt wrote, in the same object store as the raw zone (a folder locally, the bucket on R2):
+
+  ```
+  runs/<run_id>/manifest.json       the project as dbt saw it (models, tests, columns, dependencies)
+  runs/<run_id>/run_results.json    what happened to every node
+  runs/<run_id>/signals.json        the summary below; written last, so its presence means the folder is complete
+  ```
+
+  - **Signals** (`core/signals.py`, parsed by `lineage/dbt_artifacts.py`). Joining the two dbt files turns "test.lineageheal.not_null_brz_amfi__navall_nav_inr failed with 1 row" into a record naming the model, the column and the kind of check. The kinds are `test_failed`, `test_warning`, `test_error`, `model_error` and `run_error`. The summary also counts nodes by status and lists the models skipped because something upstream failed, which is the downstream impact the Detector needs (FR-DET-03). Passing nodes and skipped tests are counted, not listed.
+  - **A run that never started.** If dbt cannot connect or parse, it writes no `run_results.json`. The run still gets a summary, with one `run_error` signal carrying dbt's message, so the Detector hears about it. Tested with a database path dbt cannot open.
+  - **Tags.** The Dagster run is tagged `lineageheal/signals` (a count) and `lineageheal/has_failures`, so the UI, and later the healing workflow (LH-057), can find the runs that need attention.
+  - **Reading them.** `lineageheal signals <run_id>` prints a run's summary from the store. The parser is a pure function of the two files, with no clock and no warehouse, so the Detector can call it directly. The application database will import these summaries as its run and signal rows (LH-036); until then the files are the record.
+  - **Verified live.** A damaged AMFI report on real data failed the run; `lineageheal signals` then showed `brz_amfi__navall.nav_inr`, `not_null`, 1 row, with `gld_market_daily_summary`, `gld_mf_nav_daily` and `slv_amfi__nav` skipped, and the three files were in `runs/<run_id>/`.- **Run storage** uses `dagster-postgres` on Neon, so the local Dagster UI can browse runs executed in Actions.
 - **Scheduling:** `pipeline.yml` runs on a cron (default early morning IST) for the previous trade date, after all three feeds have published. It materialises the day's partition, uploads dbt artifacts, and records signals.
 - **Hand-off to healing:** if the run records any failure signal, a dependent `heal` job in the same workflow starts with the run's artifacts. `heal.yml` can also be triggered manually or dispatched by the API (resume after review).
 

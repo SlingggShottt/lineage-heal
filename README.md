@@ -164,6 +164,7 @@ make up                   # Postgres with pgvector (more services as they are bu
 | `uv run lineageheal dev inject-fault amfi --fault blank-nav --date 2026-10-16` | Store a damaged copy of an ingested report in the local raw zone, to rehearse a failure (refuses to run against R2) |
 | `uv run lineageheal db upgrade` | Create or update the Postgres tables (needs `DATABASE_URL` and `make up`) |
 | `uv run lineageheal log` | Show recent ingestion attempts, newest first (`--outcome failed`, `--limit 5`) |
+| `uv run lineageheal signals RUN_ID` | Show the failure signals a pipeline run recorded: the failed checks with their model and column, and the models skipped because of them. The run id is in the Dagster UI |
 | `make test-integration` | Run the tests that need the local Postgres |
 | `make up` and `make down` | Start and stop the local Postgres (port 5433, localhost only) |
 | `docker compose run --rm app ingest amfi --date 2026-10-15` | Run any `lineageheal` command in a container (the first run builds the image) |
