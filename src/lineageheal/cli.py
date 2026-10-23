@@ -21,8 +21,9 @@ from lineageheal.ingestion import runner
 from lineageheal.ingestion.amfi import AmfiNavLoader, report_filename
 from lineageheal.ingestion.log import AttemptRecorder, attempt_from_injection, open_recorder
 from lineageheal.ingestion.object_stores import LocalObjectStore
-from lineageheal.ingestion.raw_zone import RawZone
+from lineageheal.ingestion.raw_zone import RawZone, open_store
 from lineageheal.ingestion.types import IngestionOutcome, IngestionResult, Loader
+from lineageheal.orchestration.run_artifacts import load_run_summary
 from lineageheal.store.database import create_db_engine
 from lineageheal.store.ingestion_log import IngestionAttempt, IngestionLogRepository
 from lineageheal.store.migrate import current_revision, head_revision, upgrade_database
@@ -331,3 +332,26 @@ def show_log(
         typer.echo("no ingestion attempts recorded")
     for attempt in attempts:
         typer.echo(_describe_attempt(attempt))
+
+
+@app.command("signals")
+def show_signals(
+    run_id: Annotated[str, typer.Argument(help="The pipeline run, as shown in the Dagster UI.")],
+) -> None:
+    """Show the failure signals a pipeline run recorded (reads the raw zone's runs/ folder)."""
+    with _exit_on_project_errors():
+        summary = load_run_summary(open_store(get_settings()), run_id)
+    counts = ", ".join(f"{count} {status}" for status, count in sorted(summary.counts.items()))
+    typer.echo(f"run {summary.run_id}: {counts or 'dbt wrote no results'}")
+    if summary.skipped_models:
+        typer.echo(f"skipped because of an upstream failure: {', '.join(summary.skipped_models)}")
+    if not summary.signals:
+        typer.echo("no failure signals")
+    for signal in summary.signals:
+        where = ".".join(part for part in (signal.model, signal.column) if part)
+        found = f" ({signal.failures} rows)" if signal.failures else ""
+        message = signal.message.splitlines()[0] if signal.message else ""
+        typer.echo(
+            f"{signal.severity.value:5s} {signal.kind.value} {signal.check_type} "
+            f"{where or signal.name}{found}: {message}"
+        )

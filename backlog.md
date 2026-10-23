@@ -70,7 +70,7 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 | LH-031 | dagster-dbt integration | FR-ORC-01 | Done | 3 |
 | LH-032 | Dagster run storage on Postgres; Compose services for webserver and daemon. Deferred while everything runs locally (D-23): `dagster-postgres` needs a second Postgres driver and the Neon database | FR-ORC-03 | Todo | |
 | LH-033 | `pipeline.yml`: scheduled and manual runs on MotherDuck. Edits CI, so needs approval; deferred with the cloud accounts (D-23) | FR-ORC-02, FR-ORC-05 | Todo | |
-| LH-034 | Persist dbt artifacts and record failure signals per run | FR-WH-07, FR-ORC-04 | Todo | |
+| LH-034 | Persist dbt artifacts and record failure signals per run. Done as files under `runs/<run_id>/` (D-33); the starting of the healing workflow from a failed run is LH-057 | FR-WH-07, FR-ORC-04 | Done | 3 |
 | LH-035 | Historical backfill from January 2024 to R2 and MotherDuck | FR-ING-08 | Todo | |
 | LH-082 | DuckDB R2 secret and httpfs for the prod target: read the raw zone from R2 instead of a local path | FR-WH-01 | Todo | |
 | LH-085 | Speed up the dbt scenario tests: parse the project once and reuse it, and run them outside the coverage run | NFR-MAINT-02 | Done | 3 |
@@ -81,7 +81,7 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 
 | ID | Task | Refs | Status | Week done |
 |---|---|---|---|---|
-| LH-036 | Application schema and migrations: runs, signals, incidents, agent runs, evidence, fixes, reviews, knowledge, lineage | §3.4 | Todo | |
+| LH-036 | Application schema and migrations: runs, signals, incidents, agent runs, evidence, fixes, reviews, knowledge, lineage. The run and signal rows import the `signals.json` summaries LH-034 already writes | §3.4 | Todo | |
 | LH-037 | OpenLineage events from loaders with schema facets | FR-ING-09, FR-LIN-01 | Todo | |
 | LH-038 | OpenLineage capture from dbt runs | FR-LIN-01 | Todo | |
 | LH-039 | Column-level lineage builder: manifest + sqlglot, raw-to-bronze edges, table-level fallback, versioning | FR-LIN-02, FR-LIN-04, FR-LIN-05 | Todo | |
@@ -175,3 +175,4 @@ A running record of completed work, used for the weekly diary.
 | 3 | LH-029 | Whole-project build in CI: one scenario stores all four feeds' fixtures and runs `dbt build --target ci` with the repository's own profile over every model and check, so a broken reference, a cross-layer failure or a mistake in the `ci` target is caught; part of `make test`, so the CI workflow needed no change |
 | 3 | LH-030 | Dagster raw assets: one daily-partitioned asset per dataset keyed by the dbt source it feeds, built on loader and ingestion-log code now shared with the CLI (`ingestion.runner`); a holiday is a success marked `no_data`, the file hash is the data version, and all four share a one-at-a-time pool; verified live (stored, unchanged, no_data) and in the UI |
 | 3 | LH-031 | dagster-dbt integration: the 12 dbt models are Dagster assets joined to the four raw assets, grouped by layer, with all 187 dbt tests as asset checks, built by one `dbt build` per run; the manifest is parsed on demand; a first real run found that dbt, started inside `dbt/`, looked for its raw files and database in the wrong place, fixed by passing absolute paths and a `DBT_DATA_DIR` profile variable; verified on 8 real days |
+| 3 | LH-034 | Run artifacts and failure signals: after every dbt run, also a failed one, `manifest.json`, `run_results.json` and a `signals.json` summary are kept under `runs/<run_id>/`; failed tests, warnings, model errors and a run that never started become signals naming the model and column, with the skipped downstream models listed; the Dagster run is tagged and `lineageheal signals` prints them; verified with a damaged real report |

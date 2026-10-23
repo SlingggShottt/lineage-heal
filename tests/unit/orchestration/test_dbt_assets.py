@@ -10,8 +10,10 @@ from pathlib import Path
 import dagster as dg
 import pytest
 
-from lineageheal.core.errors import ConfigurationError
+from lineageheal.core.errors import ConfigurationError, StorageError
 from lineageheal.core.settings import get_settings
+from lineageheal.core.signals import SignalKind
+from lineageheal.ingestion.object_stores import LocalObjectStore
 from lineageheal.orchestration import dbt_assets
 from lineageheal.orchestration.assets import raw_asset_key, raw_assets
 from lineageheal.orchestration.dbt_assets import (
@@ -21,6 +23,7 @@ from lineageheal.orchestration.dbt_assets import (
     lineageheal_dbt_assets,
 )
 from lineageheal.orchestration.definitions import defs
+from lineageheal.orchestration.run_artifacts import load_run_summary
 
 MANIFEST = json.loads(dbt_project.manifest_path.read_text())
 MODELS = {n["name"]: n for n in MANIFEST["nodes"].values() if n["resource_type"] == "model"}
@@ -222,3 +225,137 @@ def test_the_database_folder_is_absolute_and_created_because_duckdb_will_not(
 
 def test_the_database_folder_sits_at_the_repository_root_beside_dbt() -> None:
     assert dbt_assets.DBT_DIR.parent / ".data" == dbt_assets.DATA_DIR
+
+
+# --- parsing on demand ---------------------------------------------------------------------
+
+
+class FakePreparer:
+    def __init__(self) -> None:
+        self.prepared = 0
+
+    def prepare(self, project: object) -> None:
+        self.prepared += 1
+
+
+class FakeProject:
+    def __init__(self, manifest_path: Path) -> None:
+        self.manifest_path = manifest_path
+        self.preparer = FakePreparer()
+
+
+@pytest.mark.parametrize(("manifest_age", "expected_parses"), [(None, 1), (+100, 0), (-100, 1)])
+def test_the_project_is_parsed_only_when_the_manifest_is_missing_or_older_than_an_edit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    manifest_age: float | None,
+    expected_parses: int,
+) -> None:
+    manifest = make_project(tmp_path)
+    if manifest_age is not None:
+        manifest.write_text("{}")
+        age(manifest, manifest_age)
+    fake = FakeProject(manifest)
+    monkeypatch.setattr(dbt_assets, "DBT_DIR", tmp_path)
+    monkeypatch.setattr(dbt_assets, "DbtProject", lambda **kwargs: fake)
+
+    assert dbt_assets._prepared_project() is fake
+    assert fake.preparer.prepared == expected_parses
+
+
+# --- keeping a run's artifacts -------------------------------------------------------------
+
+
+class FakeLog:
+    def __init__(self) -> None:
+        self.messages: list[tuple[str, str]] = []
+
+    def info(self, message: str) -> None:
+        self.messages.append(("info", message))
+
+    def error(self, message: str) -> None:
+        self.messages.append(("error", message))
+
+
+class FakeInstance:
+    def __init__(self) -> None:
+        self.tags: dict[str, dict[str, str]] = {}
+
+    def add_run_tags(self, run_id: str, tags: dict[str, str]) -> None:
+        self.tags[run_id] = tags
+
+
+class FakeContext:
+    run_id = "5b1f2c3e-1111-4222-8333-444455556666"
+
+    def __init__(self) -> None:
+        self.log = FakeLog()
+        self.instance = FakeInstance()
+
+
+class FakeInvocation:
+    def __init__(self, target_path: Path, error: Exception | None = None) -> None:
+        self.target_path = target_path
+        self._error = error
+
+    def get_error(self) -> Exception | None:
+        return self._error
+
+
+@pytest.fixture
+def zone(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> LocalObjectStore:
+    store = LocalObjectStore(tmp_path / "zone")
+    monkeypatch.setattr(dbt_assets, "open_store", lambda settings: store)
+    return store
+
+
+def keep(context: FakeContext, invocation: FakeInvocation, *, raise_errors: bool) -> None:
+    dbt_assets._keep_run_artifacts(context, invocation, raise_errors=raise_errors)  # type: ignore[arg-type]
+
+
+def test_a_run_with_no_results_is_recorded_with_dbts_own_error_and_tagged(
+    tmp_path: Path, zone: LocalObjectStore
+) -> None:
+    context = FakeContext()
+    invocation = FakeInvocation(
+        tmp_path / "nothing", error=RuntimeError("Cannot open the database")
+    )
+
+    keep(context, invocation, raise_errors=False)
+
+    summary = load_run_summary(zone, context.run_id)
+    assert [s.kind for s in summary.signals] == [SignalKind.RUN_ERROR]
+    assert "Cannot open the database" in summary.signals[0].message
+    assert context.instance.tags[context.run_id] == {
+        "lineageheal/signals": "1",
+        "lineageheal/has_failures": "true",
+    }
+    assert [level for level, _ in context.log.messages] == ["info"]
+
+
+def test_a_problem_keeping_artifacts_does_not_hide_a_failed_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, zone: LocalObjectStore
+) -> None:
+    def refuse(*args: object, **kwargs: object) -> None:
+        raise StorageError("the bucket is unreachable")
+
+    monkeypatch.setattr(dbt_assets, "record_dbt_run", refuse)
+    context = FakeContext()
+
+    keep(context, FakeInvocation(tmp_path), raise_errors=False)  # the run already failed
+
+    assert [level for level, _ in context.log.messages] == ["error"]
+    assert "the bucket is unreachable" in context.log.messages[0][1]
+    assert context.instance.tags == {}
+
+
+def test_a_problem_keeping_artifacts_after_a_successful_run_is_an_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, zone: LocalObjectStore
+) -> None:
+    def refuse(*args: object, **kwargs: object) -> None:
+        raise StorageError("the bucket is unreachable")
+
+    monkeypatch.setattr(dbt_assets, "record_dbt_run", refuse)
+
+    with pytest.raises(StorageError, match="unreachable"):
+        keep(FakeContext(), FakeInvocation(tmp_path), raise_errors=True)

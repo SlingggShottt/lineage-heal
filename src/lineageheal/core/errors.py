@@ -26,6 +26,10 @@ class StorageError(LineageHealError):
     """The raw-zone object store rejected or failed an operation."""
 
 
+class ArtifactError(LineageHealError):
+    """A dbt artifact file was missing, unreadable or not what dbt writes."""
+
+
 class LineageError(LineageHealError):
     """The lineage graph could not be built or queried."""
 
