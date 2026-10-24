@@ -8,7 +8,13 @@ import pytest
 from lineageheal.core.errors import ConfigurationError, StorageError
 from lineageheal.core.settings import Settings
 from lineageheal.ingestion.object_stores import LocalObjectStore
-from lineageheal.ingestion.raw_zone import RawZone, StoredObject, build_key, open_raw_zone
+from lineageheal.ingestion.raw_zone import (
+    RawZone,
+    StoredObject,
+    build_key,
+    open_raw_zone,
+    trade_date_folder,
+)
 
 TRADE_DATE = date(2026, 10, 15)
 FIXTURES = Path(__file__).parents[2] / "fixtures"
@@ -35,6 +41,12 @@ class MemoryObjectStore:
             return self.objects[key]
         except KeyError as exc:
             raise StorageError(f"missing {key}") from exc
+
+    def list_folder(self, folder: str) -> list[str]:
+        prefix = folder.rstrip("/") + "/"
+        return [
+            key for key in self.objects if key.startswith(prefix) and "/" not in key[len(prefix) :]
+        ]
 
 
 @pytest.fixture
@@ -184,3 +196,45 @@ def test_open_raw_zone_for_r2_names_missing_credentials(tmp_path: Path) -> None:
 
     with pytest.raises(ConfigurationError, match="R2_BUCKET"):
         open_raw_zone(settings)
+
+
+# --- listing what is stored for a trade date -------------------------------------------------
+
+
+def test_stored_keys_lists_every_version_of_one_trade_date(zone: RawZone) -> None:
+    first = put(zone, b"one")
+    second = put(zone, b"two")
+    put(zone, b"other day", date(2026, 10, 16))
+
+    keys = zone.stored_keys(source="amfi", dataset="navall", trade_date=date(2026, 10, 15))
+
+    assert sorted(keys) == sorted([first.key, second.key])
+
+
+def test_stored_keys_is_empty_for_a_date_with_nothing_stored(zone: RawZone) -> None:
+    put(zone, b"one")
+
+    assert zone.stored_keys(source="amfi", dataset="navall", trade_date=date(2026, 10, 14)) == []
+    assert (
+        zone.stored_keys(source="nse", dataset="cm_bhavcopy", trade_date=date(2026, 10, 15)) == []
+    )
+
+
+def test_stored_keys_does_not_mistake_a_longer_date_for_the_same_folder(zone: RawZone) -> None:
+    put(zone, b"one", date(2026, 10, 15))
+
+    # trade_date=2026-10-1 would be a prefix of 2026-10-15 if the folder were matched loosely
+    assert zone.stored_keys(source="amfi", dataset="navall", trade_date=date(2026, 10, 1)) == []
+
+
+def test_stored_keys_refuses_a_name_that_is_not_allowed(zone: RawZone) -> None:
+    with pytest.raises(StorageError, match="Invalid source"):
+        zone.stored_keys(source="../x", dataset="navall", trade_date=date(2026, 10, 15))
+
+
+def test_the_folder_of_a_trade_date_is_the_parent_of_its_keys() -> None:
+    folder = trade_date_folder("nse", "cm_bhavcopy", date(2024, 7, 5))
+    key = build_key("nse", "cm_bhavcopy", date(2024, 7, 5), "f.zip", "ab" * 32)
+
+    assert folder == "raw/source=nse/dataset=cm_bhavcopy/trade_date=2024-07-05"
+    assert key.rsplit("/", 1)[0] == folder

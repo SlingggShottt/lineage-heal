@@ -116,7 +116,7 @@ docker compose run --rm app ingest amfi --date 2026-10-15   # any lineageheal co
 uv run lineageheal ingest amfi --date 2026-10-15
 uv run lineageheal ingest nse --date 2026-10-15
 uv run lineageheal ingest nse --dataset security_master --date 2026-10-15   # or corporate_actions
-uv run lineageheal backfill amfi --start 2026-10-01 --end 2026-10-15
+uv run lineageheal backfill amfi --start 2026-10-01 --end 2026-10-15   # resumes; --refresh re-downloads, --skip-weekends for NSE
 uv run lineageheal db upgrade                    # needs DATABASE_URL and `make up`
 uv run lineageheal log --limit 10                # recent ingestion attempts
 uv run lineageheal signals RUN_ID                # failure signals recorded for a pipeline run

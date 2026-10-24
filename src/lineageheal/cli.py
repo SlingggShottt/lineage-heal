@@ -168,11 +168,30 @@ def backfill(
         ),
     ] = None,
     dataset: DatasetOption = None,
+    refresh: Annotated[
+        bool,
+        typer.Option(
+            "--refresh",
+            help="Download days that are already stored too, to pick up a republished file.",
+        ),
+    ] = False,
+    skip_weekends: Annotated[
+        bool,
+        typer.Option(
+            "--skip-weekends",
+            help=(
+                "Do not ask for Saturdays and Sundays. Saves requests for NSE, which publishes "
+                "nothing then, but would miss a special weekend session and AMFI's weekend reports."
+            ),
+        ),
+    ] = False,
 ) -> None:
-    """Ingest every day in a range. Safe to re-run: stored days are skipped.
+    """Ingest every day in a range. Safe to re-run: days already stored are not asked for again.
 
-    A day that fails is reported and skipped so the rest still load; the exit code is 1
-    if any day failed.
+    A re-run therefore carries on where an interrupted one stopped and sends the source no
+    request for a day it already has; pass --refresh to download them again anyway (AMFI
+    republishes corrected reports). A day that fails is reported and skipped so the rest
+    still load; the exit code is 1 if any day failed.
     """
     chosen = _resolve_dataset(source, dataset)
     first = start.date()
@@ -184,13 +203,23 @@ def backfill(
 
     outcomes: Counter[IngestionOutcome] = Counter()
     failed: list[date] = []
+    already_stored = weekend_days = 0
     with (
         _exit_on_project_errors(),
         _open_recorder() as recorder,
         _open_loader(source, chosen) as loader,
     ):
+        zone = RawZone(open_store(get_settings()))
         for offset in range((last - first).days + 1):
             day = first + timedelta(days=offset)
+            if skip_weekends and day.weekday() >= 5:
+                weekend_days += 1
+                continue
+            if not refresh and zone.stored_keys(
+                source=source.value, dataset=chosen, trade_date=day
+            ):
+                already_stored += 1
+                continue
             try:
                 result = _load_and_record(loader, recorder, day)
             except LineageHealError as exc:
@@ -200,8 +229,13 @@ def backfill(
             outcomes[result.outcome] += 1
             typer.echo(_describe(result))
 
-    summary = ", ".join(f"{outcomes[o]} {o.value}" for o in IngestionOutcome)
-    typer.echo(f"backfill {source.value}/{chosen} {first}..{last}: {summary}, {len(failed)} failed")
+    parts = [f"{outcomes[o]} {o.value}" for o in IngestionOutcome]
+    if already_stored:
+        parts.append(f"{already_stored} already stored")
+    if weekend_days:
+        parts.append(f"{weekend_days} weekend days skipped")
+    parts.append(f"{len(failed)} failed")
+    typer.echo(f"backfill {source.value}/{chosen} {first}..{last}: {', '.join(parts)}")
     if failed:
         raise typer.Exit(code=1)
 

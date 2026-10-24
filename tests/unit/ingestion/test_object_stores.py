@@ -33,6 +33,7 @@ class FakeS3Client:
 
     def __init__(self, fail_with: Exception | None = None) -> None:
         self.objects: dict[str, bytes] = {}
+        self.stored_at: dict[str, int] = {}
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.fail_with = fail_with
 
@@ -49,7 +50,27 @@ class FakeS3Client:
         if self.fail_with:
             raise self.fail_with
         self.objects[kwargs["Key"]] = kwargs["Body"]
+        self.stored_at[kwargs["Key"]] = len(self.stored_at)  # a later write gets a later time
         return {}
+
+    def list_objects_v2(self, **kwargs: Any) -> dict[str, Any]:
+        """List under a prefix like S3: direct children only (the delimiter), two to a page."""
+        self.calls.append(("list_objects_v2", kwargs))
+        if self.fail_with:
+            raise self.fail_with
+        prefix = kwargs["Prefix"]
+        direct = [
+            key for key in self.objects if key.startswith(prefix) and "/" not in key[len(prefix) :]
+        ]
+        start = int(kwargs.get("ContinuationToken", 0))
+        page = direct[start : start + 2]
+        response: dict[str, Any] = {
+            "Contents": [{"Key": key, "LastModified": self.stored_at[key]} for key in page],
+            "IsTruncated": start + 2 < len(direct),
+        }
+        if response["IsTruncated"]:
+            response["NextContinuationToken"] = str(start + 2)
+        return response
 
     def get_object(self, **kwargs: Any) -> dict[str, Any]:
         self.calls.append(("get_object", kwargs))
@@ -208,3 +229,34 @@ def test_r2_client_is_built_for_the_account_endpoint_with_timeouts(
     assert captured["aws_secret_access_key"] == "shh"
     assert captured["config"].connect_timeout == 10
     assert captured["config"].read_timeout == 60
+
+
+# --- R2ObjectStore: listing a folder ----------------------------------------------------------
+
+
+def test_r2_lists_the_objects_directly_under_a_folder_across_pages() -> None:
+    client = FakeS3Client()
+    store = R2ObjectStore(client, "bucket")
+    folder = "raw/source=amfi/dataset=navall/trade_date=2026-10-15"
+    for name in ("c.txt", "a.txt", "b.txt"):
+        store.put(f"{folder}/{name}", b"x", metadata={})
+    store.put(f"{folder}/nested/deeper.txt", b"x", metadata={})  # not directly under the folder
+    store.put("raw/source=amfi/dataset=navall/trade_date=2026-10-16/d.txt", b"x", metadata={})
+
+    keys = store.list_folder(folder)
+
+    # oldest first, as the local store orders them, and more than one page was needed
+    assert keys == [f"{folder}/c.txt", f"{folder}/a.txt", f"{folder}/b.txt"]
+    assert [name for name, _ in client.calls].count("list_objects_v2") == 2
+    assert client.calls[-1][1]["Prefix"] == f"{folder}/"
+
+
+def test_r2_lists_nothing_for_a_folder_that_has_nothing() -> None:
+    assert R2ObjectStore(FakeS3Client(), "bucket").list_folder("raw/none") == []
+
+
+def test_r2_turns_a_listing_failure_into_a_storage_error() -> None:
+    store = R2ObjectStore(FakeS3Client(fail_with=client_error("500")), "bucket")
+
+    with pytest.raises(StorageError, match="list"):
+        store.list_folder("raw/x")
