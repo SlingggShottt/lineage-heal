@@ -36,7 +36,7 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 | LH-005 | Write project documentation: CLAUDE, README, context, PRD, SRS, design, style guide, tech stack, backlog | — | Done | 2 |
 | LH-006 | Create service accounts: Cloudflare R2, MotherDuck, Neon, Google AI Studio, Groq, LangSmith. Deferred while everything runs locally (D-23); R2 needs a payment method on file | NFR-COST-01 | Todo | |
 | LH-007 | Scaffold Python project: pyproject, uv, src layout, ruff, mypy, pytest, pre-commit (incl. gitleaks, commit lint), Makefile, .editorconfig, .gitignore, .env.example, LICENSE | NFR-MAINT-02, NFR-SEC-01 | Done | 2 |
-| LH-008 | Configure GitHub repo: branch protection, PR and issue templates, Dependabot | NFR-SEC-05 | Todo | |
+| LH-008 | Configure GitHub repo: branch protection, PR and issue templates, Dependabot. The templates and Dependabot are files (done); branch protection and merge rules are settings the team applies from `docs/repository_settings.md` | NFR-SEC-05 | In progress | |
 | LH-009 | CI workflow for Python: format, lint, types, tests | NFR-MAINT-02 | Done | 2 |
 | LH-010 | Docker Compose with Postgres + pgvector; Dockerfile for the Python app | NFR-PORT-01 | Done | 2 |
 | LH-011 | Core module: settings, structured logging, error hierarchy | FR-OBS-02 | Done | 2 |
@@ -52,7 +52,7 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 | LH-021 | `lineageheal` CLI: `ingest` and `backfill` commands | FR-ING-08, FR-ORC-05 | Done | 2 |
 | LH-084 | Mid-project demo script: timed run-through, talking points, built-versus-planned, likely questions | — | Done | 2 |
 | LH-080 | Data spike: FBIL reference rates access. The site is a JavaScript app behind reCAPTCHA; find a documented download or API route, or agree a replacement feed. Blocks LH-020 | IF-SW-01, FR-ING-04 | Todo | |
-| LH-081 | Secret scanning in CI: add a gitleaks job over the pull request diff (the pre-commit hook only scans staged changes, so it cannot run in CI). Needs approval for the action | NFR-SEC-01 | Todo | |
+| LH-081 | Secret scanning in CI: add a gitleaks job over the pull request diff (the pre-commit hook only scans staged changes, so it cannot run in CI). GitHub secret scanning with push protection is already on for the repository, which covers pushes. Needs approval for the action | NFR-SEC-01 | Todo | |
 
 ## Week 3 — Lakehouse and orchestration
 

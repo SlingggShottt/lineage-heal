@@ -21,6 +21,8 @@ GitHub Flow: `main` is always deployable, and all work happens on short-lived br
 | Feature, fix, docs, etc. | `<type>/<backlog-id>-<slug>` | `feat/LH-017-nse-bhavcopy-loader` |
 | Agent-generated fix | `heal/<incident-id>` | `heal/INC-0042` |
 
+Pull requests use `.github/PULL_REQUEST_TEMPLATE.md` (what, why, how, testing, checklist), and are merged by squash, so the pull request title, written as a Conventional Commit, becomes the commit on `main`. `main` accepts changes only through a pull request whose CI has passed; the settings that enforce this are in `docs/repository_settings.md`.
+
 ### 2.2 Commit messages
 
 [Conventional Commits](https://www.conventionalcommits.org/), enforced by a pre-commit hook.

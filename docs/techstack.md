@@ -185,7 +185,7 @@ A cross-encoder reranker (also via fastembed) will be evaluated during the build
 
 Third-party actions are kept to a minimum and pinned to commit SHAs: `actions/checkout` and `astral-sh/setup-uv` (both MIT). The CI job installs the same uv version that created `uv.lock` and fails if the lockfile is out of date.
 
-Deployments: Render auto-deploys the API from `main`; Cloudflare Pages builds the dashboard from `main`. Dependabot keeps dependencies current.
+Deployments: Render auto-deploys the API from `main`; Cloudflare Pages builds the dashboard from `main`. Dependabot keeps dependencies current (`.github/dependabot.yml`: weekly, grouped, with the Python base image and uv left to be bumped by hand). Branch protection and merge rules are described in `docs/repository_settings.md`.
 
 ### Licences of the database packages
 
