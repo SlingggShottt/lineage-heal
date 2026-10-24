@@ -18,6 +18,7 @@ LineageHeal is a self-healing data pipeline for Indian financial market data. Py
 | Naming, code and documentation conventions | `docs/style_guide.md` |
 | Libraries, versions and free-tier limits | `docs/techstack.md` |
 | Project background, decisions, constraints, status | `docs/context.md` |
+| GitHub settings that live outside the repository (branch protection, merge rules) | `docs/repository_settings.md` |
 | What to work on next | `backlog.md` |
 
 If these documents conflict with each other or with the code, stop and ask. Do not silently pick one.

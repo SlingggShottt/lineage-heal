@@ -1,0 +1,83 @@
+# dependabot.yml
+# Keeps dependencies current (docs/techstack.md). Dependabot opens pull requests, which go
+# through the same CI and review as any other change; it never merges anything.
+#
+# Weekly, on Monday morning in India, and a few pull requests at a time, so a week's updates
+# arrive together instead of one at a time. Titles start with a Conventional Commit type, which
+# is what the squash-merge message is made from (docs/style_guide.md, section 2.2).
+#
+# The web/ folder is added with the dashboard (LH-062): Dependabot reports an error for a
+# directory that does not exist yet.
+version: 2
+
+updates:
+  # --- Python (pyproject.toml and uv.lock) -----------------------------------------------
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Kolkata"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "build"
+      prefix-development: "build"
+      include: "scope"
+    groups:
+      # dagster-dbt pins dagster to one exact version, so the packages only update together.
+      dagster:
+        patterns: ["dagster*"]
+      # Everything else that is not a major version arrives as one pull request. A major
+      # version is its own pull request, because it may break something.
+      python-minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  # --- GitHub Actions (.github/workflows) ------------------------------------------------
+  # The actions are pinned to commit SHAs with the version in a comment; Dependabot updates both.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Kolkata"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # --- Container images ------------------------------------------------------------------
+  - package-ecosystem: "docker"
+    directory: "/docker"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Kolkata"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "build"
+      include: "scope"
+    ignore:
+      # requires-python is 3.12 only (pyproject.toml), so the base image stays on 3.12.
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      # uv is pinned to the version that wrote uv.lock, in three places that must agree: this
+      # Dockerfile, the CI workflow and the build backend in pyproject.toml. Bump it by hand.
+      - dependency-name: "ghcr.io/astral-sh/uv"
+
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Kolkata"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "build"
+      include: "scope"
