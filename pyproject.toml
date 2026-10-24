@@ -44,7 +44,7 @@ dev = [
 
 [build-system]
 # uv_build is versioned in lockstep with uv, so the range tracks the installed uv.
-requires = ["uv_build>=0.12.21,<0.13.0"]
+requires = ["uv_build>=0.12.21,<0.14.0"]
 build-backend = "uv_build"
 
 # ---------------------------------------------------------------------------
