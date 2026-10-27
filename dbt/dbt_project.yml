@@ -21,6 +21,12 @@ flags:
 
 # A model may only read from its own layer or a lower one. Each layer gets its own
 # schema (see macros/generate_schema_name.sql) so layers are visible in the warehouse.
+# Seeds are small reference tables kept in the repository. The calendar is raw reference data,
+# so it sits in the bronze layer beside the files it describes.
+seeds:
+  lineageheal:
+    +schema: bronze
+
 models:
   lineageheal:
     bronze:

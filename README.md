@@ -163,6 +163,8 @@ make up                   # Postgres with pgvector (more services as they are bu
 | `make dagster` | Start the Dagster UI and daemon (http://localhost:3000). Pick a raw asset and a date partition to ingest it with the same loaders and ingestion log as `lineageheal ingest` (a date the source published nothing for is a success marked `no_data`), or materialise the dbt models, which run `dbt build` with every test as a check |
 | `uv run lineageheal dev inject-fault amfi --fault blank-nav --date 2026-10-16` | Store a damaged copy of an ingested report in the local raw zone, to rehearse a failure (refuses to run against R2) |
 | `uv run lineageheal db upgrade` | Create or update the Postgres tables (needs `DATABASE_URL` and `make up`) |
+| `uv run lineageheal calendar fetch-nse` | Fetch NSE's official holiday list for the current year into the calendar seed (`dbt/seeds/seed_calendar_nse.csv`); run it each January |
+| `uv run lineageheal calendar observe-nse --start 2024-01-01 --end 2025-12-31` | Record, from the raw zone, the weekdays NSE was closed and the weekends it traded, for years the official list no longer serves. Run a backfill over the range first |
 | `uv run lineageheal log` | Show recent ingestion attempts, newest first (`--outcome failed`, `--limit 5`) |
 | `uv run lineageheal signals RUN_ID` | Show the failure signals a pipeline run recorded: the failed checks with their model and column, and the models skipped because of them. The run id is in the Dagster UI |
 | `make test-integration` | Run the tests that need the local Postgres |

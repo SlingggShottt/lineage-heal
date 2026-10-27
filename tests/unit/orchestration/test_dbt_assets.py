@@ -27,6 +27,7 @@ from lineageheal.orchestration.run_artifacts import load_run_summary
 
 MANIFEST = json.loads(dbt_project.manifest_path.read_text())
 MODELS = {n["name"]: n for n in MANIFEST["nodes"].values() if n["resource_type"] == "model"}
+SEEDS = {n["name"]: n for n in MANIFEST["nodes"].values() if n["resource_type"] == "seed"}
 
 
 @pytest.fixture(scope="module")
@@ -38,12 +39,31 @@ def model_key(name: str) -> dg.AssetKey:
     return dg.AssetKey([MODELS[name]["schema"], name])
 
 
+def seed_key(name: str) -> dg.AssetKey:
+    return dg.AssetKey([SEEDS[name]["schema"], name])
+
+
 # --- the graph ---------------------------------------------------------------------------
 
 
-def test_every_dbt_model_is_an_asset_beside_the_raw_assets(graph: dg.AssetGraph) -> None:  # type: ignore[type-arg]
-    assert set(graph.get_all_asset_keys()) == {model_key(n) for n in MODELS} | set(ALL_RAW_ASSETS)
+def test_every_dbt_model_and_seed_is_an_asset_beside_the_raw_assets(
+    graph: dg.AssetGraph,  # type: ignore[type-arg]
+) -> None:
+    assert set(graph.get_all_asset_keys()) == (
+        {model_key(n) for n in MODELS} | {seed_key(n) for n in SEEDS} | set(ALL_RAW_ASSETS)
+    )
     assert len(MODELS) >= 12
+    assert "seed_calendar_nse" in SEEDS
+
+
+def test_the_calendar_seed_is_a_bronze_asset_that_reads_no_raw_file(
+    graph: dg.AssetGraph,  # type: ignore[type-arg]
+) -> None:
+    """It is reference data kept in the repository, not something a loader downloads."""
+    node = graph.get(seed_key("seed_calendar_nse"))
+
+    assert node.group_name == "bronze"
+    assert set(node.parent_keys) == set()
 
 
 def test_models_are_grouped_by_layer_and_raw_files_have_their_own_group(

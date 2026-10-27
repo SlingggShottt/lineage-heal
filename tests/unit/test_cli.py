@@ -18,6 +18,7 @@ from lineageheal.cli import app, today_ist
 from lineageheal.core.errors import ConfigurationError
 from lineageheal.core.signals import RunSummary, Severity, Signal, SignalKind
 from lineageheal.ingestion.amfi import AMFI_REPORT_URL
+from lineageheal.ingestion.calendar import HOLIDAY_URL, read_seed
 from lineageheal.ingestion.object_stores import LocalObjectStore
 from lineageheal.ingestion.raw_zone import RawZone
 from lineageheal.orchestration.run_artifacts import SUMMARY_FILE, run_prefix
@@ -788,3 +789,166 @@ def test_signals_refuses_a_run_id_that_is_not_a_plain_identifier() -> None:
 
     assert result.exit_code == 1
     assert "usable run id" in result.output
+
+
+# --- the NSE calendar seed -------------------------------------------------------------------
+
+
+def holiday_response(*rows: tuple[str, str]) -> httpx.Response:
+    cm = [{"tradingDate": day, "description": text, "weekDay": "?"} for day, text in rows]
+    return httpx.Response(200, json={"CM": cm})
+
+
+@respx.mock
+def test_fetch_nse_puts_the_official_holidays_into_the_seed(tmp_path: Path) -> None:
+    seed = tmp_path / "seed.csv"
+    respx.get(HOLIDAY_URL).mock(
+        return_value=holiday_response(
+            ("20-Oct-2026", "Dussehra"), ("15-Aug-2026", "Independence Day")
+        )
+    )
+
+    result = runner.invoke(app, ["calendar", "fetch-nse", "--seed", str(seed)])
+
+    assert result.exit_code == 0
+    assert result.output.strip() == "seed.csv: 1 added, 0 updated, 0 conflicts, 1 entries"
+    # 15 August 2026 is a Saturday, so only Dussehra is an exception
+    assert [e.calendar_date for e in read_seed(seed)] == [date(2026, 10, 20)]
+
+
+@respx.mock
+def test_fetching_again_changes_nothing_not_even_the_file(tmp_path: Path) -> None:
+    seed = tmp_path / "seed.csv"
+    respx.get(HOLIDAY_URL).mock(return_value=holiday_response(("20-Oct-2026", "Dussehra")))
+    runner.invoke(app, ["calendar", "fetch-nse", "--seed", str(seed)])
+    before = seed.read_bytes()
+
+    second = runner.invoke(app, ["calendar", "fetch-nse", "--seed", str(seed)])
+
+    assert "0 added, 0 updated" in second.output
+    assert seed.read_bytes() == before
+
+
+@respx.mock
+def test_fetching_keeps_earlier_years_that_the_official_list_no_longer_serves(
+    tmp_path: Path,
+) -> None:
+    seed = tmp_path / "seed.csv"
+    seed.write_text(
+        "calendar_date,status,description,source,recorded_on\n"
+        "2025-10-02,closed,No bhavcopy published,observed,2026-10-24\n"
+    )
+    respx.get(HOLIDAY_URL).mock(return_value=holiday_response(("20-Oct-2026", "Dussehra")))
+
+    runner.invoke(app, ["calendar", "fetch-nse", "--seed", str(seed)])
+
+    assert [e.calendar_date for e in read_seed(seed)] == [date(2025, 10, 2), date(2026, 10, 20)]
+
+
+@respx.mock
+def test_a_disagreement_with_the_seed_fails_and_leaves_the_seed_as_it_was(tmp_path: Path) -> None:
+    seed = tmp_path / "seed.csv"
+    seed.write_text(
+        "calendar_date,status,description,source,recorded_on\n"
+        "2026-10-20,special_session,Trading session on a weekend,observed,2026-10-24\n"
+    )
+    before = seed.read_bytes()
+    respx.get(HOLIDAY_URL).mock(return_value=holiday_response(("20-Oct-2026", "Dussehra")))
+
+    result = runner.invoke(app, ["calendar", "fetch-nse", "--seed", str(seed)])
+
+    assert result.exit_code == 1
+    assert "conflict: 2026-10-20" in result.output
+    assert seed.read_bytes() == before
+
+
+@respx.mock
+def test_a_refusal_from_nse_is_a_one_line_error(tmp_path: Path) -> None:
+    respx.get(HOLIDAY_URL).mock(return_value=httpx.Response(403))
+
+    result = runner.invoke(app, ["calendar", "fetch-nse", "--seed", str(tmp_path / "seed.csv")])
+
+    assert result.exit_code == 1
+    assert result.output.startswith("error:")
+    assert not (tmp_path / "seed.csv").exists()
+
+
+def nse_url(day: date) -> str:
+    return f"https://nsearchives.nseindia.com/content/cm/BhavCopy_NSE_CM_0_0_0_{day:%Y%m%d}_F_0000.csv.zip"
+
+
+def store_bhavcopies(tmp_path: Path, days: list[date]) -> None:
+    zone = RawZone(LocalObjectStore(tmp_path / "raw"))
+    for day in days:
+        zone.put_if_absent(
+            source="nse",
+            dataset="cm_bhavcopy",
+            trade_date=day,
+            filename=f"BhavCopy_{day:%Y%m%d}.csv.zip",
+            content=day.isoformat().encode(),
+        )
+
+
+@respx.mock
+def test_observe_nse_confirms_a_gap_with_nse_and_notices_a_weekend_session(tmp_path: Path) -> None:
+    # Monday 12 to Sunday 18 October 2026: Wednesday has no file, and Saturday does
+    store_bhavcopies(tmp_path, [date(2026, 10, d) for d in (12, 13, 15, 16, 17)])
+    asked = respx.get(nse_url(date(2026, 10, 14))).mock(return_value=httpx.Response(404))
+    seed = tmp_path / "seed.csv"
+
+    result = runner.invoke(
+        app,
+        [
+            "calendar",
+            "observe-nse",
+            "--start",
+            "2026-10-12",
+            "--end",
+            "2026-10-18",
+            "--seed",
+            str(seed),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert asked.call_count == 1  # respx refuses any other request, so nothing else was asked
+    assert [(e.calendar_date, e.status.value) for e in read_seed(seed)] == [
+        (date(2026, 10, 14), "closed"),
+        (date(2026, 10, 17), "special_session"),
+    ]
+    assert "2 added" in result.output
+
+
+@respx.mock
+def test_observe_nse_does_not_call_a_missing_file_a_holiday(tmp_path: Path) -> None:
+    store_bhavcopies(tmp_path, [date(2026, 10, d) for d in (12, 13, 15, 16)])
+    respx.get(nse_url(date(2026, 10, 14))).mock(
+        return_value=httpx.Response(200, content=make_nse_zip())
+    )
+    seed = tmp_path / "seed.csv"
+
+    result = runner.invoke(
+        app,
+        [
+            "calendar",
+            "observe-nse",
+            "--start",
+            "2026-10-12",
+            "--end",
+            "2026-10-16",
+            "--seed",
+            str(seed),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert read_seed(seed) == []  # the file exists after all, so Wednesday was not a holiday
+    assert len(list((tmp_path / "raw").rglob("*.zip"))) == 5  # and it is now stored
+
+
+def test_observe_nse_refuses_a_range_before_the_supported_window() -> None:
+    result = runner.invoke(
+        app, ["calendar", "observe-nse", "--start", "2023-12-31", "--end", "2024-01-05"]
+    )
+
+    assert result.exit_code == 2
