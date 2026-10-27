@@ -347,6 +347,51 @@ def test_damaged_prices_across_a_large_file_fail_it(workspace: Workspace) -> Non
     assert workspace.build(NSE_MODEL).failed() == {NSE_RANGE_TEST}
 
 
+def trailing_comma_layout(csv_content: bytes) -> bytes:
+    """The layout NSE served from 1 January to 20 June 2024: a header with one field too many.
+
+    The header ends in a comma and names the reserved columns Rsvd01 to Rsvd04, while every row
+    has the usual 34 fields.
+    """
+    header, rest = csv_content.split(b"\n", 1)
+    assert header.endswith(b",Rsvd1,Rsvd2,Rsvd3,Rsvd4")
+    return (
+        header.replace(b",Rsvd1,Rsvd2,Rsvd3,Rsvd4", b",Rsvd01,Rsvd02,Rsvd03,Rsvd04,") + b"\n" + rest
+    )
+
+
+def test_a_bhavcopy_with_the_early_2024_header_is_read_in_full(workspace: Workspace) -> None:
+    """Without null_padding DuckDB cannot even find the columns of such a file."""
+    workspace.store_nse(trailing_comma_layout(healthy_bhavcopy()))
+
+    result = workspace.build(NSE_MODEL)
+
+    assert result.success
+    assert result.failed() == set()
+    assert result.query(
+        "select count(*), count(symbol), count(trade_date) from bronze.brz_nse__cm_bhavcopy"
+    ) == [(7, 7, 7)]
+
+
+def test_files_of_both_layouts_read_together_without_losing_a_single_value(
+    workspace: Workspace,
+) -> None:
+    """Mixed, the early file's every column used to come back NULL: 316,322 rows on real data."""
+    early = trailing_comma_layout(healthy_bhavcopy())
+    later = healthy_bhavcopy().replace(b"2024-07-05", b"2024-07-06")
+    workspace.store_nse(early)
+    workspace.store_nse(later, trade_date=date(2024, 7, 6))
+
+    result = workspace.build(NSE_MODEL)
+
+    assert result.success
+    assert result.failed() == set()
+    assert result.query(
+        "select _trade_date, count(*), count(symbol) from bronze.brz_nse__cm_bhavcopy "
+        "group by 1 order by 1"
+    ) == [(date(2024, 7, 5), 7, 7), (date(2024, 7, 6), 7, 7)]
+
+
 def test_a_renamed_price_column_breaks_the_model(workspace: Workspace) -> None:
     """The schema-drift case from the benchmark spec: ClsPric renamed to ClosePrice."""
     workspace.store_nse(healthy_bhavcopy().replace(b",ClsPric,", b",ClosePrice,"))

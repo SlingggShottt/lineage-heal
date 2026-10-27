@@ -50,9 +50,13 @@ sources:
         meta:
           external_location: >
             read_csv('{{ env_var("RAW_ZONE_DIR", ".data/raw") }}/staged/source=nse/dataset=cm_bhavcopy/*/*.csv',
-            header = true, all_varchar = true, union_by_name = true, filename = true,
-            hive_partitioning = true)
+            header = true, all_varchar = true, union_by_name = true, null_padding = true,
+            filename = true, hive_partitioning = true)
         description: >
+          null_padding is needed for history: the 117 files from 1 January to 20 June 2024 have a
+          header with one field more than their rows (a trailing comma, and Rsvd01 to Rsvd04 where
+          later files have Rsvd1 to Rsvd4). Without it DuckDB reads every column of those files as
+          NULL, which the not_null checks then report as 316,322 failing rows.
           One row per instrument per trade date, all columns as text. Only the columns the
           bronze model uses are listed; UDiFF has 34, many of them constant or empty for the
           cash segment. Columns are matched by header name.

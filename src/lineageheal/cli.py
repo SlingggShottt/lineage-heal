@@ -9,6 +9,7 @@ from collections import Counter
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, date, datetime, timedelta, timezone
+from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -19,7 +20,20 @@ from lineageheal.core.logging import configure_logging
 from lineageheal.core.settings import get_settings
 from lineageheal.ingestion import runner
 from lineageheal.ingestion.amfi import AmfiNavLoader, report_filename
+from lineageheal.ingestion.calendar import (
+    BHAVCOPY_DATASET,
+    DEFAULT_SEED,
+    NSE_SOURCE,
+    CalendarEntry,
+    fetch_official_holidays,
+    merge_entries,
+    observe_nse_sessions,
+    read_seed,
+    write_seed,
+)
+from lineageheal.ingestion.http import PoliteFetcher
 from lineageheal.ingestion.log import AttemptRecorder, attempt_from_injection, open_recorder
+from lineageheal.ingestion.nse import NSE_BROWSER_HEADERS
 from lineageheal.ingestion.object_stores import LocalObjectStore
 from lineageheal.ingestion.raw_zone import RawZone, open_store
 from lineageheal.ingestion.types import IngestionOutcome, IngestionResult, Loader
@@ -39,6 +53,11 @@ dev_app = typer.Typer(
 app.add_typer(dev_app, name="dev")
 db_app = typer.Typer(no_args_is_help=True, help="The application database (Postgres).")
 app.add_typer(db_app, name="db")
+calendar_app = typer.Typer(
+    no_args_is_help=True,
+    help="The NSE calendar seed: the days a file is expected, so a holiday is not a missing file.",
+)
+app.add_typer(calendar_app, name="calendar")
 
 
 class Source(enum.StrEnum):
@@ -389,3 +408,69 @@ def show_signals(
             f"{signal.severity.value:5s} {signal.kind.value} {signal.check_type} "
             f"{where or signal.name}{found}: {message}"
         )
+
+
+# --- the NSE calendar seed -----------------------------------------------------------------
+
+SeedOption = Annotated[
+    Path,
+    typer.Option("--seed", help="The calendar seed to read and update.", show_default=False),
+]
+
+
+def _merge_into_seed(seed: Path, incoming: list[CalendarEntry]) -> None:
+    """Merge entries into the seed, print what changed, and exit 1 if any disagreed."""
+    merged = merge_entries(read_seed(seed), incoming)
+    if merged.added or merged.updated:
+        write_seed(seed, merged.entries)
+    typer.echo(
+        f"{seed.name}: {merged.added} added, {merged.updated} updated, "
+        f"{len(merged.conflicts)} conflicts, {len(merged.entries)} entries"
+    )
+    for conflict in merged.conflicts:
+        typer.echo(f"conflict: {conflict}", err=True)
+    if merged.conflicts:
+        raise typer.Exit(code=1)
+
+
+@calendar_app.command("fetch-nse")
+def calendar_fetch_nse(seed: SeedOption = DEFAULT_SEED) -> None:
+    """Fetch NSE's official holiday list (the current year only) and merge it into the seed."""
+    settings = get_settings()
+    with _exit_on_project_errors():
+        with PoliteFetcher.create(
+            min_interval_seconds=settings.ingest_min_interval_seconds, headers=NSE_BROWSER_HEADERS
+        ) as fetcher:
+            official = fetch_official_holidays(fetcher, recorded_on=today_ist())
+        _merge_into_seed(seed, official)
+
+
+@calendar_app.command("observe-nse")
+def calendar_observe_nse(
+    start: Annotated[datetime, typer.Option("--start", formats=[DATE_FORMAT])],
+    end: Annotated[datetime, typer.Option("--end", formats=[DATE_FORMAT])],
+    seed: SeedOption = DEFAULT_SEED,
+) -> None:
+    """Record, from the raw zone, the weekdays NSE was closed and the weekends it traded.
+
+    Meant for years the official list no longer serves. A weekday with no stored bhavcopy is
+    asked for again, and counts as closed only if NSE still has nothing. Run a backfill over
+    the range first; days it could not fetch are asked for here and stored if they exist.
+    """
+    first, last = start.date(), end.date()
+    if first < EARLIEST_BACKFILL or last < first:
+        raise typer.BadParameter(f"the range must start on {EARLIEST_BACKFILL} or later")
+    with (
+        _exit_on_project_errors(),
+        _open_recorder() as recorder,
+        _open_loader(Source(NSE_SOURCE), BHAVCOPY_DATASET) as loader,
+    ):
+        zone = RawZone(open_store(get_settings()))
+        observed = observe_nse_sessions(
+            zone,
+            lambda day: _load_and_record(loader, recorder, day),
+            start=first,
+            end=last,
+            recorded_on=today_ist(),
+        )
+        _merge_into_seed(seed, observed)

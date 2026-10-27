@@ -1,0 +1,49 @@
+version: 2
+
+seeds:
+  - name: seed_calendar_nse
+    description: >
+      The days on which NSE's capital market is an exception to the plain rule that weekdays
+      are open and weekends are closed: a weekday it was closed, or a weekend or holiday on
+      which it held a session. It exists so that "no file expected" (a holiday) can be told
+      from "file missing" (FR-ING-07), which needs a record that does not come from the files
+      themselves. Rows come from NSE's official holiday list (`nse_api`, which serves only the
+      current year) or, for earlier years, from NSE having published nothing for a weekday, or a
+      file on a weekend (`observed`). The file is written by `lineageheal calendar fetch-nse` and
+      `lineageheal calendar observe-nse`; it is not edited by hand.
+    config:
+      column_types:
+        calendar_date: date
+        recorded_on: date
+    columns:
+      - name: calendar_date
+        description: The date that is an exception.
+        data_tests:
+          - not_null
+          - unique
+      - name: status
+        description: >
+          `closed` for a weekday the exchange was closed, `special_session` for a trading
+          session on a day it would otherwise be closed (a Muhurat or special weekend session).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [closed, special_session]
+      - name: description
+        description: The holiday or session, as NSE names it, or what was observed.
+        data_tests:
+          - not_null
+      - name: source
+        description: >
+          `nse_api` when NSE's official list says so, `observed` when it was seen in the data.
+          An official row replaces an observed one for the same date.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [nse_api, observed]
+      - name: recorded_on
+        description: The date the row was fetched or observed.
+        data_tests:
+          - not_null

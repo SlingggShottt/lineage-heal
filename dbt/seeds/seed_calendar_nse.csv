@@ -1,0 +1,52 @@
+calendar_date,status,description,source,recorded_on
+2024-01-20,special_session,Trading session on a weekend,observed,2026-10-24
+2024-01-22,closed,No bhavcopy published,observed,2026-10-24
+2024-01-26,closed,No bhavcopy published,observed,2026-10-24
+2024-03-02,special_session,Trading session on a weekend,observed,2026-10-24
+2024-03-08,closed,No bhavcopy published,observed,2026-10-24
+2024-03-25,closed,No bhavcopy published,observed,2026-10-24
+2024-03-29,closed,No bhavcopy published,observed,2026-10-24
+2024-04-11,closed,No bhavcopy published,observed,2026-10-24
+2024-04-17,closed,No bhavcopy published,observed,2026-10-24
+2024-05-01,closed,No bhavcopy published,observed,2026-10-24
+2024-05-18,special_session,Trading session on a weekend,observed,2026-10-24
+2024-05-20,closed,No bhavcopy published,observed,2026-10-24
+2024-06-17,closed,No bhavcopy published,observed,2026-10-24
+2024-07-17,closed,No bhavcopy published,observed,2026-10-24
+2024-08-15,closed,No bhavcopy published,observed,2026-10-24
+2024-10-02,closed,No bhavcopy published,observed,2026-10-24
+2024-11-15,closed,No bhavcopy published,observed,2026-10-24
+2024-11-20,closed,No bhavcopy published,observed,2026-10-24
+2024-12-25,closed,No bhavcopy published,observed,2026-10-24
+2025-02-01,special_session,Trading session on a weekend,observed,2026-10-24
+2025-02-26,closed,No bhavcopy published,observed,2026-10-24
+2025-03-14,closed,No bhavcopy published,observed,2026-10-24
+2025-03-31,closed,No bhavcopy published,observed,2026-10-24
+2025-04-10,closed,No bhavcopy published,observed,2026-10-24
+2025-04-14,closed,No bhavcopy published,observed,2026-10-24
+2025-04-18,closed,No bhavcopy published,observed,2026-10-24
+2025-05-01,closed,No bhavcopy published,observed,2026-10-24
+2025-08-15,closed,No bhavcopy published,observed,2026-10-24
+2025-08-27,closed,No bhavcopy published,observed,2026-10-24
+2025-10-02,closed,No bhavcopy published,observed,2026-10-24
+2025-10-22,closed,No bhavcopy published,observed,2026-10-24
+2025-11-05,closed,No bhavcopy published,observed,2026-10-24
+2025-12-25,closed,No bhavcopy published,observed,2026-10-24
+2026-01-15,closed,Municipal Corporation Election - Maharashtra,nse_api,2026-10-24
+2026-01-26,closed,Republic Day,nse_api,2026-10-24
+2026-02-01,special_session,Trading session on a weekend,observed,2026-10-24
+2026-03-03,closed,Holi,nse_api,2026-10-24
+2026-03-26,closed,Shri Ram Navami,nse_api,2026-10-24
+2026-03-31,closed,Shri Mahavir Jayanti,nse_api,2026-10-24
+2026-04-03,closed,Good Friday,nse_api,2026-10-24
+2026-04-14,closed,Dr. Baba Saheb Ambedkar Jayanti,nse_api,2026-10-24
+2026-05-01,closed,Maharashtra Day,nse_api,2026-10-24
+2026-05-28,closed,Bakri Id,nse_api,2026-10-24
+2026-06-26,closed,Muharram,nse_api,2026-10-24
+2026-09-14,closed,Ganesh Chaturthi,nse_api,2026-10-24
+2026-10-02,closed,Mahatma Gandhi Jayanti,nse_api,2026-10-24
+2026-10-20,closed,Dussehra,nse_api,2026-10-24
+2026-11-08,special_session,Diwali Laxmi Pujan,nse_api,2026-10-24
+2026-11-10,closed,Diwali-Balipratipada,nse_api,2026-10-24
+2026-11-24,closed,Prakash Gurpurb Sri Guru Nanak Dev,nse_api,2026-10-24
+2026-12-25,closed,Christmas,nse_api,2026-10-24
