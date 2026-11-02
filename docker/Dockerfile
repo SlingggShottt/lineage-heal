@@ -2,7 +2,7 @@
 # Image for the lineageheal command-line tool and the dbt project. Base images are pinned
 # to exact versions so a rebuild gives the same result; uv is pinned to the version that
 # created uv.lock.
-FROM python:3.12.15-slim-bookworm
+FROM python:3.12.16-slim-bookworm
 
 COPY --from=ghcr.io/astral-sh/uv:0.12.21 /uv /uvx /bin/
 
