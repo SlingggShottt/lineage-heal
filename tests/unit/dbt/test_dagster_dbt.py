@@ -26,6 +26,9 @@ REPO_ROOT = Path(__file__).parents[3]
 FIXTURES = REPO_ROOT / "tests" / "fixtures"
 
 
+CALENDAR_CHECK = "file_present_when_expected_slv_meta__calendar_"
+
+
 def store_fixtures(workspace: Workspace, *, damage_amfi: bool = False) -> None:
     amfi = (FIXTURES / "amfi" / "navall_history_2026-10-15_sample.txt").read_bytes()
     workspace.store_amfi(blank_nav(amfi) if damage_amfi else amfi)
@@ -99,14 +102,17 @@ def test_a_healthy_run_builds_every_model_and_every_check_passes(
     assert store.exists(f"{prefix}/manifest.json")
     assert store.exists(f"{prefix}/run_results.json")
     summary = load_run_summary(store, result.run_id)
-    assert summary.signals == ()
+    # The fixtures are two days two years apart, so the calendar rightly warns that NSE has no
+    # file on the trading days between them. Nothing else is wrong.
+    (signal,) = summary.signals
+    assert (signal.kind, signal.model) == (SignalKind.TEST_WARNING, "slv_meta__calendar")
     assert summary.counts["success"] == len(lineageheal_dbt_assets.keys)
-    assert run_tags(instance, result)["lineageheal/signals"] == "0"
+    assert run_tags(instance, result)["lineageheal/signals"] == "1"
     assert run_tags(instance, result)["lineageheal/has_failures"] == "false"
     assert built(result) == {key.to_user_string() for key in lineageheal_dbt_assets.keys}
     evaluations = result.get_asset_check_evaluations()
     assert len(evaluations) > 100
-    assert [e.check_name for e in evaluations if not e.passed] == []
+    assert [e.check_name for e in evaluations if not e.passed] == [CALENDAR_CHECK]
 
 
 def test_a_damaged_report_fails_the_run_and_keeps_its_data_out_of_the_models_after_it(
@@ -118,7 +124,7 @@ def test_a_damaged_report_fails_the_run_and_keeps_its_data_out_of_the_models_aft
 
     assert not result.success
     failed = {e.check_name for e in result.get_asset_check_evaluations() if not e.passed}
-    assert failed == {"not_null_brz_amfi__navall_nav_inr"}
+    assert failed == {"not_null_brz_amfi__navall_nav_inr", CALENDAR_CHECK}
     models = built(result)
     # The AMFI side stops at the failed check; the NSE side, which does not read it, still builds.
     assert "silver/slv_amfi__nav" not in models
@@ -126,8 +132,7 @@ def test_a_damaged_report_fails_the_run_and_keeps_its_data_out_of_the_models_aft
     assert {"silver/slv_nse__equity_eod", "gold/gld_equity_daily_prices"} <= models
     # The failed run's artifacts were kept, and the signal names what failed.
     summary = load_run_summary(LocalObjectStore(workspace.raw_dir), result.run_id)
-    (signal,) = summary.signals
-    assert signal.kind is SignalKind.TEST_FAILED
+    (signal,) = (s for s in summary.signals if s.kind is SignalKind.TEST_FAILED)
     assert (signal.model, signal.column, signal.check_type) == (
         "brz_amfi__navall",
         "nav_inr",
@@ -135,7 +140,7 @@ def test_a_damaged_report_fails_the_run_and_keeps_its_data_out_of_the_models_aft
     )
     assert signal.run_id == result.run_id
     assert "slv_amfi__nav" in summary.skipped_models
-    assert run_tags(instance, result)["lineageheal/signals"] == "1"
+    assert run_tags(instance, result)["lineageheal/signals"] == "2"  # the failure and the gap
     assert run_tags(instance, result)["lineageheal/has_failures"] == "true"
 
 
