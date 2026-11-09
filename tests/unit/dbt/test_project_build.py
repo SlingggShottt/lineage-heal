@@ -60,6 +60,10 @@ def test_every_model_builds_on_fixture_data_and_every_check_passes(
     assert result.success, {name: s for name, s in statuses.items() if s not in ("success", "pass")}
     # Nothing was skipped: a model missing here would mean a failed check upstream of it.
     assert {name for name in models if statuses.get(name) != "success"} == set()
-    assert set(statuses.values()) <= {"success", "pass"}
+    # The fixtures are two days two years apart, so the calendar rightly warns that NSE has no
+    # file on the trading days between them. Nothing else may warn.
+    warned = {name for name, status in statuses.items() if status == "warn"}
+    assert warned == {"file_present_when_expected_slv_meta__calendar_"}
+    assert set(statuses.values()) <= {"success", "pass", "warn"}
     # All three layers took part, so the check above is not passing over an empty project.
     assert {name[:4] for name in models} >= {"brz_", "slv_", "gld_"}

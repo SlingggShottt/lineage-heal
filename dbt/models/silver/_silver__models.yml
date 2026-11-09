@@ -322,3 +322,57 @@ models:
         description: Path of the staged file the row came from.
         data_tests:
           - not_null
+
+  - name: slv_meta__calendar
+    description: >
+      For each judged feed (AMFI NAVs and the NSE bhavcopy) and each calendar date from the
+      feed's first stored file to the run's reference date: whether a file was expected and
+      whether one is stored. This is what separates a holiday from a missing file (FR-ING-07).
+      "Expected" comes from the NSE calendar seed and the weekday rule, never from the files, so
+      a missing file cannot make itself unexpected. The reference date is the `as_of_date`
+      variable when the run supplies one, otherwise the newest date any feed has; the clock is
+      never read. NSE corporate actions are not judged, because the loader stores nothing for a
+      day with no actions, and the security master has no history to judge.
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [source, dataset, calendar_date]
+      - file_present_when_expected:
+          config:
+            severity: warn
+    columns:
+      - name: source
+        description: Publisher, amfi or nse.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [amfi, nse]
+      - name: dataset
+        description: Dataset, navall or cm_bhavcopy.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [navall, cm_bhavcopy]
+      - name: calendar_date
+        description: The trade date a file would be stored under, an Asia/Kolkata calendar date.
+        data_tests:
+          - not_null
+      - name: expectation
+        description: >
+          Why a file is or is not expected. `every_day` (AMFI publishes daily), `weekday` and
+          `special_session` (expected), `holiday` and `weekend` (not expected).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [every_day, weekday, special_session, holiday, weekend]
+      - name: file_expected
+        description: True when `expectation` says the publisher should have published a file.
+        data_tests:
+          - not_null
+      - name: file_present
+        description: True when at least one version of the file is stored for the date.
+        data_tests:
+          - not_null
