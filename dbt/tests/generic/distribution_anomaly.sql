@@ -6,10 +6,11 @@
     metric_anomalies macro for how dates are compared and what "recent" means.
 
     Arguments: the date column, then lookback, min_history, tolerance and detection_days as in
-    the macro (defaults: 10, 5, 0.25 and 3).
+    the macro (defaults: 10, 5, 0.25 and 3), and optionally `calendar: nse` to classify dates
+    by the NSE calendar instead of the weekday.
 #}
 {% test distribution_anomaly(
-    model, column_name, date_column, lookback=10, min_history=5, tolerance=0.25, detection_days=3
+    model, column_name, date_column, lookback=10, min_history=5, tolerance=0.25, detection_days=3, calendar=none
 ) %}
 
 {% set metrics %}
@@ -19,6 +20,9 @@
     group by {{ date_column }}
 {% endset %}
 
-{{ metric_anomalies(metrics, lookback, min_history, tolerance, detection_days) }}
+{#- The seed is referenced here, not in the macro, so dbt sees the dependency and builds it first. -#}
+{% set calendar_seed = ref('seed_calendar_nse') if calendar == 'nse' else none %}
+
+{{ metric_anomalies(metrics, lookback, min_history, tolerance, detection_days, calendar_seed) }}
 
 {% endtest %}

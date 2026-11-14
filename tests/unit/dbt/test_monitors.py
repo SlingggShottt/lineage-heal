@@ -10,8 +10,18 @@ import pytest
 if TYPE_CHECKING:
     from conftest import BuildResult, Price, Workspace
 
-EOD_CHAIN = ("brz_meta__raw_file_versions", "brz_nse__cm_bhavcopy", "slv_nse__equity_eod")
-NAV_CHAIN = ("brz_meta__raw_file_versions", "brz_amfi__navall", "slv_amfi__nav")
+EOD_CHAIN = (
+    "seed_calendar_nse",
+    "brz_meta__raw_file_versions",
+    "brz_nse__cm_bhavcopy",
+    "slv_nse__equity_eod",
+)
+NAV_CHAIN = (
+    "seed_calendar_nse",
+    "brz_meta__raw_file_versions",
+    "brz_amfi__navall",
+    "slv_amfi__nav",
+)
 MONITORS = ("volume_anomaly", "distribution_anomaly", "fresh_within")
 
 MONDAY = date(2026, 9, 28)
@@ -190,6 +200,27 @@ def calendar_days(count: int) -> list[date]:
     return [MONDAY + timedelta(days=offset) for offset in range(count)]
 
 
+# Weekdays the NSE calendar seed lists as closed, within the dates these scenarios use.
+HOLIDAYS = (date(2026, 10, 2), date(2026, 10, 20))  # Gandhi Jayanti, Dussehra
+
+
+def amfi_reports(count: int, *, last: dict[int, str] | None = None) -> dict[date, dict[int, str]]:
+    """AMFI reports as published: about 20 schemes on a business day and 3 otherwise.
+
+    A weekend and a market holiday both get the small report, whatever the weekday. `last`
+    replaces the final day's report.
+    """
+    reports = {}
+    for day in calendar_days(count):
+        small = day.weekday() >= 5 or day in HOLIDAYS
+        reports[day] = (
+            dict.fromkeys(range(3), "1000.0000") if small else dict.fromkeys(range(20), "20.0000")
+        )
+    if last is not None:
+        reports[calendar_days(count)[-1]] = last
+    return reports
+
+
 def test_weekend_reports_are_judged_apart_from_weekday_ones(workspace: Workspace) -> None:
     """AMFI publishes few schemes, with very different NAVs, at weekends, and both are normal."""
     reports = {}
@@ -220,21 +251,16 @@ def test_a_bad_report_stops_the_gold_table_that_reads_it(workspace: Workspace) -
     assert result.statuses["gld_mf_nav_daily"] == "skipped"
 
 
-def test_a_weekday_report_that_looks_like_a_weekend_one_is_a_market_holiday_not_a_fault(
+def test_a_report_on_a_market_holiday_is_judged_against_weekend_sized_ones(
     workspace: Workspace,
 ) -> None:
     """AMFI publishes a weekend-sized report on a weekday market holiday (Dussehra 2026).
 
     On real data it had 714 schemes against 8,742 the day before, with a median NAV of 1,004
-    against 18.7. Both monitors used to fail the build on it.
+    against 18.7. Both monitors used to fail the build on it, before the calendar said that
+    the date is a holiday.
     """
-    reports = {}
-    for day in calendar_days(23):
-        if day.weekday() >= 5 or day == calendar_days(23)[-1]:  # the last day is a Tuesday
-            reports[day] = dict.fromkeys(range(3), "1000.0000")
-        else:
-            reports[day] = dict.fromkeys(range(20), "20.0000")
-    workspace.store_navs(reports)
+    workspace.store_navs(amfi_reports(23))  # the last day is Tuesday 20 October
 
     result = workspace.build(*NAV_CHAIN)
 
@@ -243,19 +269,32 @@ def test_a_weekday_report_that_looks_like_a_weekend_one_is_a_market_holiday_not_
     assert monitor_statuses(result)["distribution_anomaly"] == "pass"
 
 
-def test_a_half_empty_weekday_report_is_still_caught_when_weekend_reports_exist(
-    workspace: Workspace,
-) -> None:
-    """Matching the weekend pattern excuses a date; matching neither pattern does not."""
-    reports = {}
-    for day in calendar_days(23):
-        if day.weekday() >= 5:
-            reports[day] = dict.fromkeys(range(3), "1000.0000")
-        elif day == calendar_days(23)[-1]:
-            reports[day] = dict.fromkeys(range(10), "20.0000")  # half of a normal weekday
-        else:
-            reports[day] = dict.fromkeys(range(20), "20.0000")
-    workspace.store_navs(reports)
+def test_a_weekday_report_truncated_to_weekend_size_is_caught(workspace: Workspace) -> None:
+    """The blind spot of D-34: the weekend pattern used to excuse a half-empty weekday report.
+
+    Monday 19 October is a business day, so it is compared with business days only, and a
+    report the size of a weekend one is far from them.
+    """
+    workspace.store_navs(amfi_reports(22, last=dict.fromkeys(range(3), "20.0000")))
+
+    result = workspace.build(*NAV_CHAIN)
+
+    assert monitor_statuses(result)["volume_anomaly"] == "fail"
+
+
+def test_a_half_empty_weekday_report_is_caught(workspace: Workspace) -> None:
+    workspace.store_navs(amfi_reports(22, last=dict.fromkeys(range(10), "20.0000")))
+
+    result = workspace.build(*NAV_CHAIN)
+
+    assert monitor_statuses(result)["volume_anomaly"] == "fail"
+
+
+def test_a_weekend_report_the_size_of_a_weekday_one_is_caught(workspace: Workspace) -> None:
+    """The calendar judges both ways: a full-size report where the market was closed is odd too."""
+    workspace.store_navs(
+        amfi_reports(22) | {date(2026, 10, 18): dict.fromkeys(range(20), "1000.0000")}
+    )
 
     result = workspace.build(*NAV_CHAIN)
 
@@ -273,3 +312,22 @@ def test_a_weekday_that_looks_like_a_weekend_is_caught_when_the_feed_has_no_week
     result = workspace.build(*EOD_CHAIN)
 
     assert monitor_statuses(result)["volume_anomaly"] == "fail"
+
+
+def test_a_weekend_trading_session_is_not_judged_against_ordinary_days(
+    workspace: Workspace,
+) -> None:
+    """Sunday 8 November 2026 is the Diwali session, an hour long, so it trades far less.
+
+    It is not a business day, so it is compared with other sessions, of which there are none
+    yet, and is left unjudged rather than reported as a partial file.
+    """
+    ordinary = [date(2026, 10, 26) + timedelta(days=n) for n in range(12)]
+    ordinary = [day for day in ordinary if day.weekday() < 5]
+    workspace.store_prices({day: day_prices(FULL_DAY) for day in ordinary})
+    workspace.store_prices({date(2026, 11, 8): day_prices(1)})
+
+    result = workspace.build(*EOD_CHAIN)
+
+    assert result.failed() == set()
+    assert monitor_statuses(result)["volume_anomaly"] == "pass"
