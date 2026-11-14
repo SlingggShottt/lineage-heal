@@ -457,6 +457,25 @@ How it is used:
 - Files written by a fault injector are logged as ordinary stored versions with no HTTP status, so the log matches what is actually in the raw zone.
 - `lineageheal db upgrade` and `db status` manage the schema; `lineageheal log` reads recent attempts.
 
+### Application tables (LH-036, D-39)
+
+Seven tables hold the healing workflow's state. The knowledge, lineage and benchmark tables in the diagram are created by the tasks that define them (LH-047, LH-039, LH-069), because their shape depends on the pgvector package, the graph versioning and the benchmark runner.
+
+| Table | One row per | Key columns |
+|---|---|---|
+| `pipeline_run` | dbt run | `run_id` (the Dagster run id, text, which is also the folder under `runs/`), `status` (`failed` when any signal is an error, `succeeded` otherwise), `counts`, `skipped_models`, `artifacts_prefix` |
+| `signal` | failure observation | `run_id`, `incident_id` (empty until the Detector groups it), `kind`, `severity`, `model`, `column_name`, `check_type`, `failures`, `message`; unique per run, kind and name |
+| `incident` | grouped failure | `status` (the lifecycle below), `fault_class` (the five classes or `unknown`), `summary`, `root_cause` (JSON), `confidence`, `opened_at`, `resolved_at` |
+| `agent_run` | healing execution | `incident_id`, `status`, `model_ids`, `prompt_versions`, `llm_calls`, token counts, `trace_url`, `error` (NFR-REPRO-01) |
+| `evidence` | tool output | `agent_run_id`, `tool`, `arguments`, `output`, `hypothesis` |
+| `fix` | proposed change | `incident_id`, `kind` (`dbt_patch` or `suggestion`), `status`, `patch`, `files`, `sandbox_result`, `branch`, `github_url` |
+| `review` | approver decision | `fix_id`, `reviewer_login`, `decision`, `reason` |
+
+- **The database enforces the lifecycle's rules,** as it does for the ingestion log, so a bug in the Fixer or the API cannot write a state the design forbids: an incident is `resolved` exactly when it has a resolution time; a confidence is between 0 and 1; a finished agent run has an end time and a failed one says why; a `dbt_patch` has a diff; **a patch cannot be `verified`, `published` or `merged` without a sandbox result on record** (the rule that no pull request is opened for an unverified patch); a published fix links to GitHub; a rejection has a non-blank reason.
+- **Deleting an incident** deletes its agent runs, evidence, fixes and reviews, but only releases its signals, which belong to the run that raised them.
+- **`record_run`** (`store/runs.py`) imports the `RunSummary` that LH-034 writes to `runs/<run_id>/signals.json`. It is idempotent: a run already recorded is left as it was. A summary that repeats a signal is refused whole, since a half-imported run would read as a healthy one.
+- **Structured data** (the root cause, evidence output, counts, model and prompt versions) is JSON, stored as JSONB on Postgres and plain JSON on SQLite, which the unit tests use. The test engine switches SQLite's foreign keys on so that the same rules apply there.
+
 ### Incident lifecycle
 
 ```mermaid

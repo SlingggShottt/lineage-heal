@@ -9,6 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from lineageheal.core.errors import StorageError
+from lineageheal.store.database import explain_database_error
 from lineageheal.store.models import IngestionLog
 
 
@@ -41,14 +42,6 @@ class StoredVersion:
     sha256: str
     size_bytes: int
     ingested_at: datetime
-
-
-def _explain(exc: SQLAlchemyError) -> str:
-    """Summarise a database error without echoing statements or parameters."""
-    cause = getattr(exc, "orig", None) or exc
-    lines = str(cause).strip().splitlines()
-    detail = lines[0] if lines else ""
-    return f"{type(cause).__name__}: {detail}"
 
 
 def _to_attempt(row: IngestionLog) -> IngestionAttempt:
@@ -104,7 +97,9 @@ class IngestionLogRepository:
                 session.flush()
                 return row.id
         except SQLAlchemyError as exc:
-            raise StorageError(f"Could not write to the ingestion log: {_explain(exc)}") from exc
+            raise StorageError(
+                f"Could not write to the ingestion log: {explain_database_error(exc)}"
+            ) from exc
 
     def recent(
         self,
@@ -132,7 +127,9 @@ class IngestionLogRepository:
             with Session(self._engine) as session:
                 return [_to_attempt(row) for row in session.scalars(statement.limit(limit))]
         except SQLAlchemyError as exc:
-            raise StorageError(f"Could not read the ingestion log: {_explain(exc)}") from exc
+            raise StorageError(
+                f"Could not read the ingestion log: {explain_database_error(exc)}"
+            ) from exc
 
     def stored_versions(self, source: str, dataset: str, trade_date: date) -> list[StoredVersion]:
         """Return each raw object stored for a trade date, oldest first.
@@ -171,4 +168,6 @@ class IngestionLogRepository:
                     for key, sha, size, when in session.execute(statement)
                 ]
         except SQLAlchemyError as exc:
-            raise StorageError(f"Could not read the ingestion log: {_explain(exc)}") from exc
+            raise StorageError(
+                f"Could not read the ingestion log: {explain_database_error(exc)}"
+            ) from exc

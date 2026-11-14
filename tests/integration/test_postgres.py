@@ -1,8 +1,8 @@
-"""The ingestion log against a real Postgres (needs `make up`; skipped when it is not running).
+"""The application store against a real Postgres (needs `make up`; skipped when it is not running).
 
 SQLite stands in for Postgres in the unit tests. These check what only Postgres can show:
-real timestamptz handling, the database's own constraint enforcement and the migration
-applied to the server the project actually uses.
+real timestamptz handling, JSONB columns, the database's own constraint enforcement and the
+migrations applied to the server the project actually uses.
 """
 
 import os
@@ -13,15 +13,18 @@ from datetime import UTC, date, datetime, timedelta
 import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.runtime.migration import MigrationContext
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, inspect, select, text
 from sqlalchemy.engine import make_url
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from lineageheal.core.errors import StorageError
+from lineageheal.core.signals import RunSummary, Severity, Signal, SignalKind
 from lineageheal.store.database import create_db_engine
 from lineageheal.store.ingestion_log import IngestionAttempt, IngestionLogRepository
 from lineageheal.store.migrate import current_revision, downgrade_database, upgrade_database
-from lineageheal.store.models import Base
+from lineageheal.store.models import Base, Fix, Incident
+from lineageheal.store.runs import RunRepository
 
 # The development database from docker-compose.yml. Override to test another server.
 ADMIN_URL = os.environ.get(
@@ -78,7 +81,7 @@ def test_the_migration_runs_on_postgres_and_matches_the_models(database_url: str
     columns = {c["name"]: c for c in inspect(engine).get_columns("ingestion_log")}
     engine.dispose()
 
-    assert current_revision(database_url) == "0001"
+    assert current_revision(database_url) == "0002"
     assert differences == []
     assert str(columns["started_at"]["type"]) == "TIMESTAMP"
     assert columns["started_at"]["type"].timezone is True
@@ -121,4 +124,91 @@ def test_the_migration_can_be_reverted_and_reapplied(database_url: str) -> None:
     assert current_revision(database_url) is None
 
     upgrade_database(database_url)
-    assert current_revision(database_url) == "0001"
+    assert current_revision(database_url) == "0002"
+
+
+def test_every_application_table_exists_with_jsonb_columns(database_url: str) -> None:
+    upgrade_database(database_url)
+    engine = create_db_engine(database_url)
+
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    jsonb = {c["name"]: str(c["type"]) for c in inspector.get_columns("incident")}
+    engine.dispose()
+
+    assert tables >= {
+        "pipeline_run",
+        "signal",
+        "incident",
+        "agent_run",
+        "evidence",
+        "fix",
+        "review",
+    }
+    assert jsonb["root_cause"] == "JSONB"
+
+
+def test_a_run_is_imported_on_postgres_and_read_back_unchanged(database_url: str) -> None:
+    upgrade_database(database_url)
+    engine = create_db_engine(database_url)
+    run_id = f"run-{secrets.token_hex(4)}"
+    signal = Signal(
+        kind=SignalKind.TEST_FAILED,
+        severity=Severity.ERROR,
+        run_id=run_id,
+        detected_at=T0,
+        name="not_null_brz_amfi__navall_nav_inr",
+        check_type="not_null",
+        models=("brz_amfi__navall",),
+        model="brz_amfi__navall",
+        column="nav_inr",
+        failures=3,
+        message="Got 3 results",
+    )
+    summary = RunSummary(run_id=run_id, generated_at=T0, counts={"fail": 1}, signals=(signal,))
+    repository = RunRepository(engine)
+
+    first = repository.record(summary)
+    second = repository.record(summary)
+
+    assert (first, second) == (True, False)
+    assert repository.signals_for(run_id) == [signal]
+    assert repository.status_of(run_id) == "failed"
+    engine.dispose()
+
+
+def test_postgres_refuses_what_the_lifecycle_forbids(database_url: str) -> None:
+    upgrade_database(database_url)
+    engine = create_db_engine(database_url)
+    opened = {"summary": "x", "opened_at": T0, "updated_at": T0}
+
+    with pytest.raises(IntegrityError), Session(engine) as session, session.begin():
+        session.add(Incident(status="resolved", **opened))  # resolved without a date
+    with pytest.raises(IntegrityError), Session(engine) as session, session.begin():
+        session.add(Incident(status="detected", confidence=1.5, **opened))
+    engine.dispose()
+
+
+def test_deleting_an_incident_removes_its_fixes_on_postgres(database_url: str) -> None:
+    upgrade_database(database_url)
+    engine = create_db_engine(database_url)
+    with Session(engine) as session, session.begin():
+        incident = Incident(status="fix_proposed", summary="x", opened_at=T0, updated_at=T0)
+        session.add(incident)
+        session.flush()
+        session.add(
+            Fix(
+                incident_id=incident.id,
+                kind="suggestion",
+                status="unverified",
+                files=[],
+                created_at=T0,
+                updated_at=T0,
+            )
+        )
+        session.flush()
+        session.delete(incident)
+
+    with Session(engine) as session:
+        assert session.scalars(select(Fix)).all() == []
+    engine.dispose()
