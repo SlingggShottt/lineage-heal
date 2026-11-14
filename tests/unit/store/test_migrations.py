@@ -10,7 +10,7 @@ from alembic.autogenerate import compare_metadata
 from alembic.config import main as alembic_main
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
-from sqlalchemy import inspect
+from sqlalchemy import CheckConstraint, inspect
 
 from lineageheal.core.errors import ConfigurationError, StorageError
 from lineageheal.store.database import create_db_engine
@@ -31,8 +31,8 @@ def blank_url(tmp_path: Path) -> str:
     return f"sqlite+pysqlite:///{tmp_path / 'blank.db'}"
 
 
-def test_there_is_one_revision_and_it_is_the_ingestion_log() -> None:
-    assert head_revision() == "0001"
+def test_the_newest_revision_creates_the_incident_tables() -> None:
+    assert head_revision() == "0002"
 
 
 def test_a_fresh_database_has_no_revision_until_upgraded(blank_url: str) -> None:
@@ -40,7 +40,7 @@ def test_a_fresh_database_has_no_revision_until_upgraded(blank_url: str) -> None
 
     upgrade_database(blank_url)
 
-    assert current_revision(blank_url) == "0001"
+    assert current_revision(blank_url) == "0002"
 
 
 def test_upgrading_creates_the_ingestion_log_with_its_indexes(blank_url: str) -> None:
@@ -56,18 +56,62 @@ def test_upgrading_creates_the_ingestion_log_with_its_indexes(blank_url: str) ->
     assert indexes == {"ix_ingestion_log_lookup", "ix_ingestion_log_object_key"}
 
 
+def test_upgrading_creates_every_application_table(blank_url: str) -> None:
+    upgrade_database(blank_url)
+    engine = create_db_engine(blank_url)
+
+    tables = set(inspect(engine).get_table_names())
+    engine.dispose()
+
+    assert tables >= {
+        "pipeline_run",
+        "signal",
+        "incident",
+        "agent_run",
+        "evidence",
+        "fix",
+        "review",
+    }
+
+
+def test_the_migrations_and_the_models_carry_the_same_check_constraints(blank_url: str) -> None:
+    """Alembic's comparison skips check constraints, which here are the database's rules."""
+    upgrade_database(blank_url)
+    engine = create_db_engine(blank_url)
+    inspector = inspect(engine)
+
+    in_database = {
+        (table, check["name"])
+        for table in inspector.get_table_names()
+        for check in inspector.get_check_constraints(table)
+    }
+    engine.dispose()
+    in_models = {
+        (table.name, constraint.name)
+        for table in Base.metadata.sorted_tables
+        for constraint in table.constraints
+        if isinstance(constraint, CheckConstraint)
+    }
+
+    assert in_database == in_models
+
+
 def test_upgrading_twice_changes_nothing(blank_url: str) -> None:
     upgrade_database(blank_url)
     upgrade_database(blank_url)
 
-    assert current_revision(blank_url) == "0001"
+    assert current_revision(blank_url) == "0002"
 
 
-def test_downgrading_removes_the_table(blank_url: str) -> None:
+def test_downgrading_removes_the_tables(blank_url: str) -> None:
     upgrade_database(blank_url)
 
-    downgrade_database(blank_url, "base")
+    downgrade_database(blank_url, "0001")
+    engine = create_db_engine(blank_url)
+    assert set(inspect(engine).get_table_names()) - {"alembic_version"} == {"ingestion_log"}
+    engine.dispose()
 
+    downgrade_database(blank_url, "base")
     engine = create_db_engine(blank_url)
     assert "ingestion_log" not in inspect(engine).get_table_names()
     engine.dispose()
@@ -92,7 +136,7 @@ def test_a_percent_sign_in_the_database_path_survives(tmp_path: Path) -> None:
 
     upgrade_database(url)
 
-    assert current_revision(url) == "0001"
+    assert current_revision(url) == "0002"
 
 
 def test_the_plain_alembic_command_reads_the_url_from_the_environment(
@@ -103,7 +147,7 @@ def test_the_plain_alembic_command_reads_the_url_from_the_environment(
 
     alembic_main(argv=["-c", "alembic.ini", "upgrade", "head"])
 
-    assert current_revision(blank_url) == "0001"
+    assert current_revision(blank_url) == "0002"
 
 
 def test_the_plain_alembic_command_says_what_is_missing_without_a_url(
