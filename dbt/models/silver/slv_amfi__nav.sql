@@ -1,3 +1,9 @@
+-- depends_on: {{ ref('seed_calendar_nse') }}
+-- The volume and distribution monitors on this model classify dates by the NSE calendar. dbt
+-- makes a test hold back the models downstream of it only when they descend from every parent
+-- of the test, so the seed must be a parent of this model too, or a failed monitor would stop
+-- nothing.
+
 with
 
 -- One version of each day's report: the latest to arrive.

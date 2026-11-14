@@ -11,12 +11,15 @@ models:
       - unique_combination:
           arguments:
             columns: [scheme_code, nav_date]
-      # Weekday and weekend reports are two patterns (about 8,700 against 700 schemes), and a
-      # weekday market holiday gets a weekend-sized report, so a date is accepted if it matches
-      # either. Saturday and Sunday differ by about 17% on real data, hence the wide tolerance.
+      # Business-day reports and weekend-sized ones are two patterns (about 8,700 against 700
+      # schemes). The NSE calendar decides which a date is: a weekday market holiday gets a
+      # weekend-sized report and is compared with those, while a half-empty business-day
+      # report is compared with business days and caught. Saturday and Sunday differ by about
+      # 17% on real data, hence the wide tolerance.
       - volume_anomaly:
           arguments:
             date_column: nav_date
+            calendar: nse
             tolerance: 0.35
       - fresh_within:
           arguments:
@@ -41,6 +44,7 @@ models:
           - distribution_anomaly:
               arguments:
                 date_column: nav_date
+                calendar: nse
                 tolerance: 0.25
       - name: scheme_name
         description: Scheme name including plan and option, as published.
@@ -235,6 +239,7 @@ models:
       - volume_anomaly:
           arguments:
             date_column: price_date
+            calendar: nse
             tolerance: 0.2
       - fresh_within:
           arguments:
@@ -284,6 +289,7 @@ models:
           - distribution_anomaly:
               arguments:
                 date_column: price_date
+                calendar: nse
                 tolerance: 0.2
       - name: last_price_inr
         description: Last traded price, in rupees.
