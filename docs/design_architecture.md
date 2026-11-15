@@ -429,6 +429,12 @@ All tools are read-only and return bounded, delimited output (NFR-SEC-04).
 - **Testing.** `FakeProvider` replays a script of answers and failures and keeps the requests it received; nothing in CI calls a real model.
 - **Configuration.** Model IDs per tier and requests per minute per provider are settings (`GEMINI_MODEL`, `GEMINI_LIGHT_MODEL`, `GROQ_MODEL`, `*_REQUESTS_PER_MINUTE`). The real Gemini and Groq adapters, over plain `httpx`, are LH-093.
 
+### 8.7 Prompts
+
+Prompts are Markdown files in `src/lineageheal/agents/prompts/`, named `<agent>.<purpose>.v<N>.md`, with YAML front matter listing their variables (LH-042). `PromptRegistry` loads them all at start-up and refuses a malformed file, so a typo fails at load rather than in a live run: the declared variables must be exactly those the template uses, and rendering needs exactly those values. The newest version is the default and an older one can be pinned; the `id` (`detector.classify.v1`) is what `agent_run.prompt_versions` records (NFR-REPRO-01).
+
+A change is a new version file; old ones stay. `versions.lock.json` holds a SHA-256 per prompt, and a test fails when a locked file's content changes under the same version (NFR-MAINT-03). Feed data goes through the `untrusted` filter, which wraps it in `<data name="...">` tags it cannot close and truncates it, and the templates run in a Jinja sandbox with undefined variables as errors.
+
 ## 9. Application data model
 
 ```mermaid

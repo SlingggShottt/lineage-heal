@@ -210,9 +210,9 @@ Each model has an entry in a `_<layer>__models.yml` file in its folder, with a m
 
 - Location: `src/lineageheal/agents/prompts/`.
 - File name: `<agent>.<purpose>.v<N>.md`, for example `investigator.system.v1.md`.
-- Any change creates a new version file; old versions stay for reproducibility.
+- Any change creates a new version file; old versions stay for reproducibility. `versions.lock.json` holds a hash for each prompt, and a test fails if a locked file is edited, so a new prompt adds its line to the lock and an existing one is never changed.
 - Variables use Jinja syntax (`{{ incident_summary }}`) and are listed in a front-matter block.
-- Untrusted data is always inserted inside clearly delimited tags, with an instruction that its contents are data, not instructions.
+- Untrusted data is always inserted with the `untrusted` filter (`{{ scheme_name | untrusted('scheme_name') }}`), which delimits and truncates it, and the prompt says that the contents of `<data>` tags are data, not instructions.
 - Prompts never contain secrets, URLs with tokens or personal data.
 
 ## 6. TypeScript and React

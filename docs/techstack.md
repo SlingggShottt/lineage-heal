@@ -123,6 +123,8 @@ OpenLineage events are stored as JSONB in Postgres, and the column-level graph i
 | Lightweight steps (classification, summaries) | Gemini 3.1 Flash-Lite | Google AI Studio (free tier) |
 | Fallback when Gemini is rate-limited or down | `openai/gpt-oss-120b` | Groq (free tier) |
 
+Prompts are rendered with **Jinja2** (BSD-3-Clause, in a sandbox) and their front matter is read with **PyYAML** (MIT); both were already installed through other packages and are now declared directly. Alternatives: stdlib `string.Template` (no filters, no undefined-variable control) and a hand-written front-matter parser. PyYAML ships no type hints, so mypy ignores its import rather than adding a stubs package.
+
 Model IDs live in configuration, never in code. All calls go through `lineageheal.llm`, which handles rate limiting, retries and fallback. The providers are called over plain `httpx` rather than their SDKs (D-41), so the layer adds no dependency; `LangChain core` is used by the agents, not by this layer.
 
 **Considered:** CrewAI and AutoGen (less explicit control over state and branching), OpenAI and Anthropic APIs (no free tier), local models via Ollama (not available in CI runners), LangGraph's in-memory or SQLite checkpointers (lost when an ephemeral runner exits).

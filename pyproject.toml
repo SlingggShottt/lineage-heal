@@ -21,9 +21,11 @@ dependencies = [
     "dagster-webserver>=1.13.26",
     "dbt-duckdb>=1.11.0",
     "httpx>=0.28.1",
+    "jinja2>=3.1.6",
     "networkx>=3.7",
     "psycopg[binary]>=3.3.6",
     "pydantic-settings>=2.16.0",
+    "pyyaml>=6.0.3",
     "sqlalchemy>=2.1.5",
     "sqlglot>=30.23.0",
     "structlog>=26.1.0",
@@ -107,6 +109,11 @@ ignore_missing_imports = true
 # in lineage/service.py; the service's own signatures are fully typed.
 [[tool.mypy.overrides]]
 module = ["networkx", "networkx.*"]
+ignore_missing_imports = true
+
+# Same for PyYAML, which only reads prompt front matter in agents/prompt_registry.py.
+[[tool.mypy.overrides]]
+module = ["yaml"]
 ignore_missing_imports = true
 
 # ---------------------------------------------------------------------------
