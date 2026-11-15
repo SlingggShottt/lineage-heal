@@ -107,3 +107,20 @@ def test_the_database_url_is_optional_and_masked(monkeypatch: pytest.MonkeyPatch
 def test_a_missing_database_url_is_explained_by_name() -> None:
     with pytest.raises(ConfigurationError, match="DATABASE_URL is not set"):
         make_settings().require_database_url()
+
+
+def test_model_ids_and_rates_come_from_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GEMINI_MODEL", "some-new-model")
+    monkeypatch.setenv("GROQ_REQUESTS_PER_MINUTE", "5")
+
+    settings = make_settings()
+
+    assert settings.gemini_model == "some-new-model"
+    assert settings.groq_requests_per_minute == 5
+
+
+def test_llm_keys_are_optional_and_never_shown(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert make_settings().gemini_api_key is None
+    monkeypatch.setenv("GEMINI_API_KEY", "sekret-value")
+
+    assert "sekret-value" not in repr(make_settings())

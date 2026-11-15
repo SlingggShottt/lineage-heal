@@ -420,7 +420,14 @@ All tools are read-only and return bounded, delimited output (NFR-SEC-04).
 
 ### 8.6 LLM layer
 
-`lineageheal.llm` exposes one interface for chat and structured output. It applies a token-bucket rate limiter per provider, retries with backoff, and falls back from Gemini to Groq on rate-limit or server errors (NFR-REL-03). Prompts are loaded from versioned files, and every call records model ID, prompt version, tokens and latency. A fake provider replays recorded responses for tests.
+`lineageheal.llm` is the only way agents reach a model (IF-SW-05). Agents build an `LLMRequest` (a prompt and a tier, `standard` or `light`) and call `LLMClient.complete` or `complete_structured`; they never name a provider or model.
+
+- **Endpoints.** The client holds an ordered list of `Endpoint`s, each a `Provider` plus its own token-bucket limiter. The limiter spaces calls evenly to the configured requests per minute, so the free-tier quota is respected before a provider has to refuse (LH-041).
+- **Retries and fallback (NFR-REL-03).** A server error or timeout is retried on the same provider with doubling backoff, then the next provider is tried. A rate-limit error moves to the next provider at once when there is one, and waits for the provider's `retry-after` when there is not. A rejected request (bad key or parameters) is raised immediately.
+- **Structured output.** `complete_structured` asks for JSON matching a Pydantic model's schema, accepts a fenced reply, and on an invalid one asks once more, naming the problem. The result keeps every completion, so token accounting includes the correction.
+- **Records.** Every completion carries provider, model, input and output tokens and latency, which LH-043 persists; prompt versions join them with LH-042. Prompt text and keys are never logged.
+- **Testing.** `FakeProvider` replays a script of answers and failures and keeps the requests it received; nothing in CI calls a real model.
+- **Configuration.** Model IDs per tier and requests per minute per provider are settings (`GEMINI_MODEL`, `GEMINI_LIGHT_MODEL`, `GROQ_MODEL`, `*_REQUESTS_PER_MINUTE`). The real Gemini and Groq adapters, over plain `httpx`, are LH-093.
 
 ## 9. Application data model
 

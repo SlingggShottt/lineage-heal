@@ -62,6 +62,18 @@ class Settings(BaseSettings):
     # keeps no log. A secret, because the URL carries the password.
     database_url: SecretStr | None = None
 
+    # LLM providers (the adapters arrive with LH-093). Keys are secrets and optional here, so
+    # commands that never call a model run without them. Model IDs are configuration, not code:
+    # a retired model is fixed in .env, not by a release. Per-minute rates sit below the free
+    # tiers' documented limits (docs/techstack.md) so the client limiter, not a 429, paces calls.
+    gemini_api_key: SecretStr | None = None
+    groq_api_key: SecretStr | None = None
+    gemini_model: str = "gemini-3.5-flash"
+    gemini_light_model: str = "gemini-3.1-flash-lite"
+    groq_model: str = "openai/gpt-oss-120b"
+    gemini_requests_per_minute: float = Field(default=10.0, gt=0)
+    groq_requests_per_minute: float = Field(default=20.0, gt=0)
+
     r2_account_id: str | None = None
     r2_access_key_id: SecretStr | None = None
     r2_secret_access_key: SecretStr | None = None
