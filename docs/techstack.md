@@ -93,7 +93,7 @@ DuckDB reads raw files directly from R2 using its R2 secret type, so no separate
 
 Adding the three installed packages brought 74 packages in all (grpcio, protobuf, jinja2, rich and others), every one permissively licensed apart from three under MPL-2.0 (certifi, orjson, tqdm), a file-level licence that does not affect this project. The application image grew from 852 MB to 1.21 GB (measured; it still starts, loads the four assets and runs the CLI).
 
-`dagster-dbt` requires `sqlglot[rs]`, and sqlglot's Rust add-on `sqlglotrs` is now deprecated in favour of `sqlglotc`. It works, and the test warning is silenced; the lineage builder (LH-039) uses sqlglot directly and should choose the add-on deliberately.
+`dagster-dbt` requires `sqlglot[rs]`, and sqlglot's Rust add-on `sqlglotrs` is now deprecated in favour of `sqlglotc`. It works, and the test warning is silenced. The lineage builder (LH-039) imports sqlglot directly, so it is declared in `pyproject.toml` (MIT) rather than relied on through `dagster-dbt`; the Rust add-on is left as `dagster-dbt` installs it, since lineage on this project takes well under a second.
 
 **Considered:** Airflow (heavier to run, task-centric rather than asset-centric), Prefect (capable, but its asset model is less mature for layered tables), Dagster+ (hosted; paid after a trial).
 
@@ -102,7 +102,7 @@ Adding the three installed packages brought 74 packages in all (grpcio, protobuf
 | Tool | Role |
 |---|---|
 | **OpenLineage** (Python client, `openlineage-dbt`) | Standard lineage events for loader runs and dbt runs |
-| **sqlglot** | Parses compiled dbt SQL to derive column-level lineage |
+| **sqlglot** (MIT, declared in `pyproject.toml`) | Parses compiled dbt SQL to derive column-level lineage. Considered: `sqllineage` (MIT), less accurate on DuckDB SQL |
 | **NetworkX** | In-memory graph for upstream and downstream traversal |
 
 OpenLineage events are stored as JSONB in Postgres, and the column-level graph is rebuilt from events plus the dbt manifest.

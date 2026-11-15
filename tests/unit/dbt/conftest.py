@@ -309,3 +309,27 @@ def workspace(
 
     store = LocalObjectStore(raw_dir)
     return Workspace(raw_dir, RawZone(store), ZipStager(store), build)
+
+
+@pytest.fixture(scope="session")
+def compiled_manifest(
+    tmp_path_factory: pytest.TempPathFactory, parsed_project: ParsedProject
+) -> dict[str, Any]:
+    """The project's manifest with compiled SQL, as a plain dict. Compiling needs no data."""
+    root = tmp_path_factory.mktemp("dbt-compiled")
+    write_profile(root / "profiles", root / "test.duckdb")
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("RAW_ZONE_DIR", str(parsed_project.raw_dir))
+        result = dbtRunner().invoke(
+            [
+                "compile",
+                "--project-dir", str(DBT_DIR),
+                "--profiles-dir", str(root / "profiles"),
+                "--target-path", str(root / "target"),
+                "--log-path", str(root / "logs"),
+                "--no-version-check",
+                "--quiet",
+            ]
+        )  # fmt: skip
+    assert result.success, result.exception
+    return dict(json.loads((root / "target" / "manifest.json").read_text()))
