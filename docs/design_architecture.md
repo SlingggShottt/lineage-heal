@@ -328,13 +328,17 @@ The dbt project lives in `dbt/`. Its profile has four targets: `dev` (local Duck
 
 ### 7.2 Graph construction
 
-1. Parse the dbt manifest for model dependencies and compiled SQL.
-2. For each model, use `sqlglot.lineage` on compiled SQL to map each output column to its input columns. Edge types: `direct` (pass-through or rename), `transform` (expression), `aggregate`, `filter` (column used only in `WHERE`/`JOIN`).
-3. Link raw file columns to bronze columns using the bronze model's column mapping and the latest schema facet.
-4. If parsing fails, add table-level edges marked `inferred` (FR-LIN-05).
-5. Persist nodes and edges to `lineage_nodes` and `lineage_edges`, tagged with the manifest hash (FR-LIN-04).
+`lineage.builder.build_lineage(manifest)` builds the graph in memory from `target/manifest.json` after `dbt compile` (LH-039); storing it is LH-092.
 
-**Node identity:** `<dataset>.<column>`, where dataset is either `raw.<source>.<dataset>` or a dbt model name, e.g. `raw.nse.cm_bhavcopy.ClsPric` or `slv_nse__equity_eod.close_price_inr`.
+1. Read models, seeds and sources from the manifest, and order models so a model is traced after its parents.
+2. For each model, use `sqlglot.lineage` (DuckDB dialect) on the compiled SQL to map each output column to the upstream model, seed or raw column it reads. Each edge takes the strongest relationship on its path: `direct` (pass-through or rename), `transform` (expression, including window functions), `aggregate`. Columns used only in `WHERE`, `JOIN ... ON`, `GROUP BY`, `HAVING` or `QUALIFY` get a `filter` edge to the model's row-set node `<model>.*`, traced through CTEs to the column they really read.
+3. Link raw file columns to bronze columns. The compiled SQL reads raw files with table functions, so the trace ends at an anonymous column; the one source a bronze model depends on names the file, and the declared source columns restore the published name (DuckDB lowercases quoted names, so matching is case-insensitive). The schema facet comparison of FR-ING-09 comes with the OpenLineage work (LH-037, LH-038).
+4. If a model cannot be traced (no compiled SQL, SQL sqlglot rejects, an unknown upstream table, more than one raw source), add table-level edges `<parent>.*` to `<model>.*` marked `inferred` (FR-LIN-05). Its declared columns still exist as nodes, so models built on it still trace.
+5. Tag the graph with a version: a hash of every model's compiled SQL and declared columns, with the machine's raw-zone path removed, so the same project has the same version on any machine (FR-LIN-04).
+
+**Node identity:** `<dataset>.<column>`, where dataset is either `raw.<source>.<dataset>` or a dbt model or seed name, e.g. `raw.nse.cm_bhavcopy.ClsPric` or `slv_nse__equity_eod.close_price_inr`. Every table also has a row-set node `<table>.*`.
+
+**Known limits:** a `JOIN ... USING` column is not yet traced as a filter edge, and a bronze model reading two raw sources falls back to `inferred`.
 
 ### 7.3 Traversal
 

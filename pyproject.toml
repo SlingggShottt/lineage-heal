@@ -24,6 +24,7 @@ dependencies = [
     "psycopg[binary]>=3.3.6",
     "pydantic-settings>=2.16.0",
     "sqlalchemy>=2.1.5",
+    "sqlglot>=30.23.0",
     "structlog>=26.1.0",
     "tenacity>=9.2.1",
     "typer>=0.27.3",
