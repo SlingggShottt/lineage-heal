@@ -342,7 +342,11 @@ The dbt project lives in `dbt/`. Its profile has four targets: `dev` (local Duck
 
 ### 7.3 Traversal
 
-At runtime the graph is loaded into NetworkX. The lineage service offers `upstream(node, depth)`, `downstream(node, depth)`, `path(a, b)` and `common_ancestors(nodes)`, the last of which the Detector uses for correlation.
+`lineage.service.LineageService` wraps a built `LineageGraph` in a NetworkX directed graph (LH-040). It offers `upstream(node, depth)` and `downstream(node, depth)`, which return the reached nodes nearest first with their distance and the edges between them; `path(a, b)`, the shortest path in flow order or `None`; and `common_ancestors(nodes)`, the closest nodes that feed all of them, which the Detector uses for correlation. A node counts as its own ancestor, and an ancestor that reaches the others only through another common ancestor is dropped.
+
+- `depth=None` is unlimited and `0` returns nothing; a negative depth and an unknown node id are errors.
+- Filter edges are followed by default; `include_filters=False` follows values only.
+- Every traversal and path reports `inferred` when it crossed a table-level guess, so the Investigator can lower its confidence.
 
 ## 8. Agent design
 

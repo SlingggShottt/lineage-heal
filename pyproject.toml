@@ -21,6 +21,7 @@ dependencies = [
     "dagster-webserver>=1.13.26",
     "dbt-duckdb>=1.11.0",
     "httpx>=0.28.1",
+    "networkx>=3.7",
     "psycopg[binary]>=3.3.6",
     "pydantic-settings>=2.16.0",
     "sqlalchemy>=2.1.5",
@@ -100,6 +101,12 @@ plugins = ["pydantic.mypy"]
 # S3Client protocol in ingestion/object_stores.py instead of adding a stubs package.
 [[tool.mypy.overrides]]
 module = ["boto3", "botocore.*"]
+ignore_missing_imports = true
+
+# networkx has no inline types and its stubs package is not worth a dependency for the few calls
+# in lineage/service.py; the service's own signatures are fully typed.
+[[tool.mypy.overrides]]
+module = ["networkx", "networkx.*"]
 ignore_missing_imports = true
 
 # ---------------------------------------------------------------------------
