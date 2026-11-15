@@ -103,7 +103,7 @@ Adding the three installed packages brought 74 packages in all (grpcio, protobuf
 |---|---|
 | **OpenLineage** (Python client, `openlineage-dbt`) | Standard lineage events for loader runs and dbt runs |
 | **sqlglot** (MIT, declared in `pyproject.toml`) | Parses compiled dbt SQL to derive column-level lineage. Considered: `sqllineage` (MIT), less accurate on DuckDB SQL |
-| **NetworkX** | In-memory graph for upstream and downstream traversal |
+| **NetworkX** (BSD-3-Clause, declared in `pyproject.toml`) | In-memory graph for upstream and downstream traversal. Considered: a hand-written BFS, which would mean maintaining shortest-path and ancestor logic ourselves. It ships no type hints, so mypy ignores its imports rather than adding a stubs package |
 
 OpenLineage events are stored as JSONB in Postgres, and the column-level graph is rebuilt from events plus the dbt manifest.
 

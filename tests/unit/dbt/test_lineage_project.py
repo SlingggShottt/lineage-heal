@@ -12,6 +12,7 @@ import pytest
 
 from lineageheal.lineage.builder import build_lineage
 from lineageheal.lineage.graph import LineageGraph
+from lineageheal.lineage.service import LineageService
 
 
 @pytest.fixture(scope="module")
@@ -55,3 +56,24 @@ def test_a_split_adjusted_price_depends_on_corporate_actions(graph: LineageGraph
 
 def test_the_version_is_stable_across_builds(graph: LineageGraph) -> None:
     assert len(graph.version) == 16
+
+
+def test_the_raw_columns_behind_a_gold_nav_are_found_by_traversal(graph: LineageGraph) -> None:
+    service = LineageService(graph)
+
+    upstream = service.upstream("gld_mf_nav_daily.nav_inr", include_filters=False)
+
+    assert {r.node for r in upstream.reached if r.node.startswith("raw.")} == {
+        "raw.amfi.navall.Net Asset Value"
+    }
+    assert not upstream.inferred
+
+
+def test_the_summary_figures_share_a_cause_in_the_price_table(graph: LineageGraph) -> None:
+    service = LineageService(graph)
+
+    shared = service.common_ancestors(
+        ["gld_market_daily_summary.eq_advancers", "gld_market_daily_summary.eq_decliners"]
+    )
+
+    assert "gld_equity_daily_prices.daily_return_pct" in shared
