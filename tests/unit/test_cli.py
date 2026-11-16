@@ -16,11 +16,16 @@ from lineageheal import cli
 from lineageheal.benchmark.faults import blank_nav, negative_nav
 from lineageheal.cli import app, today_ist
 from lineageheal.core.errors import ConfigurationError
+from lineageheal.core.settings import Settings
 from lineageheal.core.signals import RunSummary, Severity, Signal, SignalKind
 from lineageheal.ingestion.amfi import AMFI_REPORT_URL
 from lineageheal.ingestion.calendar import HOLIDAY_URL, read_seed
 from lineageheal.ingestion.object_stores import LocalObjectStore
 from lineageheal.ingestion.raw_zone import RawZone
+from lineageheal.llm.client import Endpoint
+from lineageheal.llm.fake import FakeProvider
+from lineageheal.llm.limiter import TokenBucket
+from lineageheal.llm.types import BadRequestError
 from lineageheal.orchestration.run_artifacts import SUMMARY_FILE, run_prefix
 from lineageheal.store.database import create_db_engine
 from lineageheal.store.ingestion_log import IngestionAttempt, IngestionLogRepository
@@ -952,3 +957,47 @@ def test_observe_nse_refuses_a_range_before_the_supported_window() -> None:
     )
 
     assert result.exit_code == 2
+
+
+def fake_endpoints(*providers: FakeProvider) -> list[Endpoint]:
+    return [Endpoint(p, TokenBucket(6000, capacity=10)) for p in providers]
+
+
+def test_llm_smoke_calls_each_provider_and_tier(monkeypatch: pytest.MonkeyPatch) -> None:
+    gemini = FakeProvider("gemini", ["ok", "ok"])
+    groq = FakeProvider("groq", ["ok", "ok"])
+    monkeypatch.setattr(cli, "build_endpoints", lambda settings: fake_endpoints(gemini, groq))
+
+    result = runner.invoke(app, ["dev", "llm-smoke"])
+
+    assert result.exit_code == 0
+    assert [r.tier.value for r in gemini.requests] == ["standard", "light"]
+    assert "ok   gemini/standard" in result.stdout
+    assert "ok   groq/light" in result.stdout
+
+
+def test_llm_smoke_reports_a_broken_provider_even_when_another_works(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    broken = FakeProvider("gemini", [BadRequestError("bad key"), BadRequestError("bad key")])
+    working = FakeProvider("groq", ["ok", "ok"])
+    monkeypatch.setattr(cli, "build_endpoints", lambda settings: fake_endpoints(broken, working))
+
+    result = runner.invoke(app, ["dev", "llm-smoke"])
+
+    assert result.exit_code == 1
+    assert "FAIL gemini/standard: bad key" in result.stdout
+    assert "ok   groq/standard" in result.stdout
+
+
+def test_llm_smoke_without_keys_says_which_variables_to_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.setattr(cli, "get_settings", lambda: Settings(_env_file=None))
+
+    result = runner.invoke(app, ["dev", "llm-smoke"])
+
+    assert result.exit_code == 1
+    assert "GEMINI_API_KEY" in result.output

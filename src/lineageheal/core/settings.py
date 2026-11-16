@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     # keeps no log. A secret, because the URL carries the password.
     database_url: SecretStr | None = None
 
-    # LLM providers (the adapters arrive with LH-093). Keys are secrets and optional here, so
+    # LLM providers. Keys are secrets and optional here, so
     # commands that never call a model run without them. Model IDs are configuration, not code:
     # a retired model is fixed in .env, not by a release. Per-minute rates sit below the free
     # tiers' documented limits (docs/techstack.md) so the client limiter, not a 429, paces calls.
