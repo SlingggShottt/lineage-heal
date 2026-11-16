@@ -334,7 +334,9 @@ def llm_smoke() -> None:
     Providers are called directly rather than through the client, so a working fallback cannot
     hide a broken primary. Needs GEMINI_API_KEY and/or GROQ_API_KEY; uses a handful of requests.
     """
-    request = LLMRequest(prompt="Reply with the single word: ok", max_output_tokens=64)
+    # The cap is generous because Gemini counts its thinking tokens against it: a small cap can be
+    # spent before any answer text is written.
+    request = LLMRequest(prompt="Reply with the single word: ok", max_output_tokens=1024)
     failures = 0
     with _exit_on_project_errors():
         endpoints = build_endpoints(get_settings())
