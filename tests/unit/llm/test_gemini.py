@@ -228,3 +228,19 @@ def test_a_body_that_is_not_json_is_transient() -> None:
 
     with pytest.raises(ServerError):
         provider().complete(LLMRequest(prompt="why?"))
+
+
+@respx.mock
+def test_a_cap_spent_on_thinking_is_a_transient_failure_that_names_the_reason() -> None:
+    respx.post(STANDARD_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "candidates": [{"content": {"role": "model"}, "finishReason": "MAX_TOKENS"}],
+                "usageMetadata": {"promptTokenCount": 8, "thoughtsTokenCount": 64},
+            },
+        )
+    )
+
+    with pytest.raises(ServerError, match="MAX_TOKENS"):
+        provider().complete(LLMRequest(prompt="why?", max_output_tokens=64))

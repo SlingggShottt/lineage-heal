@@ -31,6 +31,8 @@ class LLMRequest:
     system: str | None = None
     tier: ModelTier = ModelTier.STANDARD
     temperature: float = 0.0
+    # Gemini counts its thinking tokens against this cap, so a small value can leave no room for
+    # the answer: the call then fails with no text. Leave it unset unless an answer must be short.
     max_output_tokens: int | None = None
     # Set for structured output. A provider with native JSON-schema support can use it;
     # the others rely on the instruction the client adds to the system prompt.
