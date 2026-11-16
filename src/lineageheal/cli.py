@@ -8,6 +8,7 @@ import enum
 from collections import Counter
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Annotated
@@ -37,6 +38,8 @@ from lineageheal.ingestion.nse import NSE_BROWSER_HEADERS
 from lineageheal.ingestion.object_stores import LocalObjectStore
 from lineageheal.ingestion.raw_zone import RawZone, open_store
 from lineageheal.ingestion.types import IngestionOutcome, IngestionResult, Loader
+from lineageheal.llm.factory import build_endpoints
+from lineageheal.llm.types import LLMError, LLMRequest, ModelTier
 from lineageheal.orchestration.run_artifacts import load_run_summary
 from lineageheal.store.database import create_db_engine
 from lineageheal.store.ingestion_log import IngestionAttempt, IngestionLogRepository
@@ -322,6 +325,34 @@ def inject_fault(
         )
         verb = "injected" if stored.created else "already injected"
         typer.echo(f"{verb} {fault} ({spec.fault_class}) into amfi/navall {day}: {stored.key}")
+
+
+@dev_app.command("llm-smoke")
+def llm_smoke() -> None:
+    """Make one tiny call per configured provider and tier, to check keys and model IDs.
+
+    Providers are called directly rather than through the client, so a working fallback cannot
+    hide a broken primary. Needs GEMINI_API_KEY and/or GROQ_API_KEY; uses a handful of requests.
+    """
+    request = LLMRequest(prompt="Reply with the single word: ok", max_output_tokens=64)
+    failures = 0
+    with _exit_on_project_errors():
+        endpoints = build_endpoints(get_settings())
+        for endpoint in endpoints:
+            for tier in ModelTier:
+                try:
+                    answer = endpoint.provider.complete(replace(request, tier=tier))
+                except LLMError as error:
+                    failures += 1
+                    typer.echo(f"FAIL {endpoint.provider.name}/{tier.value}: {error}")
+                    continue
+                typer.echo(
+                    f"ok   {answer.provider}/{tier.value} model={answer.model} "
+                    f"tokens={answer.input_tokens}+{answer.output_tokens} "
+                    f"{answer.latency_seconds:.1f}s"
+                )
+    if failures:
+        raise typer.Exit(code=1)
 
 
 @db_app.command("upgrade")

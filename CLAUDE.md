@@ -123,6 +123,7 @@ uv run lineageheal calendar fetch-nse            # NSE's official holidays for t
 uv run lineageheal log --limit 10                # recent ingestion attempts
 uv run lineageheal signals RUN_ID                # failure signals recorded for a pipeline run
 uv run lineageheal dev inject-fault amfi --fault blank-nav --date 2026-10-15   # local raw zone only
+uv run lineageheal dev llm-smoke                 # one tiny call per LLM provider and tier; needs your own keys in .env
 
 # Quality gates — all must pass before proposing a commit
 uv run ruff format . && uv run ruff check .

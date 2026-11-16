@@ -427,7 +427,7 @@ All tools are read-only and return bounded, delimited output (NFR-SEC-04).
 - **Structured output.** `complete_structured` asks for JSON matching a Pydantic model's schema, accepts a fenced reply, and on an invalid one asks once more, naming the problem. The result keeps every completion, so token accounting includes the correction.
 - **Records.** Every completion carries provider, model, input and output tokens and latency, which LH-043 persists; prompt versions join them with LH-042. Prompt text and keys are never logged.
 - **Testing.** `FakeProvider` replays a script of answers and failures and keeps the requests it received; nothing in CI calls a real model.
-- **Configuration.** Model IDs per tier and requests per minute per provider are settings (`GEMINI_MODEL`, `GEMINI_LIGHT_MODEL`, `GROQ_MODEL`, `*_REQUESTS_PER_MINUTE`). The real Gemini and Groq adapters, over plain `httpx`, are LH-093.
+- **Configuration.** Model IDs per tier and requests per minute per provider are settings (`GEMINI_MODEL`, `GEMINI_LIGHT_MODEL`, `GROQ_MODEL`, `*_REQUESTS_PER_MINUTE`). `GeminiProvider` and `GroqProvider` call the two REST APIs over plain `httpx` and make one attempt per call; `build_client` in `llm/factory.py` assembles them from settings, Gemini first, leaving out a provider with no key. `lineageheal dev llm-smoke` checks keys and model IDs against the live services.
 
 ### 8.7 Prompts
 
