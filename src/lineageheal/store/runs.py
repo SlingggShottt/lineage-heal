@@ -4,6 +4,7 @@ LH-034 writes each dbt run's summary to a file; this module imports that summary
 Detector and the dashboard can query runs and signals without reading object storage.
 """
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 
 from sqlalchemy import Engine, select
@@ -69,6 +70,42 @@ class RunRepository:
                 return True
         except SQLAlchemyError as exc:
             raise StorageError(f"Could not record the run: {explain_database_error(exc)}") from exc
+
+    def add_signals(self, run_id: str, signals: Sequence[Signal]) -> int:
+        """Attach more signals to a recorded run, skipping any it already has.
+
+        The Detector uses this for signals that do not come from the dbt run itself, such as
+        failed downloads. A signal is the same one if its kind and name match, so adding the same
+        signals twice stores them once.
+
+        Args:
+            run_id: A run that has been recorded.
+            signals: Signals whose `run_id` is that run's.
+
+        Returns:
+            How many signals were new.
+
+        Raises:
+            StorageError: A signal belongs to another run, the run is not recorded, or the
+                database could not be written.
+        """
+        if any(signal.run_id != run_id for signal in signals):
+            raise StorageError(f"Cannot add signals of another run to run {run_id}")
+        try:
+            with Session(self._engine) as session, session.begin():
+                if session.get(PipelineRun, run_id) is None:
+                    raise StorageError(f"Run {run_id} is not recorded, so it cannot take signals")
+                known = {
+                    (kind, name)
+                    for kind, name in session.execute(
+                        select(SignalRow.kind, SignalRow.name).where(SignalRow.run_id == run_id)
+                    )
+                }
+                fresh = [s for s in signals if (s.kind.value, s.name) not in known]
+                session.add_all(_to_row(signal) for signal in fresh)
+                return len(fresh)
+        except SQLAlchemyError as exc:
+            raise StorageError(f"Could not add signals: {explain_database_error(exc)}") from exc
 
     def signals_for(self, run_id: str) -> list[Signal]:
         """Return a run's signals in the order they were recorded.

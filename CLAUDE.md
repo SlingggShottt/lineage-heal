@@ -122,6 +122,7 @@ uv run lineageheal db upgrade                    # needs DATABASE_URL and `make 
 uv run lineageheal calendar fetch-nse            # NSE's official holidays for this year into the calendar seed
 uv run lineageheal log --limit 10                # recent ingestion attempts
 uv run lineageheal signals RUN_ID                # failure signals recorded for a pipeline run
+uv run lineageheal detect RUN_ID                 # those plus unanswered download failures; needs DATABASE_URL
 uv run lineageheal dev inject-fault amfi --fault blank-nav --date 2026-10-15   # local raw zone only
 uv run lineageheal dev llm-smoke                 # one tiny call per LLM provider and tier; needs your own keys in .env
 

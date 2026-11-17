@@ -155,3 +155,62 @@ def test_an_unreachable_database_is_reported_not_crashed_on() -> None:
         broken.signals_for("run-1")
     with pytest.raises(StorageError, match="Could not read the run"):
         broken.status_of("run-1")
+
+
+# --- adding signals to a recorded run --------------------------------------------------------
+
+
+def ingestion_signal(name: str = "amfi/navall/2026-10-15", *, run_id: str = "run-1") -> Signal:
+    return Signal(
+        kind=SignalKind.INGESTION_ERROR,
+        severity=Severity.ERROR,
+        run_id=run_id,
+        detected_at=NOW,
+        name=name,
+        check_type="ingestion",
+        message="download failed, HTTP 403: blocked",
+    )
+
+
+def test_added_signals_are_read_back_after_the_runs_own(repository: RunRepository) -> None:
+    repository.record(summary(signal()))
+
+    assert repository.add_signals("run-1", [ingestion_signal()]) == 1
+
+    assert [s.kind for s in repository.signals_for("run-1")] == [
+        SignalKind.TEST_FAILED,
+        SignalKind.INGESTION_ERROR,
+    ]
+    assert repository.signals_for("run-1")[1] == ingestion_signal()
+
+
+def test_adding_the_same_signals_twice_stores_them_once(repository: RunRepository) -> None:
+    repository.record(summary())
+    repository.add_signals("run-1", [ingestion_signal("a"), ingestion_signal("b")])
+
+    added = repository.add_signals("run-1", [ingestion_signal("b"), ingestion_signal("c")])
+
+    assert added == 1
+    assert [s.name for s in repository.signals_for("run-1")] == ["a", "b", "c"]
+
+
+def test_adding_signals_leaves_the_runs_status_alone(repository: RunRepository) -> None:
+    repository.record(summary())
+
+    repository.add_signals("run-1", [ingestion_signal()])
+
+    assert repository.status_of("run-1") == "succeeded"
+
+
+def test_signals_cannot_be_added_to_a_run_that_is_not_recorded(
+    repository: RunRepository,
+) -> None:
+    with pytest.raises(StorageError, match="not recorded"):
+        repository.add_signals("run-1", [ingestion_signal()])
+
+
+def test_signals_of_another_run_are_refused(repository: RunRepository) -> None:
+    repository.record(summary())
+
+    with pytest.raises(StorageError, match="another run"):
+        repository.add_signals("run-1", [ingestion_signal(run_id="run-2")])

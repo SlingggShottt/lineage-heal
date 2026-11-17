@@ -583,7 +583,7 @@ def test_db_upgrade_creates_the_tables_and_says_which_revision(
     result = runner.invoke(app, ["db", "upgrade"])
 
     assert result.exit_code == 0
-    assert result.stdout.strip() == "database is at revision 0003"
+    assert result.stdout.strip() == "database is at revision 0004"
 
 
 def test_db_status_reports_missing_current_and_outdated_databases(
@@ -744,8 +744,8 @@ def store_summary(
     )
 
 
-def test_signals_lists_what_a_run_recorded(tmp_path: Path) -> None:
-    signal = Signal(
+def failing_signal() -> Signal:
+    return Signal(
         kind=SignalKind.TEST_FAILED,
         severity=Severity.ERROR,
         run_id=RUN_ID,
@@ -758,7 +758,10 @@ def test_signals_lists_what_a_run_recorded(tmp_path: Path) -> None:
         failures=1,
         message="Got 1 result, configured to fail if != 0\nmore detail",
     )
-    store_summary(tmp_path, signals=(signal,), skipped=("slv_amfi__nav",))
+
+
+def test_signals_lists_what_a_run_recorded(tmp_path: Path) -> None:
+    store_summary(tmp_path, signals=(failing_signal(),), skipped=("slv_amfi__nav",))
 
     result = runner.invoke(app, ["signals", RUN_ID])
 
@@ -794,6 +797,82 @@ def test_signals_refuses_a_run_id_that_is_not_a_plain_identifier() -> None:
 
     assert result.exit_code == 1
     assert "usable run id" in result.output
+
+
+def log_failed_download(url: str) -> None:
+    """A failed AMFI download that finished before the run's summary was written."""
+    finished = datetime(2026, 10, 22, 8, 0, tzinfo=UTC)
+    engine = create_db_engine(url)
+    try:
+        IngestionLogRepository(engine).record(
+            IngestionAttempt(
+                source="amfi",
+                dataset="navall",
+                trade_date=date(2026, 10, 21),
+                outcome="failed",
+                started_at=finished,
+                finished_at=finished,
+                http_status=403,
+                error="blocked",
+            )
+        )
+    finally:
+        engine.dispose()
+
+
+def test_detect_lists_the_dbt_signals_and_the_unanswered_download_failure(
+    tmp_path: Path, database: str
+) -> None:
+    store_summary(tmp_path, signals=(failing_signal(),))
+    log_failed_download(database)
+
+    result = runner.invoke(app, ["detect", RUN_ID])
+
+    assert result.exit_code == 0
+    assert f"run {RUN_ID}: 2 signals" in result.output
+    assert "error test_failed not_null brz_amfi__navall.nav_inr (1 rows)" in result.output
+    assert (
+        "error ingestion_error ingestion amfi/navall/2026-10-21: "
+        "download failed, HTTP 403: blocked" in result.output
+    )
+
+
+def test_detect_can_be_run_again_without_adding_anything(tmp_path: Path, database: str) -> None:
+    store_summary(tmp_path, signals=(failing_signal(),))
+    log_failed_download(database)
+    first = runner.invoke(app, ["detect", RUN_ID])
+
+    second = runner.invoke(app, ["detect", RUN_ID])
+
+    assert second.exit_code == 0
+    assert second.output == first.output
+
+
+def test_detect_says_so_when_there_is_nothing_to_report(tmp_path: Path, database: str) -> None:
+    store_summary(tmp_path, signals=())
+
+    result = runner.invoke(app, ["detect", RUN_ID])
+
+    assert result.exit_code == 0
+    assert f"run {RUN_ID}: 0 signals" in result.output
+    assert "no failure signals" in result.output
+
+
+def test_detect_without_a_database_names_the_missing_setting(tmp_path: Path) -> None:
+    store_summary(tmp_path, signals=())
+
+    result = runner.invoke(app, ["detect", RUN_ID])
+
+    assert result.exit_code == 1
+    assert "DATABASE_URL" in result.stderr
+
+
+def test_detect_for_a_run_that_was_never_recorded_is_a_one_line_error(database: str) -> None:
+    result = runner.invoke(app, ["detect", RUN_ID])
+
+    assert result.exit_code == 1
+    assert result.output.startswith("error:")
+    assert "Traceback" not in result.output
 
 
 # --- the NSE calendar seed -------------------------------------------------------------------
