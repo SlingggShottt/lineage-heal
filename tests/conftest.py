@@ -10,7 +10,7 @@ from collections.abc import Iterator
 import pytest
 import structlog
 
-from lineageheal.core.settings import get_settings
+from lineageheal.core.settings import Settings, get_settings
 
 _LAYERS = ("unit", "integration", "e2e")
 
@@ -54,6 +54,9 @@ def _clean_settings_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     """Remove all settings variables from the process environment for this test."""
     for name in _SETTINGS_VARIABLES:
         monkeypatch.delenv(name, raising=False)
+    # A developer's own .env sets real values (a database URL, API keys). Tests that run from
+    # the repository root would read it and could act on the real services it points at.
+    monkeypatch.setitem(Settings.model_config, "env_file", None)
     get_settings.cache_clear()  # tests of code using get_settings() must see fresh values
 
 

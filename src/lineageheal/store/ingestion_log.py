@@ -4,9 +4,9 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import cast
 
-from sqlalchemy import Engine, func, select
+from sqlalchemy import Engine, and_, exists, func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from lineageheal.core.errors import StorageError
 from lineageheal.store.database import explain_database_error
@@ -126,6 +126,52 @@ class IngestionLogRepository:
         try:
             with Session(self._engine) as session:
                 return [_to_attempt(row) for row in session.scalars(statement.limit(limit))]
+        except SQLAlchemyError as exc:
+            raise StorageError(
+                f"Could not read the ingestion log: {explain_database_error(exc)}"
+            ) from exc
+
+    def unresolved_failures(self, *, since: datetime, until: datetime) -> list[IngestionAttempt]:
+        """Return failed attempts that no later attempt has answered, oldest first.
+
+        A failure stays unresolved until a later attempt for the same source, dataset and trade
+        date ends in anything but a failure: a stored or unchanged file, or the source saying it
+        has nothing. Only attempts that finished by `until` count, so asking about a past moment
+        gives the answer it would have given then, and the clock is never read.
+
+        Args:
+            since: Ignore failures that finished before this, so an old gap in a backfill does
+                not raise a signal on every run for ever.
+            until: Consider only attempts that finished at or before this.
+
+        Raises:
+            StorageError: The database could not be read.
+        """
+        later = aliased(IngestionLog)
+        answered = exists().where(
+            later.source == IngestionLog.source,
+            later.dataset == IngestionLog.dataset,
+            later.trade_date == IngestionLog.trade_date,
+            later.outcome != "failed",
+            later.finished_at <= until,
+            or_(
+                later.finished_at > IngestionLog.finished_at,
+                and_(later.finished_at == IngestionLog.finished_at, later.id > IngestionLog.id),
+            ),
+        )
+        statement = (
+            select(IngestionLog)
+            .where(
+                IngestionLog.outcome == "failed",
+                IngestionLog.finished_at >= since,
+                IngestionLog.finished_at <= until,
+                ~answered,
+            )
+            .order_by(IngestionLog.finished_at, IngestionLog.id)
+        )
+        try:
+            with Session(self._engine) as session:
+                return [_to_attempt(row) for row in session.scalars(statement)]
         except SQLAlchemyError as exc:
             raise StorageError(
                 f"Could not read the ingestion log: {explain_database_error(exc)}"

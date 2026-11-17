@@ -167,6 +167,7 @@ make up                   # Postgres with pgvector (more services as they are bu
 | `uv run lineageheal calendar fetch-nse` | Fetch NSE's official holiday list for the current year into the calendar seed (`dbt/seeds/seed_calendar_nse.csv`); run it each January |
 | `uv run lineageheal calendar observe-nse --start 2024-01-01 --end 2025-12-31` | Record, from the raw zone, the weekdays NSE was closed and the weekends it traded, for years the official list no longer serves. Run a backfill over the range first |
 | `uv run lineageheal log` | Show recent ingestion attempts, newest first (`--outcome failed`, `--limit 5`) |
+| `uv run lineageheal detect RUN_ID` | Collect every signal for a run: dbt's results (read from the raw zone and recorded in the application database) plus download failures from the ingestion log that no later attempt has answered. Needs `DATABASE_URL` and `make up`; safe to run again |
 | `uv run lineageheal signals RUN_ID` | Show the failure signals a pipeline run recorded: the failed checks with their model and column, and the models skipped because of them. The run id is in the Dagster UI |
 | `make test-integration` | Run the tests that need the local Postgres |
 | `make up` and `make down` | Start and stop the local Postgres (port 5433, localhost only) |

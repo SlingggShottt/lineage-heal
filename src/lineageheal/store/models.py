@@ -39,7 +39,14 @@ NAMING_CONVENTION = {
 OUTCOMES = ("stored", "unchanged", "no_data", "failed")
 
 # What a signal reports and how seriously; mirrors `SignalKind` and `Severity` in core.signals.
-SIGNAL_KINDS = ("test_failed", "test_warning", "test_error", "model_error", "run_error")
+SIGNAL_KINDS = (
+    "test_failed",
+    "test_warning",
+    "test_error",
+    "model_error",
+    "run_error",
+    "ingestion_error",
+)
 SIGNAL_SEVERITIES = ("error", "warn")
 RUN_STATUSES = ("succeeded", "failed")
 

@@ -6,7 +6,7 @@ ingestion. Results go to stdout; logs go to stderr (see `core.logging`).
 
 import enum
 from collections import Counter
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta, timezone
@@ -15,10 +15,12 @@ from typing import Annotated
 
 import typer
 
+from lineageheal.agents.detector.collect import SignalCollector
 from lineageheal.benchmark.faults import AMFI_FAULTS
 from lineageheal.core.errors import BenchmarkError, ConfigurationError, LineageHealError
 from lineageheal.core.logging import configure_logging
 from lineageheal.core.settings import get_settings
+from lineageheal.core.signals import Signal
 from lineageheal.ingestion import runner
 from lineageheal.ingestion.amfi import AmfiNavLoader, report_filename
 from lineageheal.ingestion.calendar import (
@@ -40,10 +42,11 @@ from lineageheal.ingestion.raw_zone import RawZone, open_store
 from lineageheal.ingestion.types import IngestionOutcome, IngestionResult, Loader
 from lineageheal.llm.factory import build_endpoints
 from lineageheal.llm.types import LLMError, LLMRequest, ModelTier
-from lineageheal.orchestration.run_artifacts import load_run_summary
+from lineageheal.orchestration.run_artifacts import load_run_summary, run_prefix
 from lineageheal.store.database import create_db_engine
 from lineageheal.store.ingestion_log import IngestionAttempt, IngestionLogRepository
 from lineageheal.store.migrate import current_revision, head_revision, upgrade_database
+from lineageheal.store.runs import RunRepository
 
 # India has no daylight saving, so a fixed offset is exact and avoids needing tzdata.
 IST = timezone(timedelta(hours=5, minutes=30), "IST")
@@ -431,9 +434,13 @@ def show_signals(
     typer.echo(f"run {summary.run_id}: {counts or 'dbt wrote no results'}")
     if summary.skipped_models:
         typer.echo(f"skipped because of an upstream failure: {', '.join(summary.skipped_models)}")
-    if not summary.signals:
+    _echo_signals(summary.signals)
+
+
+def _echo_signals(signals: Sequence[Signal]) -> None:
+    if not signals:
         typer.echo("no failure signals")
-    for signal in summary.signals:
+    for signal in signals:
         where = ".".join(part for part in (signal.model, signal.column) if part)
         found = f" ({signal.failures} rows)" if signal.failures else ""
         message = signal.message.splitlines()[0] if signal.message else ""
@@ -441,6 +448,29 @@ def show_signals(
             f"{signal.severity.value:5s} {signal.kind.value} {signal.check_type} "
             f"{where or signal.name}{found}: {message}"
         )
+
+
+@app.command("detect")
+def detect(
+    run_id: Annotated[str, typer.Argument(help="The pipeline run, as shown in the Dagster UI.")],
+) -> None:
+    """Collect every signal for a run: dbt's results plus unanswered download failures.
+
+    Reads the run's summary from the raw zone, records it in the application database
+    (DATABASE_URL, `make up`) and adds the failed downloads from the ingestion log. Safe to run
+    again: nothing is added twice.
+    """
+    with _exit_on_project_errors():
+        settings = get_settings()
+        summary = load_run_summary(open_store(settings), run_id)
+        engine = create_db_engine(settings.require_database_url())
+        try:
+            collector = SignalCollector(RunRepository(engine), IngestionLogRepository(engine))
+            signals = collector.collect(summary, artifacts_prefix=run_prefix(run_id))
+        finally:
+            engine.dispose()
+    typer.echo(f"run {run_id}: {len(signals)} signals")
+    _echo_signals(signals)
 
 
 # --- the NSE calendar seed -----------------------------------------------------------------

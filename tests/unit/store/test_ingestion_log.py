@@ -225,3 +225,89 @@ def test_error_messages_do_not_echo_the_values_that_were_being_written(
         repository.record(secretish)
 
     assert "do-not-echo-me" not in str(raised.value)
+
+
+# --- unresolved failures (FR-DET-01) ---------------------------------------------------------
+
+
+def failed(minutes: int, *, day: date = DAY, dataset: str = "navall") -> IngestionAttempt:
+    return IngestionAttempt(
+        source="amfi",
+        dataset=dataset,
+        trade_date=day,
+        outcome="failed",
+        started_at=at(minutes),
+        finished_at=at(minutes),
+        http_status=403,
+        error="blocked",
+    )
+
+
+def unresolved(
+    repository: IngestionLogRepository, *, since: int = -60, until: int = 600
+) -> list[IngestionAttempt]:
+    return repository.unresolved_failures(since=at(since), until=at(until))
+
+
+def test_a_failure_nothing_has_answered_is_unresolved(repository: IngestionLogRepository) -> None:
+    repository.record(failed(0))
+
+    [attempt] = unresolved(repository)
+
+    assert (attempt.source, attempt.trade_date, attempt.error) == ("amfi", DAY, "blocked")
+
+
+@pytest.mark.parametrize("outcome", ["stored", "unchanged", "no_data"])
+def test_a_later_attempt_that_did_not_fail_resolves_it(
+    repository: IngestionLogRepository, outcome: str
+) -> None:
+    repository.record(failed(0))
+    repository.record(stored("raw/k", 5, outcome=outcome))
+
+    assert unresolved(repository) == []
+
+
+def test_a_later_failure_does_not_resolve_an_earlier_one(
+    repository: IngestionLogRepository,
+) -> None:
+    repository.record(failed(0))
+    repository.record(failed(5))
+
+    assert [a.finished_at for a in unresolved(repository)] == [at(0), at(5)]
+
+
+def test_only_attempts_for_the_same_feed_and_date_resolve_a_failure(
+    repository: IngestionLogRepository,
+) -> None:
+    repository.record(failed(0))
+    repository.record(stored("raw/other-day", 5, day=date(2026, 10, 15)))
+    repository.record(stored("raw/other-dataset", 6, dataset="other"))
+
+    assert len(unresolved(repository)) == 1
+
+
+def test_an_earlier_success_does_not_hide_a_later_failure(
+    repository: IngestionLogRepository,
+) -> None:
+    repository.record(stored("raw/k", 0))
+    repository.record(failed(5))
+
+    assert len(unresolved(repository)) == 1
+
+
+def test_the_window_decides_what_is_seen(repository: IngestionLogRepository) -> None:
+    repository.record(failed(0))
+    repository.record(stored("raw/k", 30))
+
+    assert unresolved(repository, until=10) != []  # asked as of before the success
+    assert unresolved(repository, until=40) == []
+    assert unresolved(repository, since=5) == []  # too old to matter
+
+
+def test_attempts_at_the_same_instant_are_ordered_by_arrival(
+    repository: IngestionLogRepository,
+) -> None:
+    repository.record(failed(0))
+    repository.record(stored("raw/k", 0))
+
+    assert unresolved(repository) == []

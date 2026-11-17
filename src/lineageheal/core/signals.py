@@ -20,6 +20,9 @@ class SignalKind(StrEnum):
     TEST_ERROR = "test_error"  # a test could not run (for example a SQL error in it)
     MODEL_ERROR = "model_error"  # a model could not be built
     RUN_ERROR = "run_error"  # dbt stopped without producing results (profile, parse, crash)
+    # A download that failed, found in the ingestion log rather than a dbt run. It is the only
+    # kind with no model of its own: it names the feed and the trade date instead.
+    INGESTION_ERROR = "ingestion_error"
 
 
 class Severity(StrEnum):

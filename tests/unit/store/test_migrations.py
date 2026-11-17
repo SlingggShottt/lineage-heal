@@ -10,7 +10,9 @@ from alembic.autogenerate import compare_metadata
 from alembic.config import main as alembic_main
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
-from sqlalchemy import CheckConstraint, inspect
+from sqlalchemy import CheckConstraint, Connection, inspect, text
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.sql.elements import TextClause
 
 from lineageheal.core.errors import ConfigurationError, StorageError
 from lineageheal.store.database import create_db_engine
@@ -32,7 +34,7 @@ def blank_url(tmp_path: Path) -> str:
 
 
 def test_the_newest_revision_creates_the_lineage_tables() -> None:
-    assert head_revision() == "0003"
+    assert head_revision() == "0004"
 
 
 def test_a_fresh_database_has_no_revision_until_upgraded(blank_url: str) -> None:
@@ -40,7 +42,7 @@ def test_a_fresh_database_has_no_revision_until_upgraded(blank_url: str) -> None
 
     upgrade_database(blank_url)
 
-    assert current_revision(blank_url) == "0003"
+    assert current_revision(blank_url) == "0004"
 
 
 def test_upgrading_creates_the_ingestion_log_with_its_indexes(blank_url: str) -> None:
@@ -103,7 +105,7 @@ def test_upgrading_twice_changes_nothing(blank_url: str) -> None:
     upgrade_database(blank_url)
     upgrade_database(blank_url)
 
-    assert current_revision(blank_url) == "0003"
+    assert current_revision(blank_url) == "0004"
 
 
 def test_downgrading_removes_the_tables(blank_url: str) -> None:
@@ -139,7 +141,7 @@ def test_a_percent_sign_in_the_database_path_survives(tmp_path: Path) -> None:
 
     upgrade_database(url)
 
-    assert current_revision(url) == "0003"
+    assert current_revision(url) == "0004"
 
 
 def test_the_plain_alembic_command_reads_the_url_from_the_environment(
@@ -150,7 +152,7 @@ def test_the_plain_alembic_command_reads_the_url_from_the_environment(
 
     alembic_main(argv=["-c", "alembic.ini", "upgrade", "head"])
 
-    assert current_revision(blank_url) == "0003"
+    assert current_revision(blank_url) == "0004"
 
 
 def test_the_plain_alembic_command_says_what_is_missing_without_a_url(
@@ -164,7 +166,9 @@ def test_the_plain_alembic_command_says_what_is_missing_without_a_url(
 
 
 def test_the_sql_can_be_reviewed_without_a_database() -> None:
-    config = _config("sqlite+pysqlite://")
+    # Rendered for Postgres, which is what a reviewer reads. SQLite rebuilds a table to change
+    # a constraint, and that needs a live connection to reflect it.
+    config = _config("postgresql+psycopg://reviewer@localhost/none")
     config.output_buffer = StringIO()
 
     command.upgrade(config, "head", sql=True)
@@ -172,6 +176,7 @@ def test_the_sql_can_be_reviewed_without_a_database() -> None:
     sql = config.output_buffer.getvalue()
     assert "CREATE TABLE ingestion_log" in sql
     assert "ck_ingestion_log_failures_say_why" in sql
+    assert "'ingestion_error'" in sql
 
 
 def test_an_unreachable_database_is_reported_not_crashed_on() -> None:
@@ -203,3 +208,44 @@ def test_a_migrations_folder_without_revisions_is_reported(
 
     with pytest.raises(StorageError, match="no revisions"):
         head_revision()
+
+
+def test_the_ingestion_error_kind_keeps_existing_signals_and_downgrades_cleanly(
+    blank_url: str,
+) -> None:
+    upgrade_database(blank_url, "0003")
+    engine = create_db_engine(blank_url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO pipeline_run (run_id, status, generated_at, counts, skipped_models,"
+                " recorded_at) VALUES ('r1', 'failed', '2026-11-17 10:00:00.000000', '{}', '[]',"
+                " '2026-11-17 10:00:00.000000')"
+            )
+        )
+        connection.execute(_signal_insert("test_failed", "kept"))
+
+    upgrade_database(blank_url)
+    with engine.begin() as connection:
+        connection.execute(_signal_insert("ingestion_error", "amfi/navall/2026-10-15"))
+        assert _signal_names(connection) == ["amfi/navall/2026-10-15", "kept"]
+
+    downgrade_database(blank_url, "0003")
+    with engine.begin() as connection:
+        assert _signal_names(connection) == ["kept"]
+        with pytest.raises(IntegrityError):
+            connection.execute(_signal_insert("ingestion_error", "again"))
+    engine.dispose()
+
+
+def _signal_insert(kind: str, name: str) -> TextClause:
+    return text(
+        "INSERT INTO signal (run_id, kind, severity, detected_at, name, check_type, models,"
+        " message) VALUES ('r1', :kind, 'error', '2026-11-17 10:00:00.000000', :name, 'x', '[]',"
+        " '')"
+    ).bindparams(kind=kind, name=name)
+
+
+def _signal_names(connection: Connection) -> list[str]:
+    rows = connection.execute(text("SELECT name FROM signal ORDER BY name"))
+    return [row[0] for row in rows]
