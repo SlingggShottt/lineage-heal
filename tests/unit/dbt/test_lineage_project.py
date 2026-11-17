@@ -77,3 +77,40 @@ def test_the_summary_figures_share_a_cause_in_the_price_table(graph: LineageGrap
     )
 
     assert "gld_equity_daily_prices.daily_return_pct" in shared
+
+
+def test_a_bronze_nav_failure_is_grouped_with_the_silver_failure_it_causes(
+    graph: LineageGraph,
+) -> None:
+    """The Detector on the real project: one cause, and the gold tables a reader would see."""
+    from datetime import UTC, datetime
+
+    from lineageheal.agents.detector.grouping import group_signals
+    from lineageheal.core.signals import Severity, Signal, SignalKind
+
+    def failed(model: str, column: str, check: str) -> Signal:
+        return Signal(
+            kind=SignalKind.TEST_FAILED,
+            severity=Severity.ERROR,
+            run_id="r",
+            detected_at=datetime(2026, 10, 16, tzinfo=UTC),
+            name=f"{check}_{model}_{column}",
+            check_type=check,
+            models=(model,),
+            model=model,
+            column=column,
+        )
+
+    signals = [
+        failed("brz_amfi__navall", "nav_inr", "not_null"),
+        failed("slv_amfi__nav", "nav_inr", "positive"),
+        failed("slv_nse__equity_eod", "close_price_inr", "not_null"),
+    ]
+
+    amfi, nse = group_signals(signals, graph)
+
+    assert amfi.root_node == "brz_amfi__navall.nav_inr"
+    assert len(amfi.signals) == 2
+    assert "gld_mf_nav_daily" in amfi.gold_tables
+    assert nse.root_node == "slv_nse__equity_eod.close_price_inr"
+    assert "gld_equity_daily_prices" in nse.gold_tables

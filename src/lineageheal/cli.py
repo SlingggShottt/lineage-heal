@@ -15,7 +15,9 @@ from typing import Annotated
 
 import typer
 
+from lineageheal.agents.detector.classify import Classifier
 from lineageheal.agents.detector.collect import SignalCollector
+from lineageheal.agents.detector.detect import Detector
 from lineageheal.benchmark.faults import AMFI_FAULTS
 from lineageheal.core.errors import BenchmarkError, ConfigurationError, LineageHealError
 from lineageheal.core.logging import configure_logging
@@ -40,11 +42,14 @@ from lineageheal.ingestion.nse import NSE_BROWSER_HEADERS
 from lineageheal.ingestion.object_stores import LocalObjectStore
 from lineageheal.ingestion.raw_zone import RawZone, open_store
 from lineageheal.ingestion.types import IngestionOutcome, IngestionResult, Loader
-from lineageheal.llm.factory import build_endpoints
+from lineageheal.lineage.builder import build_lineage
+from lineageheal.llm.factory import build_client, build_endpoints
 from lineageheal.llm.types import LLMError, LLMRequest, ModelTier
-from lineageheal.orchestration.run_artifacts import load_run_summary, run_prefix
+from lineageheal.orchestration.run_artifacts import load_manifest, load_run_summary, run_prefix
 from lineageheal.store.database import create_db_engine
+from lineageheal.store.incidents import IncidentRepository
 from lineageheal.store.ingestion_log import IngestionAttempt, IngestionLogRepository
+from lineageheal.store.lineage import LineageRepository
 from lineageheal.store.migrate import current_revision, head_revision, upgrade_database
 from lineageheal.store.runs import RunRepository
 
@@ -454,23 +459,50 @@ def _echo_signals(signals: Sequence[Signal]) -> None:
 def detect(
     run_id: Annotated[str, typer.Argument(help="The pipeline run, as shown in the Dagster UI.")],
 ) -> None:
-    """Collect every signal for a run: dbt's results plus unanswered download failures.
+    """Collect a run's signals and open an incident for each shared cause.
 
-    Reads the run's summary from the raw zone, records it in the application database
-    (DATABASE_URL, `make up`) and adds the failed downloads from the ingestion log. Safe to run
-    again: nothing is added twice.
+    Reads the run's summary and manifest from the raw zone, records them in the application
+    database (DATABASE_URL, `make up`), adds the failed downloads from the ingestion log, groups
+    the signals by their shared upstream cause in the lineage graph, and opens or updates one
+    incident per group. Safe to run again: nothing is added twice. With a Gemini or Groq key set,
+    a model refines each new incident's fault class; without one, rules decide.
     """
     with _exit_on_project_errors():
         settings = get_settings()
-        summary = load_run_summary(open_store(settings), run_id)
+        store = open_store(settings)
+        summary = load_run_summary(store, run_id)
+        graph = build_lineage(load_manifest(store, run_id))
         engine = create_db_engine(settings.require_database_url())
         try:
-            collector = SignalCollector(RunRepository(engine), IngestionLogRepository(engine))
-            signals = collector.collect(summary, artifacts_prefix=run_prefix(run_id))
+            runs = RunRepository(engine)
+            signals = SignalCollector(runs, IngestionLogRepository(engine)).collect(
+                summary, artifacts_prefix=run_prefix(run_id)
+            )
+            LineageRepository(engine).save(graph)
+            try:
+                classifier = Classifier(build_client(settings))
+            except ConfigurationError:
+                classifier = Classifier()
+                typer.echo("no LLM key set: fault classes come from rules only")
+            detected = Detector(IncidentRepository(engine), classifier).detect(
+                run_id, signals, graph, at=summary.generated_at
+            )
         finally:
             engine.dispose()
-    typer.echo(f"run {run_id}: {len(signals)} signals")
-    _echo_signals(signals)
+    typer.echo(f"run {run_id}: {len(signals)} signals, {len(detected)} incidents")
+    for item in detected:
+        incident = item.incident
+        typer.echo(
+            f"incident {incident.id} {item.outcome.value}: {incident.severity} "
+            f"{incident.fault_class} ({incident.confidence or 0:.2f}, {incident.classified_by}) "
+            f"root {incident.root_node or 'unknown'}"
+        )
+        typer.echo(f"  {incident.summary}")
+        gold = incident.affected.get("gold_tables") or []
+        if gold:
+            typer.echo(f"  reaches: {', '.join(gold)}")
+    if not signals:
+        typer.echo("no failure signals")
 
 
 # --- the NSE calendar seed -----------------------------------------------------------------

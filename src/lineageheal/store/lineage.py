@@ -1,8 +1,8 @@
 """Stores built lineage graphs, so the agents and the dashboard read the graph an incident saw.
 
 LH-039 builds the graph in memory from the dbt manifest; this module keeps it, keyed by the
-manifest hash (FR-LIN-04). Only the current and the previous version are kept: older ones are
-deleted when a new version arrives.
+manifest hash (FR-LIN-04). The current and the previous version are kept, and so is any older
+version an incident was diagnosed against; the rest are deleted when a new version arrives.
 """
 
 from datetime import UTC, datetime
@@ -14,9 +14,9 @@ from sqlalchemy.orm import Session
 from lineageheal.core.errors import StorageError
 from lineageheal.lineage.graph import EdgeKind, LineageEdge, LineageGraph, LineageNode, NodeKind
 from lineageheal.store.database import explain_database_error
+from lineageheal.store.models import Incident, LineageVersion
 from lineageheal.store.models import LineageEdge as EdgeRow
 from lineageheal.store.models import LineageNode as NodeRow
-from lineageheal.store.models import LineageVersion
 
 # The current version and the one before it, so a change can be compared with what it replaced.
 KEPT_VERSIONS = 2
@@ -151,10 +151,15 @@ class LineageRepository:
 
     @staticmethod
     def _prune(session: Session) -> None:
-        stale = _versions(session, offset=KEPT_VERSIONS)
+        # A version an incident was diagnosed against stays for as long as the incident does;
+        # the foreign key from the incident would refuse to delete it in any case.
+        referenced = set(
+            session.scalars(
+                select(Incident.lineage_version).where(Incident.lineage_version.is_not(None))
+            )
+        )
+        stale = [v for v in _versions(session, offset=KEPT_VERSIONS) if v not in referenced]
         if stale:
-            # TODO(LH-045): incidents do not record a lineage version yet, so this can delete the
-            # version an incident was diagnosed against; record it on the incident first.
             # The foreign keys cascade, so a version's nodes and edges go with it.
             session.execute(delete(LineageVersion).where(LineageVersion.version.in_(stale)))
 

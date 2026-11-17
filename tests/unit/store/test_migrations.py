@@ -34,7 +34,7 @@ def blank_url(tmp_path: Path) -> str:
 
 
 def test_the_newest_revision_creates_the_lineage_tables() -> None:
-    assert head_revision() == "0004"
+    assert head_revision() == "0005"
 
 
 def test_a_fresh_database_has_no_revision_until_upgraded(blank_url: str) -> None:
@@ -42,7 +42,7 @@ def test_a_fresh_database_has_no_revision_until_upgraded(blank_url: str) -> None
 
     upgrade_database(blank_url)
 
-    assert current_revision(blank_url) == "0004"
+    assert current_revision(blank_url) == "0005"
 
 
 def test_upgrading_creates_the_ingestion_log_with_its_indexes(blank_url: str) -> None:
@@ -105,7 +105,7 @@ def test_upgrading_twice_changes_nothing(blank_url: str) -> None:
     upgrade_database(blank_url)
     upgrade_database(blank_url)
 
-    assert current_revision(blank_url) == "0004"
+    assert current_revision(blank_url) == "0005"
 
 
 def test_downgrading_removes_the_tables(blank_url: str) -> None:
@@ -141,7 +141,7 @@ def test_a_percent_sign_in_the_database_path_survives(tmp_path: Path) -> None:
 
     upgrade_database(url)
 
-    assert current_revision(url) == "0004"
+    assert current_revision(url) == "0005"
 
 
 def test_the_plain_alembic_command_reads_the_url_from_the_environment(
@@ -152,7 +152,7 @@ def test_the_plain_alembic_command_reads_the_url_from_the_environment(
 
     alembic_main(argv=["-c", "alembic.ini", "upgrade", "head"])
 
-    assert current_revision(blank_url) == "0004"
+    assert current_revision(blank_url) == "0005"
 
 
 def test_the_plain_alembic_command_says_what_is_missing_without_a_url(
@@ -249,3 +249,30 @@ def _signal_insert(kind: str, name: str) -> TextClause:
 def _signal_names(connection: Connection) -> list[str]:
     rows = connection.execute(text("SELECT name FROM signal ORDER BY name"))
     return [row[0] for row in rows]
+
+
+def test_the_incident_columns_keep_existing_incidents_with_safe_defaults(blank_url: str) -> None:
+    upgrade_database(blank_url, "0004")
+    engine = create_db_engine(blank_url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO incident (status, summary, opened_at, updated_at) VALUES "
+                "('detected', 'old incident', '2026-11-17 10:00:00.000000',"
+                " '2026-11-17 10:00:00.000000')"
+            )
+        )
+
+    upgrade_database(blank_url)
+    with engine.begin() as connection:
+        row = connection.execute(
+            text("SELECT summary, severity, fingerprint, root_node, lineage_version FROM incident")
+        ).one()
+    assert tuple(row) == ("old incident", "error", "", None, None)
+
+    downgrade_database(blank_url, "0004")
+    with engine.begin() as connection:
+        assert (
+            connection.execute(text("SELECT summary FROM incident")).scalar_one() == "old incident"
+        )
+    engine.dispose()

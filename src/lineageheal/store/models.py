@@ -21,6 +21,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -62,6 +63,7 @@ INCIDENT_STATUSES = (
     "rejected",
     "resolved",
 )
+INCIDENT_SEVERITIES = ("error", "warn")
 FAULT_CLASSES = ("schema_drift", "nulls", "duplicates", "unit_change", "late_data", "unknown")
 AGENT_RUN_STATUSES = ("running", "succeeded", "failed", "budget_exhausted")
 FIX_KINDS = ("dbt_patch", "suggestion")
@@ -170,7 +172,9 @@ class Incident(Base):
             "(status <> 'resolved' AND resolved_at IS NULL)",
             name="resolved_means_dated",
         ),
+        CheckConstraint(_one_of("severity", INCIDENT_SEVERITIES), name="severity_is_known"),
         Index("ix_incident_status", "status"),
+        Index("ix_incident_fingerprint", "fingerprint"),
     )
 
     id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
@@ -180,6 +184,25 @@ class Incident(Base):
     # The Investigator's conclusion: the node, whether the fix is inside dbt, and why.
     root_cause: Mapped[dict[str, Any] | None] = mapped_column(JSONType)
     confidence: Mapped[float | None] = mapped_column(Float)
+    # What the Detector knew when it opened the incident (FR-DET-03). `error` when any of the
+    # signals is an error; an incident made only of warnings is `warn`.
+    severity: Mapped[str] = mapped_column(String(8), server_default="error")
+    # The nearest upstream node the signals share, or empty when none could be mapped.
+    root_node: Mapped[str | None] = mapped_column(String(512))
+    # Identifies "the same unresolved cause" across runs: the root node and the rule-based fault
+    # class, which unlike the model's answer never changes for the same signals (FR-DET-05).
+    fingerprint: Mapped[str] = mapped_column(String(64), server_default="")
+    # {"models": [...], "columns": ["model.column", ...], "gold_tables": [...]}
+    affected: Mapped[dict[str, Any]] = mapped_column(JSONType, server_default=text("'{}'"))
+    # The graph version the incident was diagnosed against. The foreign key restricts deletion,
+    # so storing a newer graph can never remove it (LH-092).
+    lineage_version: Mapped[str | None] = mapped_column(
+        ForeignKey(
+            "lineage_version.version", ondelete="RESTRICT", name="fk_incident_lineage_version"
+        )
+    )
+    # Who chose the fault class: "rules", or the prompt and model that did.
+    classified_by: Mapped[str | None] = mapped_column(String(128))
     opened_at: Mapped[datetime] = mapped_column(UTCDateTime())
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime())
     resolved_at: Mapped[datetime | None] = mapped_column(UTCDateTime())

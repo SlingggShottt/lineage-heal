@@ -118,7 +118,7 @@ class RunRepository:
                 rows = session.scalars(
                     select(SignalRow).where(SignalRow.run_id == run_id).order_by(SignalRow.id)
                 )
-                return [_to_signal(row) for row in rows]
+                return [to_signal(row) for row in rows]
         except SQLAlchemyError as exc:
             raise StorageError(f"Could not read signals: {explain_database_error(exc)}") from exc
 
@@ -153,7 +153,8 @@ def _to_row(signal: Signal) -> SignalRow:
     )
 
 
-def _to_signal(row: SignalRow) -> Signal:
+def to_signal(row: SignalRow) -> Signal:
+    """Rebuild a signal from its stored row."""
     return Signal(
         kind=SignalKind(row.kind),
         severity=Severity(row.severity),
