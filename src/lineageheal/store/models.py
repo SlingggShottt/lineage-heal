@@ -9,10 +9,12 @@ from typing import Any
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     Date,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     MetaData,
@@ -60,6 +62,9 @@ FIX_KINDS = ("dbt_patch", "suggestion")
 # issue exists; merged and closed are what a human did with it on GitHub.
 FIX_STATUSES = ("unverified", "verified", "published", "merged", "closed")
 REVIEW_DECISIONS = ("approved", "rejected")
+# Mirror `NodeKind` and `EdgeKind` in lineageheal.lineage.graph.
+LINEAGE_NODE_KINDS = ("raw", "seed", "model")
+LINEAGE_EDGE_KINDS = ("direct", "transform", "aggregate", "filter")
 
 
 def _one_of(column: str, values: tuple[str, ...]) -> str:
@@ -315,3 +320,72 @@ class Review(Base):
     decision: Mapped[str] = mapped_column(String(16))
     reason: Mapped[str | None] = mapped_column(Text)
     decided_at: Mapped[datetime] = mapped_column(UTCDateTime())
+
+
+class LineageVersion(Base):
+    """One build of the lineage graph, identified by the hash of the dbt manifest (FR-LIN-04).
+
+    There is no "current" flag, which two rows could both claim: the current version is the one
+    activated most recently and the previous is the one before it. Saving a version that already
+    exists activates it again, so reverting a model change brings the old graph back as current.
+    """
+
+    __tablename__ = "lineage_version"
+    __table_args__ = (
+        CheckConstraint("node_count >= 0 AND edge_count >= 0", name="counts_are_not_negative"),
+    )
+
+    version: Mapped[str] = mapped_column(String(64), primary_key=True)
+    activated_at: Mapped[datetime] = mapped_column(UTCDateTime())
+    node_count: Mapped[int] = mapped_column(Integer)
+    edge_count: Mapped[int] = mapped_column(Integer)
+
+
+class LineageNode(Base):
+    """A column of a table, or a table's row-set (`<table>.*`), within one graph version."""
+
+    __tablename__ = "lineage_node"
+    __table_args__ = (CheckConstraint(_one_of("kind", LINEAGE_NODE_KINDS), name="kind_is_known"),)
+
+    version: Mapped[str] = mapped_column(
+        ForeignKey("lineage_version.version", ondelete="CASCADE", name="fk_lineage_node_version"),
+        primary_key=True,
+    )
+    # `<table>.<column>`, the name edges refer to; the two parts are kept apart for queries.
+    node_id: Mapped[str] = mapped_column(String(512), primary_key=True)
+    table_name: Mapped[str] = mapped_column(String(256))
+    column_name: Mapped[str] = mapped_column(String(256))
+    kind: Mapped[str] = mapped_column(String(16))
+
+
+class LineageEdge(Base):
+    """An upstream node feeding a downstream one, within one graph version."""
+
+    __tablename__ = "lineage_edge"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["version", "source"],
+            ["lineage_node.version", "lineage_node.node_id"],
+            ondelete="CASCADE",
+            name="fk_lineage_edge_source",
+        ),
+        ForeignKeyConstraint(
+            ["version", "target"],
+            ["lineage_node.version", "lineage_node.node_id"],
+            ondelete="CASCADE",
+            name="fk_lineage_edge_target",
+        ),
+        CheckConstraint(_one_of("kind", LINEAGE_EDGE_KINDS), name="kind_is_known"),
+        # A guessed edge exists only because a model's SQL could not be traced, so it can only
+        # join row-sets (FR-LIN-05); a guess between columns would look like a traced fact.
+        CheckConstraint(
+            "NOT inferred OR (source LIKE '%.*' AND target LIKE '%.*')",
+            name="inferred_joins_row_sets",
+        ),
+    )
+
+    version: Mapped[str] = mapped_column(String(64), primary_key=True)
+    source: Mapped[str] = mapped_column(String(512), primary_key=True)
+    target: Mapped[str] = mapped_column(String(512), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(16), primary_key=True)
+    inferred: Mapped[bool] = mapped_column(Boolean, default=False)

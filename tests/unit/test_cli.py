@@ -583,7 +583,7 @@ def test_db_upgrade_creates_the_tables_and_says_which_revision(
     result = runner.invoke(app, ["db", "upgrade"])
 
     assert result.exit_code == 0
-    assert result.stdout.strip() == "database is at revision 0002"
+    assert result.stdout.strip() == "database is at revision 0003"
 
 
 def test_db_status_reports_missing_current_and_outdated_databases(

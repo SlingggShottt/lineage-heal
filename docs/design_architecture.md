@@ -328,7 +328,7 @@ The dbt project lives in `dbt/`. Its profile has four targets: `dev` (local Duck
 
 ### 7.2 Graph construction
 
-`lineage.builder.build_lineage(manifest)` builds the graph in memory from `target/manifest.json` after `dbt compile` (LH-039); storing it is LH-092.
+`lineage.builder.build_lineage(manifest)` builds the graph in memory from `target/manifest.json` after `dbt compile` (LH-039); `store.lineage.LineageRepository` stores it (LH-092, see section 9).
 
 1. Read models, seeds and sources from the manifest, and order models so a model is traced after its parents.
 2. For each model, use `sqlglot.lineage` (DuckDB dialect) on the compiled SQL to map each output column to the upstream model, seed or raw column it reads. Each edge takes the strongest relationship on its path: `direct` (pass-through or rename), `transform` (expression, including window functions), `aggregate`. Columns used only in `WHERE`, `JOIN ... ON`, `GROUP BY`, `HAVING` or `QUALIFY` get a `filter` edge to the model's row-set node `<model>.*`, traced through CTEs to the column they really read.
@@ -480,7 +480,7 @@ How it is used:
 
 ### Application tables (LH-036, D-39)
 
-Seven tables hold the healing workflow's state. The knowledge, lineage and benchmark tables in the diagram are created by the tasks that define them (LH-047, LH-039, LH-069), because their shape depends on the pgvector package, the graph versioning and the benchmark runner.
+Seven tables hold the healing workflow's state. The knowledge and benchmark tables in the diagram are created by the tasks that define them (LH-047, LH-069), because their shape depends on the pgvector package and the benchmark runner. The lineage tables are described below.
 
 | Table | One row per | Key columns |
 |---|---|---|
@@ -496,6 +496,16 @@ Seven tables hold the healing workflow's state. The knowledge, lineage and bench
 - **Deleting an incident** deletes its agent runs, evidence, fixes and reviews, but only releases its signals, which belong to the run that raised them.
 - **`record_run`** (`store/runs.py`) imports the `RunSummary` that LH-034 writes to `runs/<run_id>/signals.json`. It is idempotent: a run already recorded is left as it was. A summary that repeats a signal is refused whole, since a half-imported run would read as a healthy one.
 - **Structured data** (the root cause, evidence output, counts, model and prompt versions) is JSON, stored as JSONB on Postgres and plain JSON on SQLite, which the unit tests use. The test engine switches SQLite's foreign keys on so that the same rules apply there.
+
+### Lineage tables (LH-092, D-44)
+
+`lineage_version`, `lineage_node` and `lineage_edge` keep built lineage graphs (FR-LIN-04). `LineageRepository` (`store/lineage.py`) saves and loads them.
+
+- **A version is the manifest hash** of LH-039. Its nodes and edges belong to it, and an edge's source and target must be nodes of the same version, so a graph can never point into another one.
+- **The current version is the one activated most recently.** There is no `current` flag that two rows could both claim. `save` returns True for a new version and False for one already stored; saving an older version again (a model change was reverted) activates it again, and saving the current one changes nothing.
+- **Two versions are kept,** the current and the one before it, so a change can be compared with what it replaced. A new version deletes older ones; the foreign keys cascade to their nodes and edges. Incidents do not record a lineage version yet, so nothing protects a version an incident was diagnosed against (`TODO(LH-045)`).
+- **The database refuses** an unknown node or edge kind and a guessed (`inferred`) edge between anything but row-set nodes (FR-LIN-05).
+- **Saving is one transaction,** so a graph is stored whole or not at all.
 
 ### Incident lifecycle
 
