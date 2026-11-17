@@ -583,7 +583,7 @@ def test_db_upgrade_creates_the_tables_and_says_which_revision(
     result = runner.invoke(app, ["db", "upgrade"])
 
     assert result.exit_code == 0
-    assert result.stdout.strip() == "database is at revision 0004"
+    assert result.stdout.strip() == "database is at revision 0005"
 
 
 def test_db_status_reports_missing_current_and_outdated_databases(
@@ -742,6 +742,10 @@ def store_summary(
         summary.model_dump_json().encode("utf-8"),
         metadata={},
     )
+    # An empty project: no model can be placed in the graph, so each signal is its own cause.
+    LocalObjectStore(tmp_path / "raw").put(
+        f"{run_prefix(RUN_ID)}/manifest.json", b'{"nodes": {}, "sources": {}}', metadata={}
+    )
 
 
 def failing_signal() -> Signal:
@@ -820,7 +824,7 @@ def log_failed_download(url: str) -> None:
         engine.dispose()
 
 
-def test_detect_lists_the_dbt_signals_and_the_unanswered_download_failure(
+def test_detect_opens_an_incident_for_each_cause_and_lists_the_signals_behind_them(
     tmp_path: Path, database: str
 ) -> None:
     store_summary(tmp_path, signals=(failing_signal(),))
@@ -829,23 +833,26 @@ def test_detect_lists_the_dbt_signals_and_the_unanswered_download_failure(
     result = runner.invoke(app, ["detect", RUN_ID])
 
     assert result.exit_code == 0
-    assert f"run {RUN_ID}: 2 signals" in result.output
-    assert "error test_failed not_null brz_amfi__navall.nav_inr (1 rows)" in result.output
-    assert (
-        "error ingestion_error ingestion amfi/navall/2026-10-21: "
-        "download failed, HTTP 403: blocked" in result.output
-    )
+    assert "no LLM key set: fault classes come from rules only" in result.output
+    assert f"run {RUN_ID}: 2 signals, 2 incidents" in result.output
+    assert "incident 1 opened: error late_data (0.80, rules) root unknown" in result.output
+    assert "incident 2 opened: error nulls (0.60, rules) root unknown" in result.output
+    assert "not_null on brz_amfi__navall.nav_inr (1 rows)" in result.output
 
 
-def test_detect_can_be_run_again_without_adding_anything(tmp_path: Path, database: str) -> None:
+def test_detect_can_be_run_again_without_opening_anything_new(
+    tmp_path: Path, database: str
+) -> None:
     store_summary(tmp_path, signals=(failing_signal(),))
     log_failed_download(database)
-    first = runner.invoke(app, ["detect", RUN_ID])
+    runner.invoke(app, ["detect", RUN_ID])
 
     second = runner.invoke(app, ["detect", RUN_ID])
 
     assert second.exit_code == 0
-    assert second.output == first.output
+    assert "incident 1 unchanged" in second.output
+    assert "incident 2 unchanged" in second.output
+    assert "opened" not in second.output
 
 
 def test_detect_says_so_when_there_is_nothing_to_report(tmp_path: Path, database: str) -> None:
@@ -854,7 +861,7 @@ def test_detect_says_so_when_there_is_nothing_to_report(tmp_path: Path, database
     result = runner.invoke(app, ["detect", RUN_ID])
 
     assert result.exit_code == 0
-    assert f"run {RUN_ID}: 0 signals" in result.output
+    assert f"run {RUN_ID}: 0 signals, 0 incidents" in result.output
     assert "no failure signals" in result.output
 
 
@@ -868,6 +875,19 @@ def test_detect_without_a_database_names_the_missing_setting(tmp_path: Path) -> 
 
 
 def test_detect_for_a_run_that_was_never_recorded_is_a_one_line_error(database: str) -> None:
+    result = runner.invoke(app, ["detect", RUN_ID])
+
+    assert result.exit_code == 1
+    assert result.output.startswith("error:")
+    assert "Traceback" not in result.output
+
+
+def test_detect_for_a_run_with_no_manifest_is_a_one_line_error(
+    tmp_path: Path, database: str
+) -> None:
+    store_summary(tmp_path, signals=())
+    (tmp_path / "raw" / run_prefix(RUN_ID) / "manifest.json").unlink()
+
     result = runner.invoke(app, ["detect", RUN_ID])
 
     assert result.exit_code == 1

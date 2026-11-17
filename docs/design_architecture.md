@@ -384,10 +384,15 @@ The graph state is a typed model holding: incident ID, signals, affected nodes, 
 Mostly deterministic, so its behaviour is predictable and testable:
 
 1. Collect signals (`agents/detector/collect.py`, LH-044). dbt's own already cover test failures, model errors, the anomaly monitors and the expected-file check, because the monitors and that check are dbt tests (D-29, D-37). What dbt cannot know is a download that failed before it ran, so the collector adds an `ingestion_error` signal for each failed attempt in the ingestion log that no later attempt has answered (a later stored file, an unchanged one or a "no data" answer resolves it). The window is the run's own time back a week, so an old gap in a backfill does not raise a signal for ever, and the clock is never read, so collecting for a past run gives the same signals. Ingestion signals are stored on the run being examined, named `<source>/<dataset>/<trade date>`, and a run's status stays as dbt's results set it. `lineageheal detect RUN_ID` runs this step.
-2. Map each signal to lineage nodes.
-3. Group signals whose nodes share a common upstream ancestor within a depth limit (FR-DET-02).
-4. Match against open incidents by root ancestor and fault fingerprint to avoid duplicates (FR-DET-05).
-5. One LLM call classifies the fault and writes a short summary (FR-DET-04).
+2. Map each signal to a lineage node (`agents/detector/grouping.py`, LH-045): a column-level signal sits on its column, falling back to the model's row-set when the column is not in the graph; a failed download sits on the raw file's row-set; a signal with no model (a run error) cannot be placed.
+3. Group signals whose nodes share an upstream ancestor within six edges (FR-DET-02). Filter edges are left out of this step, because many models filter on the same calendar and that would merge failures with nothing in common; the Investigator still follows them. A group's root is the nearest node all its members share, or the most widely shared one when none is in every member. A signal that cannot be placed is a group of its own. The result is deterministic: the same signals and graph give the same groups in the same order.
+4. Describe each group (FR-DET-03): the models it touches downstream, the failing columns, the gold tables a reader would see, and a severity (`error` if any signal is an error, otherwise `warn`).
+5. Fingerprint the group from its root node and its rule-based fault class, and look for an open (not resolved) incident with that fingerprint (FR-DET-05). If there is one, the group's signals are attached to it and nothing new is opened. The rule class, not the model's answer, goes into the fingerprint, because the same signals always give the same rule class while a model can answer differently next time.
+6. Only for a new incident, classify it (`agents/detector/classify.py`, FR-DET-04). Rules map each failing check to a class and a confidence, and always produce an answer. When an LLM key is configured, one light-tier call (prompt `detector.classify.v1`) may overrule the rules, give a confidence and write the summary; if that call fails or returns something unusable, the rules' answer stands. The incident records who decided (`rules`, or the prompt and model), and the graph version it was diagnosed against.
+
+`lineageheal detect RUN_ID` runs steps 1 to 6, so a re-run costs no model call for a cause that already has an incident.
+
+**Known limits:** a failed download sits on the raw file's row-set, which has no downstream edges in the graph, so it opens an incident of its own rather than joining the bronze failure it causes. A check cannot tell nulls from schema drift (a renamed column makes every value null), so the rules call it nulls with modest confidence and leave the distinction to the model and the Investigator.
 
 ### 8.4 Investigator
 
@@ -486,7 +491,7 @@ Seven tables hold the healing workflow's state. The knowledge and benchmark tabl
 |---|---|---|
 | `pipeline_run` | dbt run | `run_id` (the Dagster run id, text, which is also the folder under `runs/`), `status` (`failed` when any signal is an error, `succeeded` otherwise), `counts`, `skipped_models`, `artifacts_prefix` |
 | `signal` | failure observation | `run_id`, `incident_id` (empty until the Detector groups it), `kind`, `severity`, `model`, `column_name`, `check_type`, `failures`, `message`; unique per run, kind and name |
-| `incident` | grouped failure | `status` (the lifecycle below), `fault_class` (the five classes or `unknown`), `summary`, `root_cause` (JSON), `confidence`, `opened_at`, `resolved_at` |
+| `incident` | grouped failure | `status` (the lifecycle below), `fault_class` (the five classes or `unknown`), `confidence`, `classified_by` (`rules`, or prompt and model), `summary`, `severity`, `root_node`, `fingerprint` (the cause across runs), `affected` (JSON: models, columns, gold tables), `lineage_version`, `root_cause` (JSON, the Investigator's), `opened_at`, `resolved_at` |
 | `agent_run` | healing execution | `incident_id`, `status`, `model_ids`, `prompt_versions`, `llm_calls`, token counts, `trace_url`, `error` (NFR-REPRO-01) |
 | `evidence` | tool output | `agent_run_id`, `tool`, `arguments`, `output`, `hypothesis` |
 | `fix` | proposed change | `incident_id`, `kind` (`dbt_patch` or `suggestion`), `status`, `patch`, `files`, `sandbox_result`, `branch`, `github_url` |
@@ -503,7 +508,7 @@ Seven tables hold the healing workflow's state. The knowledge and benchmark tabl
 
 - **A version is the manifest hash** of LH-039. Its nodes and edges belong to it, and an edge's source and target must be nodes of the same version, so a graph can never point into another one.
 - **The current version is the one activated most recently.** There is no `current` flag that two rows could both claim. `save` returns True for a new version and False for one already stored; saving an older version again (a model change was reverted) activates it again, and saving the current one changes nothing.
-- **Two versions are kept,** the current and the one before it, so a change can be compared with what it replaced. A new version deletes older ones; the foreign keys cascade to their nodes and edges. Incidents do not record a lineage version yet, so nothing protects a version an incident was diagnosed against (`TODO(LH-045)`).
+- **Two versions are kept,** the current and the one before it, so a change can be compared with what it replaced. A new version deletes older ones; the foreign keys cascade to their nodes and edges. An incident records the version it was diagnosed against (LH-045), and a version an incident uses is never deleted: pruning skips it, and the foreign key from the incident refuses the delete in any case.
 - **The database refuses** an unknown node or edge kind and a guessed (`inferred`) edge between anything but row-set nodes (FR-LIN-05).
 - **Saving is one transaction,** so a graph is stored whole or not at all.
 

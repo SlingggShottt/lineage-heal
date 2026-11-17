@@ -119,3 +119,20 @@ def load_run_summary(store: ObjectStore, run_id: str) -> RunSummary:
         return RunSummary.model_validate_json(raw)
     except ValueError as exc:
         raise ArtifactError(f"Invalid signals summary for run {run_id}: {exc}") from exc
+
+
+def load_manifest(store: ObjectStore, run_id: str) -> dict[str, Any]:
+    """Read back the dbt manifest a run kept, which the lineage graph is built from.
+
+    Raises:
+        ArtifactError: The run id is unusable or the manifest is not a JSON object.
+        StorageError: There is no manifest for this run.
+    """
+    raw = store.get(f"{run_prefix(run_id)}/manifest.json")
+    try:
+        manifest = json.loads(raw)
+    except ValueError as exc:
+        raise ArtifactError(f"Invalid manifest for run {run_id}: {exc}") from exc
+    if not isinstance(manifest, dict):
+        raise ArtifactError(f"The manifest of run {run_id} is not a JSON object")
+    return manifest
