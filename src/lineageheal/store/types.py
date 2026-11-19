@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import JSON, DateTime
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine import Dialect
@@ -39,3 +40,11 @@ class UTCDateTime(TypeDecorator[datetime]):
 # JSON is stored as JSONB on Postgres, which can be indexed and queried, and as plain JSON on
 # SQLite, which the unit tests use.
 JSONType = JSON().with_variant(JSONB(), "postgresql")
+
+# Size of the vectors the knowledge index stores. The column type fixes it, so an embedding model
+# with a different size needs a migration, not just a setting.
+EMBEDDING_DIMENSIONS = 384
+
+# pgvector's column on Postgres. SQLite, used by the unit tests, has no vector type, so the same
+# list of numbers is kept as JSON there; the tests then exercise everything except the search.
+EmbeddingType = JSON().with_variant(Vector(EMBEDDING_DIMENSIONS), "postgresql")

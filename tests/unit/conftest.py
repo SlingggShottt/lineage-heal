@@ -1,4 +1,4 @@
-"""Fixtures for the store's tests: a migrated SQLite database in a temporary folder."""
+"""Fixtures shared by the unit tests that use the application database: a migrated SQLite file."""
 
 from collections.abc import Iterator
 from pathlib import Path

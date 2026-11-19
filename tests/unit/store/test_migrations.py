@@ -6,10 +6,9 @@ from pathlib import Path
 
 import pytest
 from alembic import command
-from alembic.autogenerate import compare_metadata
 from alembic.config import main as alembic_main
-from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
+from schema_drift import schema_differences
 from sqlalchemy import CheckConstraint, Connection, inspect, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql.elements import TextClause
@@ -33,8 +32,8 @@ def blank_url(tmp_path: Path) -> str:
     return f"sqlite+pysqlite:///{tmp_path / 'blank.db'}"
 
 
-def test_the_newest_revision_creates_the_lineage_tables() -> None:
-    assert head_revision() == "0005"
+def test_the_newest_revision_creates_the_knowledge_tables() -> None:
+    assert head_revision() == "0006"
 
 
 def test_a_fresh_database_has_no_revision_until_upgraded(blank_url: str) -> None:
@@ -42,7 +41,7 @@ def test_a_fresh_database_has_no_revision_until_upgraded(blank_url: str) -> None
 
     upgrade_database(blank_url)
 
-    assert current_revision(blank_url) == "0005"
+    assert current_revision(blank_url) == "0006"
 
 
 def test_upgrading_creates_the_ingestion_log_with_its_indexes(blank_url: str) -> None:
@@ -76,6 +75,8 @@ def test_upgrading_creates_every_application_table(blank_url: str) -> None:
         "lineage_version",
         "lineage_node",
         "lineage_edge",
+        "knowledge_document",
+        "knowledge_chunk",
     }
 
 
@@ -105,7 +106,7 @@ def test_upgrading_twice_changes_nothing(blank_url: str) -> None:
     upgrade_database(blank_url)
     upgrade_database(blank_url)
 
-    assert current_revision(blank_url) == "0005"
+    assert current_revision(blank_url) == "0006"
 
 
 def test_downgrading_removes_the_tables(blank_url: str) -> None:
@@ -129,7 +130,7 @@ def test_the_models_and_the_migrations_describe_the_same_schema(blank_url: str) 
     engine = create_db_engine(blank_url)
 
     with engine.connect() as connection:
-        differences = compare_metadata(MigrationContext.configure(connection), Base.metadata)
+        differences = schema_differences(connection)
     engine.dispose()
 
     assert differences == []
@@ -141,7 +142,7 @@ def test_a_percent_sign_in_the_database_path_survives(tmp_path: Path) -> None:
 
     upgrade_database(url)
 
-    assert current_revision(url) == "0005"
+    assert current_revision(url) == "0006"
 
 
 def test_the_plain_alembic_command_reads_the_url_from_the_environment(
@@ -152,7 +153,7 @@ def test_the_plain_alembic_command_reads_the_url_from_the_environment(
 
     alembic_main(argv=["-c", "alembic.ini", "upgrade", "head"])
 
-    assert current_revision(blank_url) == "0005"
+    assert current_revision(blank_url) == "0006"
 
 
 def test_the_plain_alembic_command_says_what_is_missing_without_a_url(
@@ -276,3 +277,28 @@ def test_the_incident_columns_keep_existing_incidents_with_safe_defaults(blank_u
             connection.execute(text("SELECT summary FROM incident")).scalar_one() == "old incident"
         )
     engine.dispose()
+
+
+def test_upgrading_creates_the_knowledge_tables_with_their_indexes(blank_url: str) -> None:
+    upgrade_database(blank_url)
+    engine = create_db_engine(blank_url)
+
+    inspector = inspect(engine)
+    chunk_columns = {c["name"] for c in inspector.get_columns("knowledge_chunk")}
+    indexes = {i["name"] for i in inspector.get_indexes("knowledge_chunk")}
+    engine.dispose()
+
+    assert {"document_id", "position", "text", "embedding", "embedding_model"} <= chunk_columns
+    assert "ix_knowledge_chunk_embedding" in indexes
+
+
+def test_the_offline_sql_enables_pgvector_and_adds_the_search_indexes() -> None:
+    config = _config("postgresql+psycopg://reviewer@localhost/none")
+    config.output_buffer = StringIO()
+
+    command.upgrade(config, "head", sql=True)
+
+    sql = config.output_buffer.getvalue()
+    assert "CREATE EXTENSION IF NOT EXISTS vector" in sql
+    assert "USING hnsw (embedding vector_cosine_ops)" in sql
+    assert "USING gin (to_tsvector('english', text))" in sql

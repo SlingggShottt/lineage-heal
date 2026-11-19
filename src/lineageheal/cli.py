@@ -46,9 +46,12 @@ from lineageheal.lineage.builder import build_lineage
 from lineageheal.llm.factory import build_client, build_endpoints
 from lineageheal.llm.types import LLMError, LLMRequest, ModelTier
 from lineageheal.orchestration.run_artifacts import load_manifest, load_run_summary, run_prefix
+from lineageheal.rag.embeddings import build_embedder
+from lineageheal.rag.indexer import LIVE_NAMESPACE, RunbookIndexer
 from lineageheal.store.database import create_db_engine
 from lineageheal.store.incidents import IncidentRepository
 from lineageheal.store.ingestion_log import IngestionAttempt, IngestionLogRepository
+from lineageheal.store.knowledge import KnowledgeRepository
 from lineageheal.store.lineage import LineageRepository
 from lineageheal.store.migrate import current_revision, head_revision, upgrade_database
 from lineageheal.store.runs import RunRepository
@@ -503,6 +506,40 @@ def detect(
             typer.echo(f"  reaches: {', '.join(gold)}")
     if not signals:
         typer.echo("no failure signals")
+
+
+@app.command("index")
+def index_knowledge(
+    runbooks_dir: Annotated[
+        Path, typer.Option("--runbooks", help="Folder of runbooks to index.")
+    ] = Path("docs/runbooks"),
+    namespace: Annotated[
+        str, typer.Option(help="Which index to write; benchmark runs use their own.")
+    ] = LIVE_NAMESPACE,
+) -> None:
+    """Index the runbooks so the agents can retrieve them.
+
+    Splits each runbook by section, embeds the sections with a local model (downloaded on first
+    use into EMBEDDING_CACHE_DIR, about 130 MB) and stores them in the application database
+    (DATABASE_URL, `make up`). Safe to run again: unchanged runbooks are skipped, edited ones
+    replaced and deleted ones removed.
+    """
+    with _exit_on_project_errors():
+        settings = get_settings()
+        engine = create_db_engine(settings.require_database_url())
+        try:
+            repository = KnowledgeRepository(engine)
+            report = RunbookIndexer(repository, build_embedder(settings)).index(
+                runbooks_dir, namespace=namespace
+            )
+            documents, chunks = repository.counts(namespace)
+        finally:
+            engine.dispose()
+    for slug, outcome in report.outcomes.items():
+        typer.echo(f"{outcome.value:9} {slug}")
+    for slug in report.removed:
+        typer.echo(f"removed   {slug}")
+    typer.echo(f"{namespace}: {documents} documents, {chunks} chunks")
 
 
 # --- the NSE calendar seed -----------------------------------------------------------------
