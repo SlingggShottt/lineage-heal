@@ -14,6 +14,7 @@ from sqlalchemy import Engine, text
 from lineageheal.core.errors import KnowledgeError
 from lineageheal.rag.embeddings import Embedder, FastEmbedder, HashingEmbedder
 from lineageheal.rag.indexer import RunbookIndexer
+from lineageheal.rag.retriever import Retriever
 from lineageheal.store.database import create_db_engine
 from lineageheal.store.knowledge import KnowledgeRepository
 from lineageheal.store.migrate import upgrade_database
@@ -119,3 +120,48 @@ def test_the_real_model_puts_the_matching_runbook_first_for_a_paraphrase(
         rows = connection.execute(NEAREST, {"query": str(query)}).all()
 
     assert rows[0][0] == "unit-change"
+
+
+def test_hybrid_search_on_postgres_matches_the_unit_test_behaviour(engine: Engine) -> None:
+    embedder = HashingEmbedder()
+    index_with(engine, embedder)
+    retriever = Retriever(KnowledgeRepository(engine), embedder)
+
+    hits = retriever.search("prices arrive in paise instead of rupees")
+    narrowed = retriever.search("prices arrive in paise", fault_class="nulls")
+
+    assert hits[0].chunk.slug == "unit-change"
+    assert hits[0].keyword_rank is not None
+    assert hits[0].vector_rank is not None
+    assert {h.chunk.fault_class for h in narrowed} == {"nulls"}
+
+
+def test_the_keyword_search_stems_words_and_survives_punctuation(engine: Engine) -> None:
+    embedder = HashingEmbedder()
+    index_with(engine, embedder)
+    repository = KnowledgeRepository(engine)
+
+    stemmed = repository.keyword_search("live", "duplicated rows (key; | & !)", limit=5)
+
+    assert stemmed
+    assert {m.fault_class for m in stemmed} >= {"duplicates"}
+
+
+@pytest.mark.slow
+def test_the_real_model_and_full_text_together_find_the_right_runbook(engine: Engine) -> None:
+    embedder = FastEmbedder("BAAI/bge-small-en-v1.5", Path(".data/models"))
+    try:
+        embedder.embed_query("warm up")
+    except KnowledgeError as exc:
+        pytest.skip(f"the embedding model is not available: {exc}")
+    index_with(engine, embedder)
+    retriever = Retriever(KnowledgeRepository(engine), embedder)
+
+    cases = {
+        "the exchange renamed a column overnight and the loader reads nothing": "schema-drift",
+        "the same scheme appears twice for one date": "duplicates",
+        "today's file was never published": "late-data",
+    }
+    found = {query: retriever.search(query)[0].chunk.slug for query in cases}
+
+    assert found == cases

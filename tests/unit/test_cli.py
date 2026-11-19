@@ -1141,3 +1141,40 @@ def test_index_reports_a_folder_without_runbooks(
 
     assert result.exit_code == 1
     assert "No runbooks" in result.output
+
+
+def test_search_shows_the_ranked_hits_with_where_each_search_put_them(
+    database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cli, "build_embedder", lambda _settings: HashingEmbedder())
+    runner.invoke(app, ["index"])
+
+    result = runner.invoke(app, ["search", "prices arrive in paise", "--limit", "2"])
+
+    assert result.exit_code == 0
+    first = result.stdout.splitlines()[0]
+    assert "runbook/unit-change" in first
+    assert "[unit_change]" in first
+    assert "vector #" in first
+    assert len(result.stdout.splitlines()) == 2
+
+
+def test_search_filters_and_says_when_nothing_matches(
+    database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cli, "build_embedder", lambda _settings: HashingEmbedder())
+    runner.invoke(app, ["index"])
+
+    result = runner.invoke(app, ["search", "paise", "--source", "incident"])
+
+    assert result.exit_code == 0
+    assert result.stdout.strip() == "no matches"
+
+
+def test_search_rejects_a_blank_query(database: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli, "build_embedder", lambda _settings: HashingEmbedder())
+
+    result = runner.invoke(app, ["search", " "])
+
+    assert result.exit_code == 1
+    assert "non-empty" in result.output

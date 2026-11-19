@@ -1,21 +1,26 @@
 """The knowledge index in the application database: documents, their chunks and embeddings.
 
-This module only stores and reads. What goes in (chunking, embedding) is `lineageheal.rag`,
-and searching is added with hybrid retrieval (LH-048).
+This module only stores and reads. What goes in (chunking, embedding) and how the two kinds of
+search are combined is `lineageheal.rag`; here each search is a single ranked query.
 """
 
 import enum
+import math
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import Engine, delete, func, select
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import Engine, Float, delete, func, literal, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
+from sqlalchemy.sql import Select
 
 from lineageheal.core.errors import StorageError
 from lineageheal.store.database import explain_database_error
 from lineageheal.store.models import KnowledgeChunk, KnowledgeDocument
+from lineageheal.store.types import EMBEDDING_DIMENSIONS
 
 
 class IndexOutcome(enum.StrEnum):
@@ -49,6 +54,30 @@ class ChunkToIndex:
     heading: str
     text: str
     embedding: list[float]
+
+
+@dataclass(frozen=True)
+class ChunkMatch:
+    """A chunk found by one search, with the document it belongs to."""
+
+    chunk_id: int
+    slug: str
+    source: str
+    title: str
+    fault_class: str
+    heading: str
+    text: str
+
+
+_WORD = re.compile(r"[a-z0-9]+")
+
+
+def query_words(query: str) -> list[str]:
+    """The lower-case alphanumeric words of a query, in order and without repeats.
+
+    Anything else is dropped, which also keeps a query from being read as full-text syntax.
+    """
+    return list(dict.fromkeys(_WORD.findall(query.lower())))
 
 
 class KnowledgeRepository:
@@ -180,6 +209,95 @@ class KnowledgeRepository:
         except SQLAlchemyError as exc:
             raise StorageError(f"Could not read the knowledge index: {_why(exc)}") from exc
 
+    def vector_search(
+        self,
+        namespace: str,
+        embedding: Sequence[float],
+        *,
+        limit: int,
+        fault_class: str | None = None,
+        source: str | None = None,
+    ) -> list[ChunkMatch]:
+        """The chunks nearest to a query vector by cosine distance, best first.
+
+        Postgres ranks with pgvector's `<=>`, which the HNSW index serves. SQLite has no vector
+        type, so it ranks in Python; that is only for unit tests and small stores.
+        """
+        try:
+            with Session(self._engine) as session:
+                query = self._chunks(session, namespace, fault_class, source)
+                if self._engine.dialect.name == "postgresql":
+                    distance = KnowledgeChunk.embedding.op("<=>", return_type=Float)(
+                        literal(list(embedding), Vector(EMBEDDING_DIMENSIONS))
+                    )
+                    rows = session.execute(query.order_by(distance, KnowledgeChunk.id).limit(limit))
+                    return [_match(chunk, doc) for chunk, doc in rows]
+                scored = [
+                    (_cosine_distance(embedding, chunk.embedding), chunk.id, chunk, doc)
+                    for chunk, doc in session.execute(query)
+                ]
+                scored.sort(key=lambda item: item[:2])
+                return [_match(chunk, doc) for _, _, chunk, doc in scored[:limit]]
+        except SQLAlchemyError as exc:
+            raise StorageError(f"Could not search the knowledge index: {_why(exc)}") from exc
+
+    def keyword_search(
+        self,
+        namespace: str,
+        query: str,
+        *,
+        limit: int,
+        fault_class: str | None = None,
+        source: str | None = None,
+    ) -> list[ChunkMatch]:
+        """The chunks containing any of the query's words, best first.
+
+        A chunk needs only one word to match, because queries here are sentences describing a
+        failure and requiring every word would find nothing. Postgres ranks with `ts_rank_cd`
+        over English-stemmed text, using the GIN index; SQLite counts matching words, which is
+        cruder but orders the same way for the small cases the unit tests use.
+        """
+        words = query_words(query)
+        if not words:
+            return []
+        try:
+            with Session(self._engine) as session:
+                base = self._chunks(session, namespace, fault_class, source)
+                if self._engine.dialect.name == "postgresql":
+                    tsquery = func.to_tsquery("english", " | ".join(words))
+                    vector = func.to_tsvector("english", KnowledgeChunk.text)
+                    rows = session.execute(
+                        base.where(vector.op("@@")(tsquery))
+                        .order_by(func.ts_rank_cd(vector, tsquery).desc(), KnowledgeChunk.id)
+                        .limit(limit)
+                    )
+                    return [_match(chunk, doc) for chunk, doc in rows]
+                scored = []
+                for chunk, doc in session.execute(base):
+                    present = set(_WORD.findall(chunk.text.lower()))
+                    hits = sum(word in present for word in words)
+                    if hits:
+                        scored.append((-hits, chunk.id, chunk, doc))
+                scored.sort(key=lambda item: item[:2])
+                return [_match(chunk, doc) for _, _, chunk, doc in scored[:limit]]
+        except SQLAlchemyError as exc:
+            raise StorageError(f"Could not search the knowledge index: {_why(exc)}") from exc
+
+    @staticmethod
+    def _chunks(
+        session: Session, namespace: str, fault_class: str | None, source: str | None
+    ) -> Select[KnowledgeChunk, KnowledgeDocument]:
+        query = (
+            select(KnowledgeChunk, KnowledgeDocument)
+            .join(KnowledgeDocument, KnowledgeChunk.document_id == KnowledgeDocument.id)
+            .where(KnowledgeDocument.namespace == namespace)
+        )
+        if fault_class is not None:
+            query = query.where(KnowledgeDocument.fault_class == fault_class)
+        if source is not None:
+            query = query.where(KnowledgeDocument.source == source)
+        return query
+
     @staticmethod
     def _find(session: Session, namespace: str, source: str, slug: str) -> KnowledgeDocument | None:
         return session.scalar(
@@ -193,3 +311,22 @@ class KnowledgeRepository:
 
 def _why(exc: SQLAlchemyError) -> str:
     return explain_database_error(exc)
+
+
+def _match(chunk: KnowledgeChunk, document: KnowledgeDocument) -> ChunkMatch:
+    return ChunkMatch(
+        chunk_id=chunk.id,
+        slug=document.slug,
+        source=document.source,
+        title=document.title,
+        fault_class=document.fault_class,
+        heading=chunk.heading,
+        text=chunk.text,
+    )
+
+
+def _cosine_distance(a: Sequence[float], b: Sequence[float]) -> float:
+    norm = math.sqrt(sum(x * x for x in a)) * math.sqrt(sum(y * y for y in b))
+    if norm == 0:
+        return 1.0
+    return 1.0 - sum(x * y for x, y in zip(a, b, strict=True)) / norm
