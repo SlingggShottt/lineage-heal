@@ -25,7 +25,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from lineageheal.store.types import JSONType, UTCDateTime
+from lineageheal.store.types import EmbeddingType, JSONType, UTCDateTime
 
 # Fixed names for keys, indexes and checks keep migrations stable and readable.
 NAMING_CONVENTION = {
@@ -74,6 +74,8 @@ REVIEW_DECISIONS = ("approved", "rejected")
 # Mirror `NodeKind` and `EdgeKind` in lineageheal.lineage.graph.
 LINEAGE_NODE_KINDS = ("raw", "seed", "model")
 LINEAGE_EDGE_KINDS = ("direct", "transform", "aggregate", "filter")
+# What the knowledge index holds: runbooks now, decided incidents once reviews exist.
+KNOWLEDGE_SOURCES = ("runbook", "incident")
 
 
 def _one_of(column: str, values: tuple[str, ...]) -> str:
@@ -419,3 +421,59 @@ class LineageEdge(Base):
     target: Mapped[str] = mapped_column(String(512), primary_key=True)
     kind: Mapped[str] = mapped_column(String(16), primary_key=True)
     inferred: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class KnowledgeDocument(Base):
+    """A runbook or past incident that the agents can retrieve from (FR-KB-01).
+
+    The namespace keeps the benchmark's knowledge (runbooks plus seed-split incidents) apart
+    from the live index, so a benchmark run can never see an incident it is being tested on
+    (FR-KB-03). The hash lets re-indexing skip a document that has not changed.
+    """
+
+    __tablename__ = "knowledge_document"
+    __table_args__ = (
+        UniqueConstraint("namespace", "source", "slug", name="uq_knowledge_document_identity"),
+        CheckConstraint(_one_of("source", KNOWLEDGE_SOURCES), name="source_is_known"),
+        CheckConstraint(_one_of("fault_class", FAULT_CLASSES), name="fault_class_is_known"),
+    )
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    namespace: Mapped[str] = mapped_column(String(64))
+    source: Mapped[str] = mapped_column(String(16))
+    # The runbook's file name without its extension, or an incident's id: stable across edits.
+    slug: Mapped[str] = mapped_column(String(128))
+    title: Mapped[str] = mapped_column(String(256))
+    fault_class: Mapped[str] = mapped_column(String(32))
+    feeds: Mapped[str] = mapped_column(String(256), default="")
+    content_hash: Mapped[str] = mapped_column(String(64))
+    indexed_at: Mapped[datetime] = mapped_column(UTCDateTime())
+
+
+class KnowledgeChunk(Base):
+    """One piece of a document, small enough to retrieve on its own, with its embedding.
+
+    A full-text index over `text` exists on Postgres only (migration 0006): it is an expression
+    index, which the models cannot describe portably.
+    """
+
+    __tablename__ = "knowledge_chunk"
+    __table_args__ = (
+        UniqueConstraint("document_id", "position", name="uq_knowledge_chunk_position"),
+        Index(
+            "ix_knowledge_chunk_embedding",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("knowledge_document.id", ondelete="CASCADE", name="fk_knowledge_chunk_document")
+    )
+    position: Mapped[int] = mapped_column(Integer)
+    heading: Mapped[str] = mapped_column(String(128))
+    text: Mapped[str] = mapped_column(Text)
+    embedding: Mapped[list[float]] = mapped_column(EmbeddingType)
+    embedding_model: Mapped[str] = mapped_column(String(128))

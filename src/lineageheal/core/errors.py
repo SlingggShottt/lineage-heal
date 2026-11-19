@@ -40,3 +40,7 @@ class AgentError(LineageHealError):
 
 class BenchmarkError(LineageHealError):
     """A fault could not be injected or a benchmark step could not run."""
+
+
+class KnowledgeError(LineageHealError):
+    """A runbook could not be read, or the knowledge index could not be built or searched."""

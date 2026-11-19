@@ -74,6 +74,13 @@ class Settings(BaseSettings):
     gemini_requests_per_minute: float = Field(default=10.0, gt=0)
     groq_requests_per_minute: float = Field(default=20.0, gt=0)
 
+    # Embeddings run locally (D-06). The stored vectors are only comparable with ones from the
+    # same model, so the name is recorded with each chunk and a changed setting re-indexes.
+    # The knowledge tables hold 384-dimension vectors, so the model must produce that many.
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
+    # fastembed would otherwise download the model into the system temp folder on every reboot.
+    embedding_cache_dir: Path = Path(".data/models")
+
     r2_account_id: str | None = None
     r2_access_key_id: SecretStr | None = None
     r2_secret_access_key: SecretStr | None = None

@@ -135,7 +135,8 @@ Model IDs live in configuration, never in code. All calls go through `lineagehea
 |---|---|
 | **Postgres + pgvector** (Neon) | Vector search over past incidents and runbooks |
 | **Postgres full-text search** | Keyword search, combined with vector search using reciprocal rank fusion |
-| **fastembed** with `BAAI/bge-small-en-v1.5` | Local 384-dimension embeddings, CPU-only, no API calls |
+| **fastembed** with `BAAI/bge-small-en-v1.5` | Local 384-dimension embeddings, CPU-only, no API calls. The model is downloaded on first use (about 130 MB, as a quantised ONNX file) into `EMBEDDING_CACHE_DIR`; `EMBEDDING_MODEL` can name another 384-dimension model |
+| **pgvector** (Python package) | The `vector` column type for SQLAlchemy; the extension itself comes with the Postgres image |
 
 A cross-encoder reranker (also via fastembed) will be evaluated during the build and kept only if it measurably improves root-cause accuracy.
 
@@ -196,6 +197,8 @@ Deployments: Render auto-deploys the API from `main`; Cloudflare Pages builds th
 | SQLAlchemy | MIT |
 | Alembic | MIT |
 | psycopg 3 (with `psycopg-binary`) | LGPL-3.0 |
+| pgvector (Python package) | MIT |
+| fastembed | Apache-2.0 |
 
 psycopg is the project's only copyleft dependency. The LGPL permits using it as a library from code under another licence, as here, without affecting that code's licence; modifying psycopg itself would carry LGPL obligations.
 

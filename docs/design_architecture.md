@@ -485,7 +485,7 @@ How it is used:
 
 ### Application tables (LH-036, D-39)
 
-Seven tables hold the healing workflow's state. The knowledge and benchmark tables in the diagram are created by the tasks that define them (LH-047, LH-069), because their shape depends on the pgvector package and the benchmark runner. The lineage tables are described below.
+Seven tables hold the healing workflow's state. The benchmark tables in the diagram are created by the task that defines them (LH-069), because their shape depends on the benchmark runner. The lineage and knowledge tables are described below.
 
 | Table | One row per | Key columns |
 |---|---|---|
@@ -531,6 +531,15 @@ stateDiagram-v2
     unresolved --> resolved: fixed manually
     resolved --> [*]
 ```
+
+### Knowledge tables (LH-047, D-47)
+
+| Table | One row per | Key columns |
+|---|---|---|
+| `knowledge_document` | runbook (later, decided incident) | `namespace` (`live`, or the benchmark's own), `source` (`runbook` or `incident`), `slug`, `title`, `fault_class`, `feeds`, `content_hash`, `indexed_at`; unique per namespace, source and slug |
+| `knowledge_chunk` | section of a document | `document_id`, `position`, `heading`, `text` (title, heading and body, which is what is embedded and searched), `embedding` (`vector(384)`), `embedding_model` |
+
+Migration 0006 enables the pgvector extension and adds an HNSW index on `embedding` using cosine distance and a GIN index on `to_tsvector('english', text)`; a keyword query must repeat that expression to use the index. On SQLite, which the unit tests use, the vector is stored as JSON and the full-text index is not created. `lineageheal index` is idempotent: it skips a runbook whose text and embedding model are unchanged before embedding anything, replaces an edited one in one transaction, and removes one deleted from the repository. A runbook that does not follow the template stops the run before anything is removed.
 
 ## 10. API and review flow
 

@@ -27,6 +27,7 @@ from lineageheal.llm.fake import FakeProvider
 from lineageheal.llm.limiter import TokenBucket
 from lineageheal.llm.types import BadRequestError
 from lineageheal.orchestration.run_artifacts import SUMMARY_FILE, run_prefix
+from lineageheal.rag.embeddings import HashingEmbedder
 from lineageheal.store.database import create_db_engine
 from lineageheal.store.ingestion_log import IngestionAttempt, IngestionLogRepository
 from lineageheal.store.migrate import upgrade_database
@@ -583,7 +584,7 @@ def test_db_upgrade_creates_the_tables_and_says_which_revision(
     result = runner.invoke(app, ["db", "upgrade"])
 
     assert result.exit_code == 0
-    assert result.stdout.strip() == "database is at revision 0005"
+    assert result.stdout.strip() == "database is at revision 0006"
 
 
 def test_db_status_reports_missing_current_and_outdated_databases(
@@ -1100,3 +1101,43 @@ def test_llm_smoke_without_keys_says_which_variables_to_set(
 
     assert result.exit_code == 1
     assert "GEMINI_API_KEY" in result.output
+
+
+# --- index -----------------------------------------------------------------------------------
+
+
+def test_index_stores_the_runbooks_and_a_second_run_skips_them(
+    database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cli, "build_embedder", lambda _settings: HashingEmbedder())
+
+    first = runner.invoke(app, ["index"])
+    second = runner.invoke(app, ["index"])
+
+    assert first.exit_code == 0
+    assert "added     nulls" in first.stdout
+    assert "live: 5 documents, 20 chunks" in first.stdout
+    assert second.exit_code == 0
+    assert "unchanged nulls" in second.stdout
+
+
+def test_index_needs_a_database_and_names_the_variable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+
+    result = runner.invoke(app, ["index"])
+
+    assert result.exit_code == 1
+    assert "DATABASE_URL" in result.output
+
+
+def test_index_reports_a_folder_without_runbooks(
+    database: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cli, "build_embedder", lambda _settings: HashingEmbedder())
+
+    result = runner.invoke(app, ["index", "--runbooks", str(tmp_path)])
+
+    assert result.exit_code == 1
+    assert "No runbooks" in result.output
