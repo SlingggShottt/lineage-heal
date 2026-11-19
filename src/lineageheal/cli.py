@@ -48,6 +48,7 @@ from lineageheal.llm.types import LLMError, LLMRequest, ModelTier
 from lineageheal.orchestration.run_artifacts import load_manifest, load_run_summary, run_prefix
 from lineageheal.rag.embeddings import build_embedder
 from lineageheal.rag.indexer import LIVE_NAMESPACE, RunbookIndexer
+from lineageheal.rag.retriever import Retriever
 from lineageheal.store.database import create_db_engine
 from lineageheal.store.incidents import IncidentRepository
 from lineageheal.store.ingestion_log import IngestionAttempt, IngestionLogRepository
@@ -540,6 +541,43 @@ def index_knowledge(
     for slug in report.removed:
         typer.echo(f"removed   {slug}")
     typer.echo(f"{namespace}: {documents} documents, {chunks} chunks")
+
+
+@app.command("search")
+def search_knowledge(
+    query: Annotated[str, typer.Argument(help="A description of the failure, in plain words.")],
+    fault_class: Annotated[
+        str | None, typer.Option(help="Only documents about this fault class, e.g. nulls.")
+    ] = None,
+    source: Annotated[
+        str | None, typer.Option(help="Only `runbook` or `incident` documents.")
+    ] = None,
+    limit: Annotated[int, typer.Option(min=1, max=20, help="The most hits to show.")] = 5,
+    namespace: Annotated[str, typer.Option(help="Which index to search.")] = LIVE_NAMESPACE,
+) -> None:
+    """Search the knowledge index the way the Investigator does: by meaning and by words.
+
+    Each hit shows its fused score and where each search ranked it, which helps when deciding
+    whether a runbook is findable. Needs `lineageheal index` to have run.
+    """
+    with _exit_on_project_errors():
+        settings = get_settings()
+        engine = create_db_engine(settings.require_database_url())
+        try:
+            hits = Retriever(
+                KnowledgeRepository(engine), build_embedder(settings), namespace=namespace
+            ).search(query, fault_class=fault_class, source=source, limit=limit)
+        finally:
+            engine.dispose()
+    if not hits:
+        typer.echo("no matches")
+    for hit in hits:
+        chunk = hit.chunk
+        typer.echo(
+            f"{hit.score:.4f}  {chunk.source}/{chunk.slug} · {chunk.heading} "
+            f"[{chunk.fault_class}]  vector #{hit.vector_rank or '-'}, "
+            f"words #{hit.keyword_rank or '-'}"
+        )
 
 
 # --- the NSE calendar seed -----------------------------------------------------------------

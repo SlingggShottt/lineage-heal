@@ -614,7 +614,7 @@ sequenceDiagram
 - **Corpus:** runbooks (`docs/runbooks/*.md`, chunked by heading) and decided incidents (one document each: summary, root cause, fix, decision, reviewer reason).
 - **Embedding:** `BAAI/bge-small-en-v1.5` via fastembed, 384 dimensions, stored in pgvector with an HNSW index.
 - **Keyword search:** Postgres `tsvector` with a GIN index.
-- **Fusion:** reciprocal rank fusion (k = 60) over both result lists, then optional filters by fault class and source.
+- **Fusion:** reciprocal rank fusion (k = 60) over both result lists. Filters by fault class and source are applied inside each search, so a filtered query still fills its limit. Each search returns 20 candidates, and the keyword side matches any query word (English-stemmed), because queries are sentences, not exact names. A hit reports its fused score and each search's rank (`rag/retriever.py`, `lineageheal search`).
 - **Benchmark isolation:** benchmark runs use a separate namespace containing runbooks plus seed-split incidents only (FR-KB-03, FR-BEN-07).
 
 ## 12. Benchmark design
