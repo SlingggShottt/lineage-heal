@@ -68,7 +68,7 @@ A local-directory backend sits behind the same interface for tests and sandboxes
 
 | Tool | Role |
 |---|---|
-| **DuckDB** | Local development, CI tests and the benchmark sandbox |
+| **DuckDB** (MIT, declared in `pyproject.toml`) | Local development, CI tests and the benchmark sandbox; the Investigator's data tools read it read-only. Declared directly because code imports it, though dbt-duckdb already brings it |
 | **MotherDuck** | Shared, persistent warehouse for the live pipeline |
 | **dbt Core** + **dbt-duckdb** | Bronze, silver and gold models; one project, with `dev`, `ci`, `bench` and `prod` targets |
 | Project generic tests (`dbt/tests/generic/`) | `non_negative`, `positive`, `unique_combination`, and the monitors `volume_anomaly`, `distribution_anomaly` and `fresh_within` (LH-027). Written in the project instead of adding `dbt_utils` or `dbt_expectations`, because each is a few lines and needs no dependency |

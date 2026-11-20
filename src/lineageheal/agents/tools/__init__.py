@@ -8,13 +8,14 @@ from lineageheal.agents.tools.base import (
     ToolRegistry,
     ToolResult,
 )
+from lineageheal.agents.tools.data_tools import DATA_TOOLS
 from lineageheal.agents.tools.run_tools import RUN_TOOLS
 from lineageheal.agents.tools.source_tools import SOURCE_TOOLS
 
 
 def build_registry(context: ToolContext) -> ToolRegistry:
     """The tools available for one investigation, reading from `context`."""
-    return ToolRegistry(context, (*RUN_TOOLS, *SOURCE_TOOLS))
+    return ToolRegistry(context, (*RUN_TOOLS, *SOURCE_TOOLS, *DATA_TOOLS))
 
 
 __all__ = [

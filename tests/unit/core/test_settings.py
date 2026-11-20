@@ -18,6 +18,7 @@ def test_defaults_are_safe_for_local_development() -> None:
     assert settings.log_format == "console"
     assert settings.raw_zone_backend == "local"
     assert settings.raw_zone_dir == Path(".data/raw")
+    assert settings.warehouse_path == Path(".data/dev.duckdb")
 
 
 def test_requests_to_sources_are_spaced_three_seconds_apart_by_default() -> None:

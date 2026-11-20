@@ -19,6 +19,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from lineageheal.agents.prompt_registry import untrusted
+from lineageheal.agents.tools.data_access import RawFileReader, Warehouse
 from lineageheal.core.errors import LineageHealError
 from lineageheal.core.signals import RunSummary
 from lineageheal.ingestion.calendar import DEFAULT_SEED
@@ -60,6 +61,8 @@ class ToolContext:
     summary: RunSummary
     ingestion_log: IngestionLogRepository | None = None
     retriever: Retriever | None = None
+    raw_files: RawFileReader | None = None
+    warehouse: Warehouse | None = None
     calendar_seed: Path = DEFAULT_SEED
 
 

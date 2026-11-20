@@ -401,21 +401,22 @@ A **lineage-guided search**. Starting from the failing columns, it visits upstre
 | Tool | Returns |
 |---|---|
 | `get_lineage` | Upstream or downstream nodes and edges |
-| `get_raw_schema` | Column names and inferred types of a raw file |
-| `compare_schemas` | Added, removed, renamed-candidate and retyped columns between two dates |
+| `get_raw_schema` | Column names of the latest stored raw file for a feed and date, as published |
+| `compare_schemas` | Columns added, removed or reordered between two dates (a rename shows as one removed and one added) |
 | `profile_column` | Null rate, distinct count, min, max, mean for a column on a date |
-| `compare_profiles` | A column's profile today versus a trailing baseline |
-| `sample_rows` | At most 20 rows matching a filter |
+| `compare_profiles` | A column's profile on two dates, with the ratio of each figure |
+| `sample_rows` | At most 10 rows, for a date or one `column = value` |
 | `get_model_sql` | Raw and compiled SQL for a model |
 | `get_test_failure` | Test definition and sample failing rows |
 | `get_ingestion_log` | Ingestion attempts for a source, dataset and date |
-| `get_corporate_actions` | Corporate actions for instruments in a date range |
+| `get_corporate_actions` | Corporate actions for a symbol within up to 30 days of a date |
 | `get_calendar` | Whether a file was expected on a date |
 | `search_knowledge` | Top similar incidents and runbook sections |
 
-All tools are read-only and return bounded, delimited output (NFR-SEC-04). `agents/tools/` implements them (LH-049, D-49); the data tools `get_raw_schema`, `compare_schemas`, `profile_column`, `compare_profiles`, `sample_rows` and `get_corporate_actions` follow in LH-095.
+All tools are read-only and return bounded, delimited output (NFR-SEC-04). `agents/tools/` implements them (LH-049, D-49); the data tools `get_raw_schema`, `compare_schemas`, `profile_column`, `compare_profiles`, `sample_rows` and `get_corporate_actions` are in `data_tools.py` (LH-095, D-50).
 
 - **A closed set.** A `ToolRegistry` is built in code for each investigation. The model chooses a tool name and arguments; both are checked before anything runs. Each tool's arguments are a Pydantic model that refuses unknown fields, so an argument cannot name a path or widen what the tool reads. `specifications()` gives each tool's name, description and JSON schema for the LangGraph binding (LH-050).
+- **Where the data tools read.** All of them go through `data_access.py`. The warehouse (`WAREHOUSE_PATH`) is opened read-only; a model or column is used only if the warehouse's catalogue lists it by exact name, and is then quoted; filter values are bound parameters; a query running longer than 5 seconds is interrupted. Raw files are read through the raw zone's checksum check, and for zip and gzip only the header is expanded. Profile figures are returned as text so decimals stay exact, and a day filter uses the table's own date column (`price_date`, `nav_date`, `ex_date`, `calendar_date` or `trade_date`).
 - **Errors are results.** An unknown tool, invalid arguments, an unknown node or a missing database comes back as `{"error": ...}` with `ok = false`, with near matches where they help, so the agent can try another route. A bug in a tool still raises.
 - **Bounds.** Each tool caps its rows (lineage: 40 nodes and 60 edges at most, a depth of 1 to 6; log: 20 attempts, newest kept; knowledge: 5 hits) and its text fields (1,500 characters; SQL 3,000). The registry then cuts the whole output at 6,000 characters and wraps it as `<data name="<tool>">`, with a closing tag inside the content broken so it cannot end the block. A result also carries its payload as data, which becomes the `evidence` row.
 - **Where each tool reads.** The run's manifest and signal summary (model SQL, test failures), the stored lineage graph, the ingestion log (needs `DATABASE_URL`), the calendar seed, and the knowledge index.
