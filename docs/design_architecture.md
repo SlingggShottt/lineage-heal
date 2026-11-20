@@ -396,7 +396,15 @@ Mostly deterministic, so its behaviour is predictable and testable:
 
 ### 8.4 Investigator
 
-A **lineage-guided search**. Starting from the failing columns, it visits upstream nodes in order of a cheap heuristic score (schema changed today, profile shifted, nearest to the source), and at each step uses tools to gather evidence for or against "this node is the root cause". It stops when one hypothesis reaches the confidence threshold, the frontier is exhausted, or the budget runs out (FR-INV-05).
+A **lineage-guided search** (`agents/investigator/`, LH-050, D-51), a plain class that the LangGraph graph wraps (LH-051).
+
+1. **Seed, no model.** Similar knowledge, the failing checks (or the ingestion log for a failed download) and the lineage four edges above the failure, as numbered evidence.
+2. **Loop.** A model sees the evidence (the newest in full, older ones short, every value delimited) and the **frontier**: unrefuted nodes at or above the failing node, nearest first, with raw file nodes always offered. It returns a structured step: an assessment of the newest evidence (supports, refutes or unclear for one node), its leading node and confidence, and either one registered tool call or `conclude`. A refuted node leaves the frontier; a repeated call is skipped; an invented tool is an error result.
+3. **Stop** when the model concludes, or its leading node reaches the confidence threshold (default 0.8) with two supporting findings, or the budget runs out.
+4. **Conclude.** A final call gives the root-cause node, fault class, explanation, evidence ids, confidence, up to three alternatives and the fix location (FR-INV-04, FR-INV-06). It is checked: the node must be in the graph (one correction is allowed, the only way to pass the call limit), cited evidence must exist, confidence is capped at 0.3 with no evidence and 0.6 with fewer than two supporting findings, alternatives naming unknown nodes are dropped, and late data is always `external`.
+5. **Budget** (FR-INV-05): `INVESTIGATOR_MAX_LLM_CALLS` (12, one kept for the answer) and `INVESTIGATOR_MAX_SECONDS` (120). Reaching either, or an unreachable model, ends the search as `budget_exhausted` with the evidence and the best guess so far, never an answer.
+
+The prompts are `investigator.step.v1` and `investigator.conclude.v1`.
 
 | Tool | Returns |
 |---|---|
