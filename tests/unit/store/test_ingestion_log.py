@@ -311,3 +311,17 @@ def test_attempts_at_the_same_instant_are_ordered_by_arrival(
     repository.record(stored("raw/k", 0))
 
     assert unresolved(repository) == []
+
+
+def test_for_day_returns_every_attempt_for_that_feed_and_day_oldest_first(
+    repository: IngestionLogRepository,
+) -> None:
+    repository.record(stored("second", 10, outcome="unchanged"))
+    repository.record(stored("first", 0))
+    repository.record(stored("other-day", 5, day=date(2026, 10, 15)))
+    repository.record(stored("other-dataset", 5, dataset="cm_bhavcopy"))
+
+    attempts = repository.for_day("amfi", "navall", DAY)
+
+    assert [a.object_key for a in attempts] == ["first", "second"]
+    assert repository.for_day("amfi", "navall", date(2026, 1, 1)) == []

@@ -75,6 +75,11 @@ class LineageService:
         """The manifest version the graph was built from."""
         return self._graph.version
 
+    @property
+    def node_ids(self) -> tuple[str, ...]:
+        """Every node id in the graph, sorted; callers use it to suggest a near match."""
+        return tuple(sorted(self._flow))
+
     def upstream(
         self, node: str, depth: int | None = None, *, include_filters: bool = True
     ) -> Traversal:

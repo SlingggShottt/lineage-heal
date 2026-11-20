@@ -413,7 +413,12 @@ A **lineage-guided search**. Starting from the failing columns, it visits upstre
 | `get_calendar` | Whether a file was expected on a date |
 | `search_knowledge` | Top similar incidents and runbook sections |
 
-All tools are read-only and return bounded, delimited output (NFR-SEC-04).
+All tools are read-only and return bounded, delimited output (NFR-SEC-04). `agents/tools/` implements them (LH-049, D-49); the data tools `get_raw_schema`, `compare_schemas`, `profile_column`, `compare_profiles`, `sample_rows` and `get_corporate_actions` follow in LH-095.
+
+- **A closed set.** A `ToolRegistry` is built in code for each investigation. The model chooses a tool name and arguments; both are checked before anything runs. Each tool's arguments are a Pydantic model that refuses unknown fields, so an argument cannot name a path or widen what the tool reads. `specifications()` gives each tool's name, description and JSON schema for the LangGraph binding (LH-050).
+- **Errors are results.** An unknown tool, invalid arguments, an unknown node or a missing database comes back as `{"error": ...}` with `ok = false`, with near matches where they help, so the agent can try another route. A bug in a tool still raises.
+- **Bounds.** Each tool caps its rows (lineage: 40 nodes and 60 edges at most, a depth of 1 to 6; log: 20 attempts, newest kept; knowledge: 5 hits) and its text fields (1,500 characters; SQL 3,000). The registry then cuts the whole output at 6,000 characters and wraps it as `<data name="<tool>">`, with a closing tag inside the content broken so it cannot end the block. A result also carries its payload as data, which becomes the `evidence` row.
+- **Where each tool reads.** The run's manifest and signal summary (model SQL, test failures), the stored lineage graph, the ingestion log (needs `DATABASE_URL`), the calendar seed, and the knowledge index.
 
 ### 8.5 Fixer
 

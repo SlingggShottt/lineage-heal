@@ -268,3 +268,32 @@ def observe_nse_sessions(
                 log.info("calendar_gap_was_a_missing_file", trade_date=day.isoformat())
         day += timedelta(days=1)
     return entries
+
+
+def expectation(source: str, day: date, entries: Sequence[CalendarEntry]) -> tuple[str, bool]:
+    """Whether a feed's file is expected on a date, and why, as `slv_meta__calendar` decides it.
+
+    AMFI publishes every day. NSE follows the calendar: a weekday is open and a weekend closed
+    unless the seed lists the date as an exception. The dbt model is what the pipeline checks
+    with; this repeats its rules in Python for the Investigator's calendar tool, which has no
+    warehouse to ask. Change one and the other must change with it.
+
+    Returns:
+        The reason (`every_day`, `holiday`, `special_session`, `weekend` or `weekday`) and
+        whether a file is expected.
+
+    Raises:
+        IngestionError: The source has no expectation rule.
+    """
+    if source == "amfi":
+        return "every_day", True
+    if source != "nse":
+        raise IngestionError(f"No calendar rule for source {source!r}")
+    for entry in entries:
+        if entry.calendar_date == day:
+            if entry.status is DayStatus.CLOSED:
+                return "holiday", False
+            return "special_session", True
+    if day.weekday() >= 5:
+        return "weekend", False
+    return "weekday", True
