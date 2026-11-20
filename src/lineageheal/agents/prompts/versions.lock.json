@@ -1,3 +1,5 @@
 {
-  "detector.classify.v1": "41e2842dca540a5b7303bb043b407c0f0e3a210ceed2547d5196ebcacc7bb77c"
+  "detector.classify.v1": "41e2842dca540a5b7303bb043b407c0f0e3a210ceed2547d5196ebcacc7bb77c",
+  "investigator.conclude.v1": "6a0d70a945653dbae3834db972cbb5cad89e7f58cb49560293c01405247af818",
+  "investigator.step.v1": "7e103d73b891b51bc288c5458884d92e33d438a46c54d41b2622fb5b7f8e5dff"
 }
