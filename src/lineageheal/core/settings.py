@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     raw_zone_backend: Literal["local", "r2"] = "local"
     raw_zone_dir: Path = Path(".data/raw")
 
+    # The DuckDB file the Investigator's data tools read, always read-only. It is the dev
+    # target's file by default; the benchmark points it at the sandbox it is replaying in.
+    warehouse_path: Path = Path(".data/dev.duckdb")
+
     # Gap between requests to a source site (FR-ING-10). Raise it if a source pushes back.
     ingest_min_interval_seconds: float = Field(default=3.0, ge=0)
 

@@ -51,6 +51,12 @@ def test_the_registry_offers_exactly_the_read_only_tools(registry: ToolRegistry)
         "get_ingestion_log",
         "get_calendar",
         "search_knowledge",
+        "get_raw_schema",
+        "compare_schemas",
+        "profile_column",
+        "compare_profiles",
+        "sample_rows",
+        "get_corporate_actions",
     }
 
 
