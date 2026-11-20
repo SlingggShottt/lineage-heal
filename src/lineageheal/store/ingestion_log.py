@@ -177,6 +177,29 @@ class IngestionLogRepository:
                 f"Could not read the ingestion log: {explain_database_error(exc)}"
             ) from exc
 
+    def for_day(self, source: str, dataset: str, trade_date: date) -> list[IngestionAttempt]:
+        """Return every attempt for one feed and trade date, oldest first.
+
+        Raises:
+            StorageError: The database could not be read.
+        """
+        statement = (
+            select(IngestionLog)
+            .where(
+                IngestionLog.source == source,
+                IngestionLog.dataset == dataset,
+                IngestionLog.trade_date == trade_date,
+            )
+            .order_by(IngestionLog.finished_at, IngestionLog.id)
+        )
+        try:
+            with Session(self._engine) as session:
+                return [_to_attempt(row) for row in session.scalars(statement)]
+        except SQLAlchemyError as exc:
+            raise StorageError(
+                f"Could not read the ingestion log: {explain_database_error(exc)}"
+            ) from exc
+
     def stored_versions(self, source: str, dataset: str, trade_date: date) -> list[StoredVersion]:
         """Return each raw object stored for a trade date, oldest first.
 

@@ -16,6 +16,7 @@ from lineageheal.ingestion.calendar import (
     CalendarEntry,
     DayStatus,
     EntrySource,
+    expectation,
     fetch_official_holidays,
     merge_entries,
     observe_nse_sessions,
@@ -400,3 +401,33 @@ def test_the_committed_seed_covers_2024_and_2025_with_observed_closures() -> Non
     # Muhurat days have a file, so they are open days and not exceptions
     assert date(2024, 11, 1) not in by_date
     assert date(2025, 10, 21) not in by_date
+
+
+def exception_on(day: date, status: DayStatus) -> CalendarEntry:
+    return CalendarEntry(day, status, "x", EntrySource.NSE_API, date(2026, 10, 1))
+
+
+@pytest.mark.parametrize(
+    ("source", "day", "expected"),
+    [
+        ("amfi", date(2026, 10, 17), ("every_day", True)),  # a Saturday: AMFI still publishes
+        ("nse", date(2026, 10, 16), ("weekday", True)),
+        ("nse", date(2026, 10, 17), ("weekend", False)),
+        ("nse", date(2026, 10, 20), ("holiday", False)),  # listed as closed
+        ("nse", date(2026, 10, 24), ("special_session", True)),  # a Saturday with a session
+    ],
+)
+def test_expectation_follows_the_weekday_rule_and_the_seed_exceptions(
+    source: str, day: date, expected: tuple[str, bool]
+) -> None:
+    entries = [
+        exception_on(date(2026, 10, 20), DayStatus.CLOSED),
+        exception_on(date(2026, 10, 24), DayStatus.SPECIAL_SESSION),
+    ]
+
+    assert expectation(source, day, entries) == expected
+
+
+def test_a_source_without_a_calendar_rule_is_refused() -> None:
+    with pytest.raises(IngestionError, match="fbil"):
+        expectation("fbil", date(2026, 10, 16), [])
