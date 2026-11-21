@@ -56,6 +56,7 @@ class StoredIncident:
     classified_by: str | None
     opened_at: datetime
     updated_at: datetime
+    root_cause: dict[str, Any] | None = None
 
 
 def _to_stored(row: Incident) -> StoredIncident:
@@ -73,6 +74,7 @@ def _to_stored(row: Incident) -> StoredIncident:
         classified_by=row.classified_by,
         opened_at=row.opened_at,
         updated_at=row.updated_at,
+        root_cause=None if row.root_cause is None else dict(row.root_cause),
     )
 
 

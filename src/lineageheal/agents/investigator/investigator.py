@@ -17,6 +17,7 @@ import json
 import time
 from collections.abc import Callable
 from dataclasses import replace
+from datetime import UTC, datetime
 
 import structlog
 
@@ -62,14 +63,20 @@ class Investigator:
         budget: Budget,
         prompts: PromptRegistry | None = None,
         clock: Callable[[], float] = time.monotonic,
+        now: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
-        """Create an investigator; `clock` is injectable so tests control the time limit."""
+        """Create an investigator.
+
+        `clock` (monotonic seconds) and `now` (wall time, stamped on evidence) are injectable so
+        tests control the time limit and the stored times.
+        """
         self._client = client
         self._tools = tools
         self._lineage = lineage
         self._budget = budget
         self._prompts = prompts or PromptRegistry()
         self._clock = clock
+        self._now = now
 
     def investigate(self, group: SignalGroup, verdict: Verdict) -> Investigation:
         """Search for the root cause of an incident.
@@ -206,6 +213,7 @@ class Investigator:
                 ok=result.ok,
                 content=result.content,
                 payload=result.payload,
+                collected_at=self._now(),
             )
         )
 
@@ -290,6 +298,9 @@ class _Run:
         self.notes: list[str] = []
         self.prompt_ids: list[str] = []
         self.model_ids: dict[str, str] = {}
+        self.prompt_hashes: dict[str, str] = {}
+        self.input_tokens = 0
+        self.output_tokens = 0
 
     def record_call(self, prompt: Prompt, completions: tuple[Completion, ...]) -> None:
         # A reply that failed validation is asked for again, and that is a second call.
@@ -297,6 +308,9 @@ class _Run:
         if prompt.id not in self.prompt_ids:
             self.prompt_ids.append(prompt.id)
         self.model_ids[prompt.id] = completions[-1].model
+        self.prompt_hashes[prompt.id] = prompt.sha256
+        self.input_tokens += sum(c.input_tokens for c in completions)
+        self.output_tokens += sum(c.output_tokens for c in completions)
 
     def finish(
         self,
@@ -315,6 +329,9 @@ class _Run:
             elapsed_seconds=round(now - self.started, 3),
             prompt_ids=self.prompt_ids,
             model_ids=self.model_ids,
+            prompt_hashes=self.prompt_hashes,
+            input_tokens=self.input_tokens,
+            output_tokens=self.output_tokens,
             notes=self.notes,
         )
 
