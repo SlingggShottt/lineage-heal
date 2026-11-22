@@ -125,6 +125,7 @@ uv run lineageheal signals RUN_ID                # failure signals recorded for 
 uv run lineageheal index                         # embed docs/runbooks into the knowledge index; needs DATABASE_URL
 uv run lineageheal search "QUERY"                # hybrid search over the knowledge index; --fault-class, --source
 uv run lineageheal detect RUN_ID                 # signals + download failures, grouped into incidents; needs DATABASE_URL
+uv run lineageheal heal RUN_ID                   # detect, then investigate each incident to a saved root cause; needs DATABASE_URL and an LLM key; --incident ID
 uv run lineageheal dev inject-fault amfi --fault blank-nav --date 2026-10-15   # local raw zone only
 uv run lineageheal dev llm-smoke                 # one tiny call per LLM provider and tier; needs your own keys in .env
 

@@ -15,9 +15,8 @@ from typing import Annotated
 
 import typer
 
-from lineageheal.agents.detector.classify import Classifier
-from lineageheal.agents.detector.collect import SignalCollector
-from lineageheal.agents.detector.detect import Detector
+from lineageheal.agents.graph import HealDependencies, run_heal
+from lineageheal.agents.wiring import Detection, build_investigator, detect_run
 from lineageheal.benchmark.faults import AMFI_FAULTS
 from lineageheal.core.errors import BenchmarkError, ConfigurationError, LineageHealError
 from lineageheal.core.logging import configure_logging
@@ -42,20 +41,19 @@ from lineageheal.ingestion.nse import NSE_BROWSER_HEADERS
 from lineageheal.ingestion.object_stores import LocalObjectStore
 from lineageheal.ingestion.raw_zone import RawZone, open_store
 from lineageheal.ingestion.types import IngestionOutcome, IngestionResult, Loader
-from lineageheal.lineage.builder import build_lineage
+from lineageheal.llm.client import LLMClient
 from lineageheal.llm.factory import build_client, build_endpoints
 from lineageheal.llm.types import LLMError, LLMRequest, ModelTier
-from lineageheal.orchestration.run_artifacts import load_manifest, load_run_summary, run_prefix
+from lineageheal.orchestration.run_artifacts import load_run_summary
 from lineageheal.rag.embeddings import build_embedder
 from lineageheal.rag.indexer import LIVE_NAMESPACE, RunbookIndexer
 from lineageheal.rag.retriever import Retriever
 from lineageheal.store.database import create_db_engine
 from lineageheal.store.incidents import IncidentRepository
 from lineageheal.store.ingestion_log import IngestionAttempt, IngestionLogRepository
+from lineageheal.store.investigations import InvestigationRepository
 from lineageheal.store.knowledge import KnowledgeRepository
-from lineageheal.store.lineage import LineageRepository
 from lineageheal.store.migrate import current_revision, head_revision, upgrade_database
-from lineageheal.store.runs import RunRepository
 
 # India has no daylight saving, so a fixed offset is exact and avoids needing tzdata.
 IST = timezone(timedelta(hours=5, minutes=30), "IST")
@@ -474,25 +472,18 @@ def detect(
     with _exit_on_project_errors():
         settings = get_settings()
         store = open_store(settings)
-        summary = load_run_summary(store, run_id)
-        graph = build_lineage(load_manifest(store, run_id))
         engine = create_db_engine(settings.require_database_url())
         try:
-            runs = RunRepository(engine)
-            signals = SignalCollector(runs, IngestionLogRepository(engine)).collect(
-                summary, artifacts_prefix=run_prefix(run_id)
-            )
-            LineageRepository(engine).save(graph)
             try:
-                classifier = Classifier(build_client(settings))
+                client: LLMClient | None = build_client(settings)
             except ConfigurationError:
-                classifier = Classifier()
-                typer.echo("no LLM key set: fault classes come from rules only")
-            detected = Detector(IncidentRepository(engine), classifier).detect(
-                run_id, signals, graph, at=summary.generated_at
-            )
+                client = None
+            detection = detect_run(engine, store, run_id, client)
         finally:
             engine.dispose()
+    if client is None:
+        typer.echo("no LLM key set: fault classes come from rules only")
+    signals, detected = detection.signals, detection.detected
     typer.echo(f"run {run_id}: {len(signals)} signals, {len(detected)} incidents")
     for item in detected:
         incident = item.incident
@@ -507,6 +498,60 @@ def detect(
             typer.echo(f"  reaches: {', '.join(gold)}")
     if not signals:
         typer.echo("no failure signals")
+
+
+@app.command("heal")
+def heal(
+    run_id: Annotated[str, typer.Argument(help="The pipeline run, as shown in the Dagster UI.")],
+    incident: Annotated[
+        int | None, typer.Option(help="Investigate only this incident, if the run has it.")
+    ] = None,
+) -> None:
+    """Detect a run's incidents and investigate each one to a root cause.
+
+    Does what `detect` does, then for every incident searches the lineage graph, reads the data
+    and the knowledge index, and saves the evidence and conclusion on the incident. It calls a
+    real model (a Gemini or Groq key in `.env`), a handful of free-tier requests per incident.
+    Incidents already past investigation are left alone. Nothing is patched yet.
+    """
+    with _exit_on_project_errors():
+        settings = get_settings()
+        store = open_store(settings)
+        client = build_client(settings)
+        engine = create_db_engine(settings.require_database_url())
+        try:
+            holder: list[Detection] = []
+
+            def detect_step() -> list[int]:
+                holder.append(detect_run(engine, store, run_id, client))
+                return [item.incident.id for item in holder[0].detected]
+
+            deps = HealDependencies(
+                detect=detect_step,
+                incidents=IncidentRepository(engine),
+                investigations=InvestigationRepository(engine),
+                make_investigator=lambda: build_investigator(
+                    settings, engine, store, holder[0], client
+                ),
+                now=lambda: datetime.now(UTC),
+            )
+            outcomes = run_heal(deps, run_id, only_incident=incident)
+        finally:
+            engine.dispose()
+    if not outcomes:
+        typer.echo("no incidents to investigate")
+    for outcome in outcomes:
+        typer.echo(f"incident {outcome.incident_id} {outcome.kind.value}")
+        if outcome.root_cause_node:
+            confidence = f" ({outcome.confidence:.2f})" if outcome.confidence is not None else ""
+            typer.echo(f"  root cause: {outcome.root_cause_node}{confidence}")
+        if outcome.fault_class:
+            where = f", fix in {outcome.fix_location}" if outcome.fix_location else ""
+            typer.echo(f"  fault class: {outcome.fault_class}{where}")
+        if outcome.detail:
+            typer.echo(f"  {outcome.detail}")
+        if outcome.llm_calls:
+            typer.echo(f"  {outcome.evidence_count} findings, {outcome.llm_calls} model calls")
 
 
 @app.command("index")
