@@ -54,6 +54,7 @@ from lineageheal.store.ingestion_log import IngestionAttempt, IngestionLogReposi
 from lineageheal.store.investigations import InvestigationRepository
 from lineageheal.store.knowledge import KnowledgeRepository
 from lineageheal.store.migrate import current_revision, head_revision, upgrade_database
+from lineageheal.vcs.factory import build_github_client
 
 # India has no daylight saving, so a fixed offset is exact and avoids needing tzdata.
 IST = timezone(timedelta(hours=5, minutes=30), "IST")
@@ -365,6 +366,22 @@ def llm_smoke() -> None:
                 )
     if failures:
         raise typer.Exit(code=1)
+
+
+@dev_app.command("github-smoke")
+def github_smoke() -> None:
+    """Check the GitHub App's settings by reading the base branch as the App.
+
+    Reads only: it signs in as the App, exchanges for an installation token and looks up the
+    base branch's commit. Needs the GITHUB_APP_* variables and GITHUB_REPOSITORY in .env.
+    """
+    with _exit_on_project_errors():
+        settings = get_settings()
+        client = build_github_client(settings)
+        sha = client.base_branch_sha()
+        typer.echo(
+            f"ok   {settings.github_repository} {settings.github_base_branch} is at {sha[:10]}"
+        )
 
 
 @db_app.command("upgrade")

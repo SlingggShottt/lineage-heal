@@ -106,6 +106,15 @@ class Settings(BaseSettings):
     r2_secret_access_key: SecretStr | None = None
     r2_bucket: str | None = None
 
+    # The LineageHeal GitHub App: the bot that opens branches, pull requests and issues. The
+    # private key is a PEM, which a .env file holds on one line with `\n` for each newline.
+    github_app_id: str | None = None
+    github_app_private_key: SecretStr | None = None
+    github_app_installation_id: str | None = None
+    # The repository the bot works in, as `owner/name`, and the branch fixes are proposed against.
+    github_repository: str | None = Field(default=None, pattern=r"^[\w.-]+/[\w.-]+$")
+    github_base_branch: str = "main"
+
     def require_database_url(self) -> str:
         """Return the database URL, or explain that it is not set.
 

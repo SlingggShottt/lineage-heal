@@ -150,7 +150,10 @@ A cross-encoder reranker (also via fastembed) will be evaluated during the build
 | **SQLAlchemy 2.0 style** + **psycopg 3** | Database access. Synchronous today, for the CLI and loaders; an async session factory over the same models arrives with the API (LH-058) |
 | **Alembic** | Schema migrations |
 | **Authlib** | GitHub sign-in through the GitHub App's user-authorisation flow |
-| **PyGithub** with a **GitHub App** | Branches, pull requests, issues and merges by the LineageHeal bot |
+| **httpx** + **PyJWT** (`pyjwt[crypto]`) with a **GitHub App** | Branches, pull requests, issues and merges by the LineageHeal bot: PyJWT (MIT, with `cryptography`, Apache-2.0 or BSD) signs the App's RS256 token; the calls go over httpx with timeouts and retries |
+
+
+**Considered for GitHub:** PyGithub (LGPL-3.0, hides the retry and mocking points the project requires, and depends on PyJWT itself), as the LLM layer chose plain httpx over provider SDKs (D-41).
 
 ## Frontend
 

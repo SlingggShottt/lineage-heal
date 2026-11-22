@@ -9,7 +9,8 @@ under an allowed folder, with no way to climb out of it. The size limits keep a 
 from __future__ import annotations
 
 import difflib
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
 from lineageheal.core.errors import LineageHealError
@@ -39,11 +40,16 @@ DEFAULT_LIMITS = PatchLimits()
 
 @dataclass(frozen=True, slots=True)
 class Patch:
-    """A checked change: a unified diff against the repository root and what it touches."""
+    """A checked change: a unified diff against the repository root and what it touches.
+
+    `new_contents` maps each file to its complete new text, so a pull request can be committed
+    without applying the diff again. It is not part of equality: the diff says the same thing.
+    """
 
     diff: str
     files: tuple[str, ...]
     changed_lines: int
+    new_contents: Mapping[str, str] = field(default_factory=dict, compare=False)
 
 
 def check_path(path: str) -> str:
@@ -98,6 +104,7 @@ def build_patch(
         raise PatchError("a file is named more than once")
 
     parts: list[str] = []
+    contents: dict[str, str] = {}
     changed = 0
     for path, (_, new_content) in zip(paths, edits, strict=True):
         original = _read_existing(root, path)
@@ -110,12 +117,13 @@ def build_patch(
             raise PatchError(f"{path} is unchanged")
         diff, lines = _diff(path, original, new_text)
         parts.append(diff)
+        contents[path] = new_text
         changed += lines
     if changed > limits.max_changed_lines:
         raise PatchError(
             f"the fix changes {changed} lines; the limit is {limits.max_changed_lines}"
         )
-    return Patch("".join(parts), tuple(paths), changed)
+    return Patch("".join(parts), tuple(paths), changed, contents)
 
 
 def _read_existing(root: Path, path: str) -> str:
