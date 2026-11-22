@@ -89,6 +89,10 @@ class Settings(BaseSettings):
     fixer_max_llm_calls: int = Field(default=2, ge=1)
     fixer_max_files: int = Field(default=4, ge=1)
     fixer_max_changed_lines: int = Field(default=120, ge=1)
+    # Patches tried in the sandbox before giving up (FR-FIX-03); a failed one's output goes back
+    # to the model. One `dbt build` may run this long before it is stopped.
+    fixer_max_attempts: int = Field(default=2, ge=1)
+    sandbox_timeout_seconds: float = Field(default=600.0, gt=0)
 
     # Embeddings run locally (D-06). The stored vectors are only comparable with ones from the
     # same model, so the name is recorded with each chunk and a changed setting re-indexes.
