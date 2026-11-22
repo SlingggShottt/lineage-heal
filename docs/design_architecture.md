@@ -432,7 +432,7 @@ All tools are read-only and return bounded, delimited output (NFR-SEC-04). `agen
 ### 8.5 Fixer
 
 1. Read the relevant dbt files and the Investigator's root cause.
-2. Produce a unified diff. Reject it immediately if it touches anything outside `dbt/models/`, `dbt/macros/` or schema YAML files, or exceeds a size limit (FR-FIX-01).
+2. Ask a model for the complete new content of each file it changes, and compute the unified diff from that (`agents/fixer/`, D-54). A model may only change a file it was shown (the root cause's model, the models it feeds and the schema file beside it). Reject the result immediately if it touches anything outside `.sql` under `dbt/models/` or `dbt/macros/` or `.yml` under `dbt/models/`, creates a file, or exceeds the size limits of 4 files and 120 changed lines (FR-FIX-01). An answer that fails the checks is sent back once with the reason.
 3. **Sandbox verification** (FR-FIX-02): create a temporary git worktree, apply the patch, build the affected subgraph on a DuckDB copy containing the incident's data, and compare test results before and after. Pass means: originally failing tests now pass, and no previously passing test fails.
 4. On failure, feed the error back and retry, up to the attempt limit (FR-FIX-03).
 5. On success, the GitHub App pushes branch `heal/<incident-id>` and opens a pull request using the PR template in section 10.3. For external root causes, it opens an issue instead (FR-FIX-05).
