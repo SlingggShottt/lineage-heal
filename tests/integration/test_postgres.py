@@ -187,6 +187,7 @@ def test_deleting_an_incident_removes_its_fixes_on_postgres(database_url: str) -
                 kind="suggestion",
                 status="unverified",
                 files=[],
+                suggestion={"title": "t"},
                 created_at=T0,
                 updated_at=T0,
             )

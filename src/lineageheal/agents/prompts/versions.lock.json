@@ -1,6 +1,7 @@
 {
   "detector.classify.v1": "41e2842dca540a5b7303bb043b407c0f0e3a210ceed2547d5196ebcacc7bb77c",
   "fixer.patch.v1": "28ac3535ccac3b024c1864ef7b24cf667b72a269e7c4c420f76bfdd26b29d06d",
+  "fixer.suggest.v1": "dbd4030eb8f896ea06bde5dbf54f3596c45f11dac36efac1e9a3a14f2447cf2c",
   "investigator.conclude.v1": "6a0d70a945653dbae3834db972cbb5cad89e7f58cb49560293c01405247af818",
   "investigator.step.v1": "7e103d73b891b51bc288c5458884d92e33d438a46c54d41b2622fb5b7f8e5dff"
 }

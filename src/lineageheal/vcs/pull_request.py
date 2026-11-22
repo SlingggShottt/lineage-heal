@@ -8,15 +8,15 @@ which would otherwise notify real accounts.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from lineageheal.vcs.text import plain as _bounded
+
 MAX_TITLE = 100
 MAX_FIELD = 1200
 MAX_LIST_ITEMS = 10
-_SPACE = re.compile(r"\s+")
 
 
 @dataclass(frozen=True)
@@ -95,5 +95,4 @@ def _verification(sandbox: dict[str, Any]) -> str:
 
 
 def _plain(text: str, limit: int = MAX_FIELD) -> str:
-    flat = _SPACE.sub(" ", text).strip().replace("@", "@​")
-    return flat if len(flat) <= limit else flat[: limit - 1] + "…"
+    return _bounded(text, limit)
