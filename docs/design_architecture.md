@@ -373,7 +373,7 @@ flowchart TD
     L --> E([End])
 ```
 
-The graph is built with LangGraph and checkpointed to Postgres (`langgraph-checkpoint-postgres`). The run pauses at the review interrupt and the workflow job ends. When an approver decides, the API dispatches `heal.yml` in resume mode, which continues from the checkpoint into the learning step.
+As built so far (LH-051), the graph is `detect`, then `investigate` repeated for each of the run's incidents (`agents/graph/`); the patch, sandbox and pull request branches below arrive with the Fixer. Each node is a plain method over the Detector, Investigator and repositories, so LangGraph only decides the order. An incident already past investigation is skipped, and an investigation that crashes is recorded as `failed` without stopping the others. The finished graph is built with LangGraph and checkpointed to Postgres (`langgraph-checkpoint-postgres`). The run pauses at the review interrupt and the workflow job ends. When an approver decides, the API dispatches `heal.yml` in resume mode, which continues from the checkpoint into the learning step.
 
 ### 8.2 State
 

@@ -111,9 +111,9 @@ OpenLineage events are stored as JSONB in Postgres, and the column-level graph i
 
 ## Agents and LLMs
 
-**LangGraph** runs the Detector → Investigator → Fixer workflow as a stateful graph, with explicit human-in-the-loop interrupts. **LangChain core** supplies the model interfaces. Agent outputs are validated as Pydantic models (structured output).
+**LangGraph** (MIT, `langgraph` 1.x, added in LH-051; it brings `langchain-core` and `langsmith` as dependencies, and tracing stays off until LH-043) runs the Detector → Investigator → Fixer workflow as a stateful graph, with explicit human-in-the-loop interrupts. **LangChain core** supplies the model interfaces. Agent outputs are validated as Pydantic models (structured output).
 
-**langgraph-checkpoint-postgres** persists graph state to Postgres. A healing run pauses at the review interrupt and its GitHub Actions job ends; when an approver decides, a new job resumes the graph from the saved checkpoint. Without a durable checkpointer, the workflow would have to stay running for however long review takes.
+**langgraph-checkpoint-postgres** (not yet added: it arrives with the review pause, LH-056, because it needs a second Postgres driver and nothing pauses before then) persists graph state to Postgres. A healing run pauses at the review interrupt and its GitHub Actions job ends; when an approver decides, a new job resumes the graph from the saved checkpoint. Without a durable checkpointer, the workflow would have to stay running for however long review takes.
 
 ### Models
 

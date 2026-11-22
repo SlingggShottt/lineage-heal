@@ -13,6 +13,7 @@ from click.testing import Result
 from typer.testing import CliRunner
 
 from lineageheal import cli
+from lineageheal.agents import wiring
 from lineageheal.benchmark.faults import blank_nav, negative_nav
 from lineageheal.cli import app, today_ist
 from lineageheal.core.errors import ConfigurationError
@@ -22,14 +23,16 @@ from lineageheal.ingestion.amfi import AMFI_REPORT_URL
 from lineageheal.ingestion.calendar import HOLIDAY_URL, read_seed
 from lineageheal.ingestion.object_stores import LocalObjectStore
 from lineageheal.ingestion.raw_zone import RawZone
-from lineageheal.llm.client import Endpoint
+from lineageheal.llm.client import Endpoint, LLMClient
 from lineageheal.llm.fake import FakeProvider
 from lineageheal.llm.limiter import TokenBucket
-from lineageheal.llm.types import BadRequestError
+from lineageheal.llm.types import BadRequestError, LLMError
 from lineageheal.orchestration.run_artifacts import SUMMARY_FILE, run_prefix
 from lineageheal.rag.embeddings import HashingEmbedder
 from lineageheal.store.database import create_db_engine
+from lineageheal.store.incidents import IncidentRepository
 from lineageheal.store.ingestion_log import IngestionAttempt, IngestionLogRepository
+from lineageheal.store.investigations import InvestigationRepository
 from lineageheal.store.migrate import upgrade_database
 
 FIXTURES = Path(__file__).parents[1] / "fixtures" / "amfi"
@@ -1178,3 +1181,76 @@ def test_search_rejects_a_blank_query(database: str, monkeypatch: pytest.MonkeyP
 
     assert result.exit_code == 1
     assert "non-empty" in result.output
+
+
+# --- heal ------------------------------------------------------------------------------------
+
+
+def unreachable_model(monkeypatch: pytest.MonkeyPatch) -> FakeProvider:
+    """A client whose only provider is down, so every model call fails without any network."""
+    provider = FakeProvider("gemini", [LLMError("down")] * 20)
+    client = LLMClient(fake_endpoints(provider), attempts=1, sleep=lambda _: None)
+    monkeypatch.setattr(cli, "build_client", lambda settings: client)
+    monkeypatch.setattr(wiring, "build_embedder", lambda settings: HashingEmbedder())
+    return provider
+
+
+def test_heal_without_a_model_key_says_so_and_changes_nothing(
+    tmp_path: Path, database: str
+) -> None:
+    store_summary(tmp_path, signals=(failing_signal(),))
+
+    result = runner.invoke(app, ["heal", RUN_ID])
+
+    assert result.exit_code == 1
+    assert result.output.startswith("error:")
+    assert "Traceback" not in result.output
+
+
+def test_heal_investigates_each_incident_and_reports_a_stopped_search(
+    tmp_path: Path, database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store_summary(tmp_path, signals=(failing_signal(),))
+    unreachable_model(monkeypatch)
+
+    result = runner.invoke(app, ["heal", RUN_ID])
+
+    assert result.exit_code == 0
+    assert "incident 1 budget_exhausted" in result.output
+    assert "could not be reached" in result.output
+    engine = create_db_engine(database)
+    try:
+        stored = InvestigationRepository(engine).latest_for(1)
+        incident = IncidentRepository(engine).get(1)
+    finally:
+        engine.dispose()
+    assert stored is not None
+    assert stored.status == "budget_exhausted"
+    assert incident is not None
+    assert incident.status == "unresolved"
+
+
+def test_heal_can_be_limited_to_one_incident(
+    tmp_path: Path, database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store_summary(tmp_path, signals=(failing_signal(),))
+    log_failed_download(database)
+    unreachable_model(monkeypatch)
+
+    result = runner.invoke(app, ["heal", RUN_ID, "--incident", "2"])
+
+    assert result.exit_code == 0
+    assert "incident 2 budget_exhausted" in result.output
+    assert "incident 1" not in result.output
+
+
+def test_heal_says_so_when_the_run_has_no_incident(
+    tmp_path: Path, database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store_summary(tmp_path, signals=())
+    unreachable_model(monkeypatch)
+
+    result = runner.invoke(app, ["heal", RUN_ID])
+
+    assert result.exit_code == 0
+    assert "no incidents to investigate" in result.output
