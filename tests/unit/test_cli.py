@@ -1262,6 +1262,8 @@ def test_heal_says_so_when_the_run_has_no_incident(
 def test_github_smoke_without_settings_says_which_variables_to_set(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    for name in ("GITHUB_APP_ID", "GITHUB_REPOSITORY"):
+        monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(cli, "get_settings", lambda: Settings(_env_file=None))
 
     result = runner.invoke(app, ["dev", "github-smoke"])

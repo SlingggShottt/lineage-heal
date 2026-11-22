@@ -8,6 +8,19 @@ from lineageheal.core.settings import Settings
 from lineageheal.vcs import GitHubClient, build_github_client
 
 
+@pytest.fixture(autouse=True)
+def _no_github_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """GitHub Actions sets GITHUB_REPOSITORY itself; these tests must not see it."""
+    for name in (
+        "GITHUB_APP_ID",
+        "GITHUB_APP_PRIVATE_KEY",
+        "GITHUB_APP_INSTALLATION_ID",
+        "GITHUB_REPOSITORY",
+        "GITHUB_BASE_BRANCH",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+
 def settings(**fields: object) -> Settings:
     return Settings(_env_file=None, **fields)  # type: ignore[arg-type]
 
