@@ -2,8 +2,10 @@
 
 A drafted patch is stored as `unverified` (LH-052). The sandbox's verdicts are stored with
 `save_attempts` (LH-053), which also moves the incident to `fix_proposed` or `fix_unverified`
-in the same transaction. Publishing belongs to the GitHub client, and the database already
-refuses a patch marked verified without a sandbox result on record.
+in the same transaction. A suggestion for a root cause outside dbt is stored by
+`save_suggestion` and marked filed, with its issue, by `mark_filed` (LH-055). Publishing a pull
+request belongs to the GitHub client, and the database already refuses a patch marked verified
+without a sandbox result on record.
 """
 
 from __future__ import annotations
@@ -46,8 +48,10 @@ class StoredFix:
     patch: str | None
     files: list[str]
     sandbox_result: dict[str, Any] | None
+    suggestion: dict[str, Any] | None
     branch: str | None
     github_url: str | None
+    github_number: int | None
     created_at: datetime
     updated_at: datetime
 
@@ -61,8 +65,10 @@ def _to_stored(row: Fix) -> StoredFix:
         patch=row.patch,
         files=list(row.files),
         sandbox_result=None if row.sandbox_result is None else dict(row.sandbox_result),
+        suggestion=None if row.suggestion is None else dict(row.suggestion),
         branch=row.branch,
         github_url=row.github_url,
+        github_number=row.github_number,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -141,6 +147,75 @@ class FixRepository:
         except SQLAlchemyError as exc:
             raise StorageError(
                 f"Could not save the attempts: {explain_database_error(exc)}"
+            ) from exc
+
+    def save_suggestion(self, incident_id: int, suggestion: dict[str, Any], at: datetime) -> int:
+        """Store a drafted suggestion and return its fix id.
+
+        A draft that was never filed (GitHub was unreachable) is replaced by the new one, so
+        retrying never piles up rows. A filed suggestion is left alone.
+
+        Raises:
+            StorageError: The incident does not exist, the suggestion is already filed, or the
+                database could not be written.
+        """
+        try:
+            with Session(self._engine) as session, session.begin():
+                if session.get(Incident, incident_id) is None:
+                    raise StorageError(f"Incident {incident_id} does not exist")
+                rows = list(
+                    session.scalars(
+                        select(Fix).where(Fix.incident_id == incident_id, Fix.kind == "suggestion")
+                    )
+                )
+                if any(row.status != "unverified" for row in rows):
+                    raise StorageError(f"Incident {incident_id} already has a filed suggestion")
+                if rows:
+                    row = rows[0]
+                    row.suggestion = suggestion
+                    row.updated_at = at
+                else:
+                    row = Fix(
+                        incident_id=incident_id,
+                        kind="suggestion",
+                        status="unverified",
+                        files=[],
+                        suggestion=suggestion,
+                        created_at=at,
+                        updated_at=at,
+                    )
+                    session.add(row)
+                session.flush()
+                return row.id
+        except SQLAlchemyError as exc:
+            raise StorageError(
+                f"Could not save the suggestion: {explain_database_error(exc)}"
+            ) from exc
+
+    def mark_filed(self, fix_id: int, number: int, url: str, at: datetime) -> None:
+        """Record the issue a suggestion was filed as, and set the incident to `suggestion_filed`.
+
+        A human's decision on the incident is not overwritten.
+
+        Raises:
+            StorageError: The fix is not a suggestion, or the database could not be written.
+        """
+        try:
+            with Session(self._engine) as session, session.begin():
+                row = session.get(Fix, fix_id)
+                if row is None or row.kind != "suggestion":
+                    raise StorageError(f"Fix {fix_id} is not a suggestion")
+                row.status = "published"
+                row.github_number = number
+                row.github_url = url
+                row.updated_at = at
+                incident = session.get(Incident, row.incident_id)
+                if incident is not None and incident.status not in _DECIDED:
+                    incident.status = "suggestion_filed"
+                    incident.updated_at = at
+        except SQLAlchemyError as exc:
+            raise StorageError(
+                f"Could not record the issue: {explain_database_error(exc)}"
             ) from exc
 
     def for_incident(self, incident_id: int) -> list[StoredFix]:

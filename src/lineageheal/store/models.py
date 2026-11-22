@@ -302,6 +302,9 @@ class Fix(Base):
         CheckConstraint(_one_of("kind", FIX_KINDS), name="kind_is_known"),
         CheckConstraint(_one_of("status", FIX_STATUSES), name="status_is_known"),
         CheckConstraint("kind <> 'dbt_patch' OR patch IS NOT NULL", name="patches_have_a_diff"),
+        CheckConstraint(
+            "kind <> 'suggestion' OR suggestion IS NOT NULL", name="suggestions_have_content"
+        ),
         # No patch is verified, published or merged without a sandbox result on record.
         CheckConstraint(
             "kind <> 'dbt_patch' OR status NOT IN ('verified', 'published', 'merged') "
@@ -324,6 +327,9 @@ class Fix(Base):
     patch: Mapped[str | None] = mapped_column(Text)  # a unified diff, for a dbt patch
     files: Mapped[list[str]] = mapped_column(JSONType)
     sandbox_result: Mapped[dict[str, Any] | None] = mapped_column(JSONType)
+    # The drafted change for a root cause outside dbt: title, target, change, sketch, how to
+    # verify and risks. Only a `suggestion` fix has one.
+    suggestion: Mapped[dict[str, Any] | None] = mapped_column(JSONType)
     branch: Mapped[str | None] = mapped_column(String(255))
     github_url: Mapped[str | None] = mapped_column(Text)
     github_number: Mapped[int | None] = mapped_column(Integer)

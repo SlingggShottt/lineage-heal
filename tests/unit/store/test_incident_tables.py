@@ -253,7 +253,16 @@ def test_a_patch_needs_a_diff(engine: Engine) -> None:
 def test_a_suggestion_needs_no_diff(engine: Engine) -> None:
     (incident_id,) = stored(engine, incident())
 
-    stored(engine, fix(incident_id, kind="suggestion", patch=None, status="unverified"))
+    stored(
+        engine,
+        fix(incident_id, kind="suggestion", patch=None, status="unverified", suggestion={"t": 1}),
+    )
+
+
+def test_a_suggestion_needs_content(engine: Engine) -> None:
+    (incident_id,) = stored(engine, incident())
+
+    refused(engine, fix(incident_id, kind="suggestion", patch=None, status="unverified"))
 
 
 @pytest.mark.parametrize("status", ["verified", "published", "merged"])
@@ -275,7 +284,16 @@ def test_no_patch_goes_further_without_a_sandbox_result(engine: Engine, status: 
 def test_a_published_fix_links_to_github(engine: Engine) -> None:
     (incident_id,) = stored(engine, incident())
 
-    refused(engine, fix(incident_id, kind="suggestion", patch=None, status="published"))
+    refused(
+        engine,
+        fix(
+            incident_id,
+            kind="suggestion",
+            patch=None,
+            status="published",
+            suggestion={"t": 1},
+        ),
+    )
     stored(
         engine,
         fix(
@@ -283,6 +301,7 @@ def test_a_published_fix_links_to_github(engine: Engine) -> None:
             kind="suggestion",
             patch=None,
             status="published",
+            suggestion={"t": 1},
             github_url="https://github.com/x/y/issues/2",
             github_number=2,
         ),

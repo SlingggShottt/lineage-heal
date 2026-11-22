@@ -118,3 +118,62 @@ def test_a_decided_incident_keeps_its_status(engine: Engine, incident_id: int) -
 def test_attempts_for_an_unknown_incident_are_refused(engine: Engine) -> None:
     with pytest.raises(StorageError, match="does not exist"):
         FixRepository(engine).save_attempts(999, [sandboxed(True)], NOW)
+
+
+def test_a_suggestion_is_stored_without_a_diff(engine: Engine, incident_id: int) -> None:
+    repository = FixRepository(engine)
+
+    fix_id = repository.save_suggestion(incident_id, {"title": "t"}, NOW)
+
+    [stored] = repository.for_incident(incident_id)
+    assert stored.id == fix_id
+    assert (stored.kind, stored.status, stored.patch) == ("suggestion", "unverified", None)
+    assert stored.suggestion == {"title": "t"}
+
+
+def test_a_suggestion_row_without_content_is_refused_by_the_database(
+    engine: Engine, incident_id: int
+) -> None:
+    with pytest.raises(IntegrityError), Session(engine) as session, session.begin():
+        session.add(
+            Fix(
+                incident_id=incident_id,
+                kind="suggestion",
+                status="unverified",
+                files=[],
+                created_at=NOW,
+                updated_at=NOW,
+            )
+        )
+
+
+def test_a_filed_suggestion_cannot_be_replaced(engine: Engine, incident_id: int) -> None:
+    repository = FixRepository(engine)
+    fix_id = repository.save_suggestion(incident_id, {"title": "t"}, NOW)
+    repository.mark_filed(fix_id, 4, "https://x/4", NOW)
+
+    with pytest.raises(StorageError, match="already has a filed"):
+        repository.save_suggestion(incident_id, {"title": "again"}, NOW)
+
+
+def test_only_a_suggestion_can_be_marked_filed(engine: Engine, incident_id: int) -> None:
+    repository = FixRepository(engine)
+    patch_id = repository.save_patch(incident_id, PATCH, NOW)
+
+    with pytest.raises(StorageError, match="not a suggestion"):
+        repository.mark_filed(patch_id, 4, "https://x/4", NOW)
+    with pytest.raises(StorageError, match="not a suggestion"):
+        repository.mark_filed(999, 4, "https://x/4", NOW)
+
+
+def test_a_decided_incident_keeps_its_status_when_its_suggestion_is_filed(
+    engine: Engine, incident_id: int
+) -> None:
+    repository = FixRepository(engine)
+    fix_id = repository.save_suggestion(incident_id, {"title": "t"}, NOW)
+    with Session(engine) as session, session.begin():
+        session.execute(update(Incident).values(status="rejected"))
+
+    repository.mark_filed(fix_id, 4, "https://x/4", NOW)
+
+    assert status_of(engine, incident_id) == "rejected"
