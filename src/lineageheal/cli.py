@@ -15,8 +15,8 @@ from typing import Annotated
 
 import typer
 
-from lineageheal.agents.graph import HealDependencies, run_heal
-from lineageheal.agents.wiring import Detection, build_investigator, detect_run
+from lineageheal.agents.graph import HealDependencies, run_heal_report
+from lineageheal.agents.wiring import Detection, build_fixing, build_investigator, detect_run
 from lineageheal.benchmark.faults import AMFI_FAULTS
 from lineageheal.core.errors import BenchmarkError, ConfigurationError, LineageHealError
 from lineageheal.core.logging import configure_logging
@@ -521,18 +521,33 @@ def detect(
 def heal(
     run_id: Annotated[str, typer.Argument(help="The pipeline run, as shown in the Dagster UI.")],
     incident: Annotated[
-        int | None, typer.Option(help="Investigate only this incident, if the run has it.")
+        int | None, typer.Option(help="Handle only this incident, if the run has it.")
     ] = None,
+    publish: Annotated[
+        bool,
+        typer.Option(
+            "--publish",
+            help="Open the pull request or issue on GitHub as the App. Without it, nothing "
+            "leaves this machine: fixes are verified and stored only.",
+        ),
+    ] = False,
 ) -> None:
-    """Detect a run's incidents and investigate each one to a root cause.
+    """Detect a run's incidents, find each root cause and propose a verified fix.
 
     Does what `detect` does, then for every incident searches the lineage graph, reads the data
-    and the knowledge index, and saves the evidence and conclusion on the incident. It calls a
-    real model (a Gemini or Groq key in `.env`), a handful of free-tier requests per incident.
-    Incidents already past investigation are left alone. Nothing is patched yet.
+    and the knowledge index, and saves the evidence and conclusion. A root cause in dbt then gets
+    a patch, built and tested in a sandbox on a copy of the warehouse; one outside dbt gets a
+    drafted suggestion. It calls a real model (a Gemini or Groq key in `.env`), a handful of
+    free-tier requests per incident. With `--publish` a verified patch becomes a pull request
+    and a suggestion a GitHub issue (needs the GITHUB_* settings); nothing is ever merged.
+    Incidents already fixed or decided are left alone.
     """
     with _exit_on_project_errors():
         settings = get_settings()
+        if publish:
+            build_github_client(
+                settings
+            )  # fail on a missing GITHUB_* setting before any model call
         store = open_store(settings)
         client = build_client(settings)
         engine = create_db_engine(settings.require_database_url())
@@ -551,10 +566,14 @@ def heal(
                     settings, engine, store, holder[0], client
                 ),
                 now=lambda: datetime.now(UTC),
+                make_fixing=lambda: build_fixing(
+                    settings, engine, holder[0], client, publish=publish
+                ),
             )
-            outcomes = run_heal(deps, run_id, only_incident=incident)
+            report = run_heal_report(deps, run_id, only_incident=incident)
         finally:
             engine.dispose()
+    outcomes = report.outcomes
     if not outcomes:
         typer.echo("no incidents to investigate")
     for outcome in outcomes:
@@ -569,6 +588,14 @@ def heal(
             typer.echo(f"  {outcome.detail}")
         if outcome.llm_calls:
             typer.echo(f"  {outcome.evidence_count} findings, {outcome.llm_calls} model calls")
+    for fix in report.fixes:
+        typer.echo(f"incident {fix.incident_id} fix: {fix.kind.value}")
+        if fix.detail:
+            typer.echo(f"  {fix.detail}")
+        if fix.pull_request_url:
+            typer.echo(f"  pull request: {fix.pull_request_url}")
+        if fix.issue_url:
+            typer.echo(f"  issue: {fix.issue_url}")
 
 
 @app.command("index")

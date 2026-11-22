@@ -16,6 +16,7 @@ import structlog
 
 from lineageheal.agents.detector.classify import Verdict
 from lineageheal.agents.detector.grouping import SignalGroup
+from lineageheal.agents.graph.fixing import FixDependencies, FixNodes
 from lineageheal.agents.graph.state import HealState, IncidentOutcome, OutcomeKind
 from lineageheal.agents.investigator import Investigation, InvestigationStatus, Investigator
 from lineageheal.core.signals import Signal
@@ -34,6 +35,8 @@ class HealDependencies:
     investigations: InvestigationRepository
     make_investigator: Callable[[], Investigator]  # called after detection, which it may need
     now: Callable[[], datetime]
+    # Called after detection, like `make_investigator`; None stops after investigating.
+    make_fixing: Callable[[], FixDependencies] | None = None
 
 
 def group_of(incident: StoredIncident, signals: list[Signal]) -> SignalGroup:
@@ -55,6 +58,7 @@ class HealNodes:
         """Bind the nodes to their dependencies."""
         self._deps = deps
         self._investigator: Investigator | None = None
+        self._fix: FixNodes | None = None
 
     def detect(self, state: HealState) -> dict[str, Any]:
         """Open or update the run's incidents and queue them, or just the one asked for."""
@@ -68,11 +72,32 @@ class HealNodes:
         """Investigate the next queued incident and save the result."""
         incident_id, *rest = state["pending"]
         outcome = self._investigate_one(incident_id)
-        return {"pending": rest, "outcomes": [*state["outcomes"], outcome]}
+        concluded = outcome.kind is OutcomeKind.CONCLUDED
+        return {
+            "pending": rest,
+            "outcomes": [*state["outcomes"], outcome],
+            "to_fix": [*state["to_fix"], incident_id] if concluded else state["to_fix"],
+        }
+
+    def fix(self, state: HealState) -> dict[str, Any]:
+        """Fix the next concluded incident: verify and publish a patch, or file a suggestion."""
+        incident_id, *rest = state["to_fix"]
+        make = self._deps.make_fixing
+        assert make is not None  # noqa: S101  # the graph only routes here when fixing is on
+        if self._fix is None:
+            self._fix = FixNodes(make(), self._deps.incidents, self._deps.investigations)
+        outcome = self._fix.fix_one(incident_id)
+        return {"to_fix": rest, "fixes": [*state["fixes"], outcome]}
 
     def more_to_do(self, state: HealState) -> str:
-        """Route to the next incident, or end."""
-        return "investigate" if state["pending"] else "end"
+        """Route to the next incident to investigate, then to the fixes, then end."""
+        if state["pending"]:
+            return "investigate"
+        return "fix" if state["to_fix"] and self._deps.make_fixing is not None else "end"
+
+    def more_to_fix(self, state: HealState) -> str:
+        """Route to the next incident to fix, or end."""
+        return "fix" if state["to_fix"] else "end"
 
     def _investigate_one(self, incident_id: int) -> IncidentOutcome:
         deps = self._deps
