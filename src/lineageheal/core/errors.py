@@ -44,3 +44,7 @@ class BenchmarkError(LineageHealError):
 
 class KnowledgeError(LineageHealError):
     """A runbook could not be read, or the knowledge index could not be built or searched."""
+
+
+class VCSError(LineageHealError):
+    """GitHub refused a request or could not be reached; the message never contains a token."""

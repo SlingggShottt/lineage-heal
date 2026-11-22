@@ -1254,3 +1254,35 @@ def test_heal_says_so_when_the_run_has_no_incident(
 
     assert result.exit_code == 0
     assert "no incidents to investigate" in result.output
+
+
+# --- github-smoke ----------------------------------------------------------------------------
+
+
+def test_github_smoke_without_settings_says_which_variables_to_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in ("GITHUB_APP_ID", "GITHUB_REPOSITORY"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(cli, "get_settings", lambda: Settings(_env_file=None))
+
+    result = runner.invoke(app, ["dev", "github-smoke"])
+
+    assert result.exit_code == 1
+    assert "GITHUB_APP_ID" in result.output
+
+
+def test_github_smoke_reports_the_base_branch_commit(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Fake:
+        def base_branch_sha(self) -> str:
+            return "0123456789abcdef"
+
+    monkeypatch.setattr(
+        cli, "get_settings", lambda: Settings(_env_file=None, github_repository="acme/pipeline")
+    )
+    monkeypatch.setattr(cli, "build_github_client", lambda settings: Fake())
+
+    result = runner.invoke(app, ["dev", "github-smoke"])
+
+    assert result.exit_code == 0
+    assert "acme/pipeline main is at 0123456789" in result.stdout

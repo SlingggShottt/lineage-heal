@@ -75,6 +75,39 @@ gh api "repos/$REPO/branches/main/protection" \
 Expected: only squash merging allowed, branches deleted on merge, the check listed above, a pull
 request required, and force pushes and deletions both `false`.
 
+## 5. Create the LineageHeal GitHub App
+
+The healing workflow acts on GitHub as a bot, not as a person (IF-SW-06). One App serves as the
+bot identity now and as the dashboard sign-in later (LH-060). You do this once, in a browser.
+
+1. GitHub, **Settings → Developer settings → GitHub Apps → New GitHub App**. Use the account or
+   organisation that owns the repository.
+2. Name it `LineageHeal` (or similar). Homepage URL: the repository's URL.
+3. Untick **Webhook → Active**; nothing receives webhooks.
+4. **Repository permissions**, and nothing else (NFR-SEC-02):
+   Contents: read and write. Pull requests: read and write. Issues: read and write.
+   Actions: read and write (to start the workflow). Metadata: read.
+5. **Where can this App be installed?** Only on this account.
+6. Create it, then note the **App ID** shown on its page.
+7. **Generate a private key.** A `.pem` file downloads. Keep it out of the repository.
+8. **Install App** on the repository only (not "all repositories"). The installation's ID is the
+   number at the end of the installation's settings URL (`.../installations/<id>`).
+9. Put the values in `.env`, which is git-ignored. Never paste them in chat or commit them:
+
+   | Variable | Value |
+   |---|---|
+   | `GITHUB_APP_ID` | the App ID |
+   | `GITHUB_APP_INSTALLATION_ID` | the installation ID |
+   | `GITHUB_APP_PRIVATE_KEY` | the `.pem` on one line, each newline written as `\n` |
+   | `GITHUB_REPOSITORY` | `owner/name` |
+
+   One way to write the key on one line: `awk 'NF {printf "%s\\n", $0}' key.pem`.
+10. Check it, reading only: `uv run lineageheal dev github-smoke`. It should print the commit
+    `main` is at. An error names the setting that is wrong.
+
+Later steps (CI secrets for the workflow, the user sign-in callback) are added by the tasks that
+need them.
+
 ## What this changes in practice
 
 - A direct push to `main` is refused for everyone but an administrator bypassing the rule.

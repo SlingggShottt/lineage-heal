@@ -128,6 +128,7 @@ uv run lineageheal detect RUN_ID                 # signals + download failures, 
 uv run lineageheal heal RUN_ID                   # detect, then investigate each incident to a saved root cause; needs DATABASE_URL and an LLM key; --incident ID
 uv run lineageheal dev inject-fault amfi --fault blank-nav --date 2026-10-15   # local raw zone only
 uv run lineageheal dev llm-smoke                 # one tiny call per LLM provider and tier; needs your own keys in .env
+uv run lineageheal dev github-smoke              # signs in as the GitHub App and reads the base branch; needs the GITHUB_* settings in .env
 
 # Quality gates — all must pass before proposing a commit
 uv run ruff format . && uv run ruff check .

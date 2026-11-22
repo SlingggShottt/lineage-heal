@@ -158,3 +158,9 @@ def test_a_file_longer_than_the_limit_is_refused(repo: Path) -> None:
             [("dbt/models/bronze/brz_a.sql", "x" * 100)],
             PatchLimits(max_file_characters=50),
         )
+
+
+def test_a_patch_carries_each_files_complete_new_text_for_committing(repo: Path) -> None:
+    patch = build_patch(repo, [("dbt/models/bronze/brz_a.sql", "select 1")])
+
+    assert patch.new_contents == {"dbt/models/bronze/brz_a.sql": "select 1\n"}
