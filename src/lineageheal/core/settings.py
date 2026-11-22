@@ -84,6 +84,12 @@ class Settings(BaseSettings):
     investigator_max_seconds: float = Field(default=120.0, gt=0)
     investigator_confidence_threshold: float = Field(default=0.8, gt=0, le=1)
 
+    # What one proposed patch may be (FR-FIX-01). The call limit is the first answer plus the
+    # corrections a rejected answer is sent back for; sandbox retries are counted separately.
+    fixer_max_llm_calls: int = Field(default=2, ge=1)
+    fixer_max_files: int = Field(default=4, ge=1)
+    fixer_max_changed_lines: int = Field(default=120, ge=1)
+
     # Embeddings run locally (D-06). The stored vectors are only comparable with ones from the
     # same model, so the name is recorded with each chunk and a changed setting re-indexes.
     # The knowledge tables hold 384-dimension vectors, so the model must produce that many.
