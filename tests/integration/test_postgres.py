@@ -15,17 +15,24 @@ from sqlalchemy import inspect, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from lineageheal.agents.investigator.models import (
+    Conclusion,
+    Evidence,
+    Investigation,
+    InvestigationStatus,
+)
 from lineageheal.core.errors import StorageError
 from lineageheal.core.signals import RunSummary, Severity, Signal, SignalKind
 from lineageheal.store.database import create_db_engine
 from lineageheal.store.ingestion_log import IngestionAttempt, IngestionLogRepository
+from lineageheal.store.investigations import InvestigationRepository
 from lineageheal.store.migrate import (
     current_revision,
     downgrade_database,
     head_revision,
     upgrade_database,
 )
-from lineageheal.store.models import Fix, Incident
+from lineageheal.store.models import AgentRun, Fix, Incident
 from lineageheal.store.runs import RunRepository
 
 DAY = date(2026, 10, 16)
@@ -189,4 +196,59 @@ def test_deleting_an_incident_removes_its_fixes_on_postgres(database_url: str) -
 
     with Session(engine) as session:
         assert session.scalars(select(Fix)).all() == []
+    engine.dispose()
+
+
+def test_an_investigation_round_trips_through_jsonb_and_the_run_constraints_hold(
+    database_url: str,
+) -> None:
+    upgrade_database(database_url)
+    engine = create_db_engine(database_url)
+    with Session(engine) as session, session.begin():
+        incident = Incident(status="detected", summary="x", opened_at=T0, updated_at=T0)
+        session.add(incident)
+        session.flush()
+        incident_id = incident.id
+    repository = InvestigationRepository(engine)
+    found = Investigation(
+        status=InvestigationStatus.CONCLUDED,
+        conclusion=Conclusion(
+            root_cause_node="raw.amfi.navall.nav",
+            fault_class="schema_drift",
+            explanation="Renamed.",
+            evidence_ids=[1],
+            confidence=0.9,
+            fix_location="dbt",
+            fix_reason="Bronze can read the new name.",
+        ),
+        partial=None,
+        evidence=[
+            Evidence(
+                1, "get_raw_schema", {"source": "amfi"}, True, "c", {"columns": ["Nav", "Ünï"]}
+            )
+        ],
+        llm_calls=3,
+        elapsed_seconds=1.0,
+        model_ids={"investigator.step.v1": "m"},
+        prompt_hashes={"investigator.step.v1": "ab" * 32},
+    )
+
+    run_id = repository.start(incident_id, T0)
+    repository.finish(run_id, found, T0 + timedelta(minutes=1))
+    stored = repository.latest_for(incident_id)
+
+    assert stored is not None
+    assert stored.evidence[0]["output"] == {"columns": ["Nav", "Ünï"]}
+    assert stored.finished_at == T0 + timedelta(minutes=1)
+    with pytest.raises(IntegrityError), Session(engine) as session, session.begin():
+        session.add(
+            AgentRun(
+                incident_id=incident_id,
+                status="failed",
+                started_at=T0,
+                finished_at=T0,
+                model_ids={},
+                prompt_versions={},
+            )
+        )  # no error text
     engine.dispose()

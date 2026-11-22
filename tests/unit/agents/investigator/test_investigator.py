@@ -294,3 +294,17 @@ def test_a_budget_of_nothing_is_refused(field: str) -> None:
 
     with pytest.raises(ValidationError):
         Settings(_env_file=None, **{field: 0})
+
+
+def test_the_investigation_records_tokens_prompt_hashes_and_evidence_times(
+    group: SignalGroup, verdict: Verdict
+) -> None:
+    investigator, _ = build([lineage_call(action="conclude"), conclusion()])
+
+    result = investigator.investigate(group, verdict)
+
+    assert result.input_tokens > 0
+    assert result.output_tokens > 0
+    assert set(result.prompt_hashes) == set(result.prompt_ids)
+    assert all(len(h) == 64 for h in result.prompt_hashes.values())
+    assert all(e.collected_at is not None and e.collected_at.tzinfo for e in result.evidence)

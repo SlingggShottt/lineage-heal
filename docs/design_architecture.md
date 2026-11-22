@@ -506,7 +506,7 @@ Seven tables hold the healing workflow's state. The benchmark tables in the diag
 | `pipeline_run` | dbt run | `run_id` (the Dagster run id, text, which is also the folder under `runs/`), `status` (`failed` when any signal is an error, `succeeded` otherwise), `counts`, `skipped_models`, `artifacts_prefix` |
 | `signal` | failure observation | `run_id`, `incident_id` (empty until the Detector groups it), `kind`, `severity`, `model`, `column_name`, `check_type`, `failures`, `message`; unique per run, kind and name |
 | `incident` | grouped failure | `status` (the lifecycle below), `fault_class` (the five classes or `unknown`), `confidence`, `classified_by` (`rules`, or prompt and model), `summary`, `severity`, `root_node`, `fingerprint` (the cause across runs), `affected` (JSON: models, columns, gold tables), `lineage_version`, `root_cause` (JSON, the Investigator's), `opened_at`, `resolved_at` |
-| `agent_run` | healing execution | `incident_id`, `status`, `model_ids`, `prompt_versions`, `llm_calls`, token counts, `trace_url`, `error` (NFR-REPRO-01) |
+| `agent_run` | healing execution | `incident_id`, `status`, `model_ids`, `prompt_versions` (prompt id to content hash), `llm_calls`, token counts, `trace_url`, `error` (NFR-REPRO-01). Opened `running` before the search; closed with its evidence and the incident update in one transaction (`InvestigationRepository`, D-52) |
 | `evidence` | tool output | `agent_run_id`, `tool`, `arguments`, `output`, `hypothesis` |
 | `fix` | proposed change | `incident_id`, `kind` (`dbt_patch` or `suggestion`), `status`, `patch`, `files`, `sandbox_result`, `branch`, `github_url` |
 | `review` | approver decision | `fix_id`, `reviewer_login`, `decision`, `reason` |

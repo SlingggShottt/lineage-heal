@@ -8,6 +8,7 @@ the store can keep later without reshaping.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import StrEnum
 from typing import Any, Literal
 
@@ -97,6 +98,7 @@ class Evidence:
     payload: dict[str, Any]
     node: str | None = None
     verdict: Verdict | None = None
+    collected_at: datetime | None = None  # wall clock, for the stored record
 
 
 class InvestigationStatus(StrEnum):
@@ -118,4 +120,7 @@ class Investigation:
     elapsed_seconds: float
     prompt_ids: list[str] = field(default_factory=list)
     model_ids: dict[str, str] = field(default_factory=dict)
+    prompt_hashes: dict[str, str] = field(default_factory=dict)  # prompt id -> sha256
+    input_tokens: int = 0
+    output_tokens: int = 0
     notes: list[str] = field(default_factory=list)  # corrections made to the model's answer
