@@ -134,6 +134,7 @@ function detail(overrides: Partial<Detail> = {}): Detail {
         created_at: "2026-11-23T08:47:00Z",
       },
     ],
+    decision: null,
     ...overrides,
   };
 }

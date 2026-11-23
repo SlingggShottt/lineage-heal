@@ -214,3 +214,39 @@ def test_a_request_that_may_have_been_received_is_not_repeated(
         client.open_issue("t", "b")
 
     assert route.call_count == 1
+
+
+def test_a_refusal_carries_githubs_status_and_reason_for_the_caller_to_act_on(
+    client: GitHubClient, github: respx.MockRouter
+) -> None:
+    github.put(f"/repos/{REPO}/pulls/7/merge").mock(
+        return_value=httpx.Response(405, json={"message": "Required status check is expected."})
+    )
+
+    with pytest.raises(VCSError) as raised:
+        client.squash_merge(7, SecretStr("ghu_user"))
+
+    assert raised.value.status == 405
+    assert raised.value.reason == "Required status check is expected."
+    assert "ghu_user" not in str(raised.value)
+
+
+def test_a_connection_failure_has_no_status(
+    client: GitHubClient, github: respx.MockRouter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("tenacity.nap.time.sleep", lambda _: None)
+    github.get(f"/repos/{REPO}/pulls/7").mock(side_effect=httpx.ConnectError("refused"))
+
+    with pytest.raises(VCSError) as raised:
+        client.pull_request(7)
+
+    assert raised.value.status is None
+
+
+def test_a_merged_pull_request_names_who_merged_it(
+    client: GitHubClient, github: respx.MockRouter
+) -> None:
+    body = {**PR, "state": "closed", "merged": True, "merged_by": {"login": "ada"}}
+    github.get(f"/repos/{REPO}/pulls/7").mock(return_value=httpx.Response(200, json=body))
+
+    assert client.pull_request(7).merged_by == "ada"

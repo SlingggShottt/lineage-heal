@@ -33,6 +33,7 @@ from lineageheal.store.fixes import FixRepository
 from lineageheal.store.incidents import IncidentRepository, StoredIncident
 from lineageheal.store.investigations import InvestigationRepository
 from lineageheal.store.lineage import LineageRepository
+from lineageheal.store.reviews import ReviewRepository
 
 router = APIRouter(tags=["incidents"], responses={404: PROBLEM_RESPONSES[404]})
 
@@ -71,6 +72,7 @@ def get_incident(incident_id: IncidentId, engine: EngineDep) -> IncidentDetail:
         IncidentRepository(engine).signals_of(incident_id),
         InvestigationRepository(engine).latest_for(incident_id),
         FixRepository(engine).for_incident(incident_id),
+        ReviewRepository(engine).latest_for_incident(incident_id),
     )
 
 
