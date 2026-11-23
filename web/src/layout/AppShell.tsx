@@ -21,7 +21,7 @@ export function AppShell() {
       </a>
       <header className="border-b">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-3">
-          <div className="flex items-center gap-6">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
             <span className="text-lg font-semibold">LineageHeal</span>
             <nav aria-label="Main" className="flex gap-1">
               {NAV.map(({ to, label, end }) => (

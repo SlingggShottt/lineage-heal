@@ -234,7 +234,7 @@ def to_detail(
     similar_incidents, runbooks = _knowledge(investigation)
     return IncidentDetail(
         **_summary_fields(incident),
-        root_cause=_root_cause(incident.root_cause),
+        root_cause=_root_cause(incident.root_cause, incident.confidence),
         affected=Affected(
             models=list(affected.get("models", [])),
             columns=list(affected.get("columns", [])),
@@ -298,13 +298,17 @@ def _summary_fields(incident: StoredIncident) -> dict[str, Any]:
     }
 
 
-def _root_cause(stored: dict[str, Any] | None) -> RootCause | None:
+def _root_cause(
+    stored: dict[str, Any] | None, incident_confidence: float | None
+) -> RootCause | None:
     if stored is None:
         return None
+    # A concluded cause keeps its confidence on the incident; only a best guess stores its own.
+    confidence = stored.get("confidence")
     return RootCause(
         node=stored.get("node"),
         explanation=stored.get("explanation"),
-        confidence=stored.get("confidence"),
+        confidence=incident_confidence if confidence is None else confidence,
         fix_location=stored.get("fix_location"),
         fix_reason=stored.get("fix_reason"),
         partial=bool(stored.get("partial", False)),

@@ -231,6 +231,7 @@ def test_the_detail_shows_the_diagnosis_evidence_signals_and_similar_knowledge(
 
     assert body["root_cause"]["explanation"] == "The NAV column was renamed upstream."
     assert body["root_cause"]["fix_location"] == "dbt"
+    assert body["root_cause"]["confidence"] == 0.9  # the incident's, which a conclusion sets
     assert body["root_cause"]["evidence_ids"] == [2]
     assert [s["name"] for s in body["signals"]] == [signal.name]
     investigation = body["investigation"]
