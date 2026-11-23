@@ -47,4 +47,17 @@ class KnowledgeError(LineageHealError):
 
 
 class VCSError(LineageHealError):
-    """GitHub refused a request or could not be reached; the message never contains a token."""
+    """GitHub refused a request or could not be reached; the message never contains a token.
+
+    Attributes:
+        status: The HTTP status GitHub answered with, or None when it could not be reached.
+        reason: GitHub's own short explanation, if it gave one (never the request or a token).
+    """
+
+    def __init__(
+        self, message: str, *, status: int | None = None, reason: str | None = None
+    ) -> None:
+        """Create the error."""
+        super().__init__(message)
+        self.status = status
+        self.reason = reason

@@ -17,6 +17,7 @@ from lineageheal.core.signals import Signal
 from lineageheal.store.fixes import StoredFix
 from lineageheal.store.incidents import StoredIncident
 from lineageheal.store.investigations import StoredInvestigation
+from lineageheal.store.reviews import StoredReview
 
 # Mirrors of the store's allowed values; a test fails if they drift apart.
 IncidentStatus = Literal[
@@ -151,6 +152,15 @@ class FixSummary(BaseModel):
     created_at: datetime
 
 
+class DecisionRecord(BaseModel):
+    """The approver's decision on the incident's fix."""
+
+    decision: Literal["approved", "rejected"]
+    reviewer: str
+    reason: str | None
+    decided_at: datetime
+
+
 class IncidentDetail(IncidentSummary):
     """Everything the incident page shows except the lineage graph and the full diff."""
 
@@ -161,6 +171,7 @@ class IncidentDetail(IncidentSummary):
     similar_incidents: list[KnowledgeHit]
     related_runbooks: list[KnowledgeHit]
     fixes: list[FixSummary]
+    decision: DecisionRecord | None
 
 
 class SandboxOut(BaseModel):
@@ -228,6 +239,7 @@ def to_detail(
     signals: list[Signal],
     investigation: StoredInvestigation | None,
     fixes: list[StoredFix],
+    review: StoredReview | None = None,
 ) -> IncidentDetail:
     """The incident page's data, from the stored incident, signals, evidence and fixes."""
     affected = incident.affected
@@ -245,7 +257,17 @@ def to_detail(
         similar_incidents=similar_incidents,
         related_runbooks=runbooks,
         fixes=[to_fix_summary(fix) for fix in fixes],
+        decision=None if review is None else DecisionRecord(**_review_fields(review)),
     )
+
+
+def _review_fields(review: StoredReview) -> dict[str, Any]:
+    return {
+        "decision": review.decision,
+        "reviewer": review.reviewer_login,
+        "reason": review.reason,
+        "decided_at": review.decided_at,
+    }
 
 
 def to_fix_summary(fix: StoredFix) -> FixSummary:

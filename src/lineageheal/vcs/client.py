@@ -51,6 +51,7 @@ class PullRequest:
     merged: bool
     head: str
     base: str
+    merged_by: str | None = None  # the login that merged it, when it is merged
 
 
 @dataclass(frozen=True)
@@ -233,7 +234,11 @@ class GitHubClient:
         except httpx.HTTPError as exc:
             raise VCSError(f"GitHub could not be reached: {type(exc).__name__}") from exc
         if response.status_code >= 400:
-            raise VCSError(_describe(method, path, response))
+            raise VCSError(
+                _describe(method, path, response),
+                status=response.status_code,
+                reason=_reason(response) or None,
+            )
         result: dict[str, Any] = response.json() if response.content else {}
         return result
 
@@ -273,15 +278,21 @@ def _pull_request(data: Mapping[str, Any]) -> PullRequest:
         merged=bool(data.get("merged", False)),
         head=str(data["head"]["ref"]),
         base=str(data["base"]["ref"]),
+        merged_by=(data.get("merged_by") or {}).get("login"),
     )
+
+
+def _reason(response: httpx.Response) -> str:
+    """GitHub's own explanation of a failure, clipped."""
+    try:
+        return str(response.json().get("message", ""))[:300]
+    except (ValueError, AttributeError):
+        return ""
 
 
 def _describe(method: str, path: str, response: httpx.Response) -> str:
     """A failure message built from GitHub's own words, never from the request or its token."""
-    try:
-        reason = str(response.json().get("message", ""))[:300]
-    except ValueError:
-        reason = ""
+    reason = _reason(response)
     limited = response.headers.get("x-ratelimit-remaining") == "0" or response.status_code == 429
     hint = " (rate limited)" if limited else ""
     return f"GitHub {method} {path} failed with HTTP {response.status_code}{hint}: {reason}"

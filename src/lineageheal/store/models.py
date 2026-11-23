@@ -347,7 +347,9 @@ class Review(Base):
             "decision <> 'rejected' OR (reason IS NOT NULL AND length(trim(reason)) > 0)",
             name="rejections_say_why",
         ),
-        Index("ix_review_fix_id", "fix_id"),
+        # One decision per fix: a rejected fix is closed for good and a new attempt is a new fix,
+        # so a second decision can only be a double click or two approvers racing.
+        UniqueConstraint("fix_id", name="uq_review_fix_id"),
     )
 
     id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)

@@ -317,12 +317,20 @@ def test_an_unknown_fix_kind_or_status_is_refused(engine: Engine) -> None:
 
 def test_a_rejection_needs_a_reason_and_an_approval_does_not(engine: Engine) -> None:
     (incident_id,) = stored(engine, incident())
-    (fix_id,) = stored(engine, fix(incident_id))
+    (approved_fix, rejected_fix) = stored(engine, fix(incident_id), fix(incident_id))
 
+    stored(engine, review(approved_fix))
+    refused(engine, review(rejected_fix, decision="rejected"))
+    refused(engine, review(rejected_fix, decision="rejected", reason="   "))
+    stored(engine, review(rejected_fix, decision="rejected", reason="Wrong column"))
+
+
+def test_a_fix_takes_only_one_decision(engine: Engine) -> None:
+    (incident_id,) = stored(engine, incident())
+    (fix_id,) = stored(engine, fix(incident_id))
     stored(engine, review(fix_id))
-    refused(engine, review(fix_id, decision="rejected"))
-    refused(engine, review(fix_id, decision="rejected", reason="   "))
-    stored(engine, review(fix_id, decision="rejected", reason="Wrong column"))
+
+    refused(engine, review(fix_id, decision="rejected", reason="Changed my mind"))
 
 
 def test_an_unknown_decision_is_refused(engine: Engine) -> None:

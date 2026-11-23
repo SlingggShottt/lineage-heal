@@ -14,13 +14,17 @@ from urllib.parse import urlsplit
 from fastapi import Depends, Request
 from sqlalchemy import Engine
 
+from lineageheal.api.decisions import DecisionService
 from lineageheal.api.github_auth import GitHubOAuth
 from lineageheal.api.problems import ApiError
 from lineageheal.api.security import SESSION_COOKIE, TokenCipher, hash_session_id, tokens_match
 from lineageheal.core.errors import ConfigurationError
 from lineageheal.core.settings import Settings
 from lineageheal.store.database import create_db_engine
+from lineageheal.store.reviews import ReviewRepository
 from lineageheal.store.sessions import SessionRepository, StoredSession
+from lineageheal.vcs.client import GitHubClient
+from lineageheal.vcs.factory import build_github_client
 
 
 def settings_of(request: Request) -> Settings:
@@ -106,6 +110,37 @@ def cipher_of(request: Request) -> TokenCipher:
     return cipher
 
 
+def github_of(request: Request) -> GitHubClient:
+    """The GitHub client, built on first use from the App's settings.
+
+    Raises:
+        ApiError: The App is not configured (503).
+    """
+    state = request.app.state
+    if state.github is None:
+        try:
+            state.github = build_github_client(state.settings)
+        except ConfigurationError as exc:
+            raise ApiError(
+                503,
+                "github-unavailable",
+                "GitHub unavailable",
+                "GitHub is not configured on this server.",
+            ) from exc
+    github: GitHubClient = state.github
+    return github
+
+
+def decisions_of(request: Request) -> DecisionService:
+    """The service that carries out approvals and rejections."""
+    return DecisionService(
+        ReviewRepository(engine_of(request)),
+        github_of(request),
+        cipher_of(request),
+        lambda: now_of(request),
+    )
+
+
 def optional_session(request: Request) -> StoredSession | None:
     """The signed-in session for this request, or None for an anonymous visitor.
 
@@ -175,3 +210,4 @@ def approver_action(
 
 OptionalSessionDep = Annotated[StoredSession | None, Depends(optional_session)]
 ApproverDep = Annotated[StoredSession, Depends(approver_action)]
+DecisionServiceDep = Annotated[DecisionService, Depends(decisions_of)]

@@ -12,13 +12,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from lineageheal.api.problems import PROBLEM_RESPONSES, install_problem_handlers
-from lineageheal.api.routers import auth, health, incidents
+from lineageheal.api.routers import auth, decisions, health, incidents
 from lineageheal.core.settings import Settings, get_settings
 
 TAGS = [
     {"name": "health", "description": "Liveness and readiness."},
     {"name": "auth", "description": "GitHub sign-in and the current session."},
     {"name": "incidents", "description": "Detected failures, their diagnosis, lineage and fixes."},
+    {"name": "decisions", "description": "Approvers approve or reject a proposed fix."},
 ]
 
 
@@ -54,6 +55,7 @@ def create_app(
     app.state.engine = None
     app.state.oauth = None
     app.state.cipher = None
+    app.state.github = None
     app.state.clock = clock or (lambda: datetime.now(UTC))
     install_problem_handlers(app)
 
@@ -73,6 +75,7 @@ def create_app(
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(incidents.router)
+    app.include_router(decisions.router)
     return app
 
 

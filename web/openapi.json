@@ -63,6 +63,108 @@
         "title": "Alternative",
         "type": "object"
       },
+      "Decision": {
+        "description": "What an approval or rejection did.",
+        "properties": {
+          "decided_at": {
+            "format": "date-time",
+            "title": "Decided At",
+            "type": "string"
+          },
+          "decision": {
+            "enum": [
+              "approved",
+              "rejected"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "fix_id": {
+            "title": "Fix Id",
+            "type": "integer"
+          },
+          "incident_id": {
+            "title": "Incident Id",
+            "type": "integer"
+          },
+          "merge_commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merge Commit"
+          },
+          "pull_request_number": {
+            "title": "Pull Request Number",
+            "type": "integer"
+          },
+          "pull_request_url": {
+            "title": "Pull Request Url",
+            "type": "string"
+          },
+          "reviewer": {
+            "title": "Reviewer",
+            "type": "string"
+          }
+        },
+        "required": [
+          "incident_id",
+          "fix_id",
+          "decision",
+          "reviewer",
+          "decided_at",
+          "pull_request_number",
+          "pull_request_url",
+          "merge_commit"
+        ],
+        "title": "Decision",
+        "type": "object"
+      },
+      "DecisionRecord": {
+        "description": "The approver's decision on the incident's fix.",
+        "properties": {
+          "decided_at": {
+            "format": "date-time",
+            "title": "Decided At",
+            "type": "string"
+          },
+          "decision": {
+            "enum": [
+              "approved",
+              "rejected"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "reviewer": {
+            "title": "Reviewer",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision",
+          "reviewer",
+          "reason",
+          "decided_at"
+        ],
+        "title": "DecisionRecord",
+        "type": "object"
+      },
       "EvidenceOut": {
         "description": "One tool result the Investigator collected.",
         "properties": {
@@ -382,6 +484,16 @@
             ],
             "title": "Confidence"
           },
+          "decision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DecisionRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "fault_class": {
             "anyOf": [
               {
@@ -521,7 +633,8 @@
           "investigation",
           "similar_incidents",
           "related_runbooks",
-          "fixes"
+          "fixes",
+          "decision"
         ],
         "title": "IncidentDetail",
         "type": "object"
@@ -1098,6 +1211,22 @@
           "head"
         ],
         "title": "Readiness",
+        "type": "object"
+      },
+      "RejectRequest": {
+        "description": "Why the fix is being rejected. A rejection without a reason is refused.",
+        "properties": {
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "RejectRequest",
         "type": "object"
       },
       "RootCause": {
@@ -2362,6 +2491,142 @@
         ]
       }
     },
+    "/incidents/{incident_id}/approve": {
+      "post": {
+        "description": "Submit an approving review and squash-merge the pull request as the signed-in approver.",
+        "operationId": "approve_incidents__incident_id__approve_post",
+        "parameters": [
+          {
+            "description": "The incident's id.",
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "description": "The incident's id.",
+              "maximum": 9223372036854775807,
+              "minimum": 1,
+              "title": "Incident Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Decision"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Approve and merge the fix",
+        "tags": [
+          "decisions"
+        ]
+      }
+    },
     "/incidents/{incident_id}/fix": {
       "get": {
         "description": "The newest patch or suggestion, with its diff and sandbox verdict.",
@@ -2634,6 +2899,152 @@
         ]
       }
     },
+    "/incidents/{incident_id}/reject": {
+      "post": {
+        "description": "Close the pull request unmerged and record the reason.",
+        "operationId": "reject_incidents__incident_id__reject_post",
+        "parameters": [
+          {
+            "description": "The incident's id.",
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "description": "The incident's id.",
+              "maximum": 9223372036854775807,
+              "minimum": 1,
+              "title": "Incident Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Decision"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Reject the fix",
+        "tags": [
+          "decisions"
+        ]
+      }
+    },
     "/me": {
       "get": {
         "description": "Report the signed-in person, and whether they may approve.",
@@ -2768,6 +3179,10 @@
     {
       "description": "Detected failures, their diagnosis, lineage and fixes.",
       "name": "incidents"
+    },
+    {
+      "description": "Approvers approve or reject a proposed fix.",
+      "name": "decisions"
     }
   ]
 }
