@@ -3,7 +3,7 @@
 # Targets for Docker, dbt and the frontend are added by the tasks that introduce them.
 
 .DEFAULT_GOAL := help
-.PHONY: help setup up down dagster fmt lint typecheck test test-integration check clean
+.PHONY: help setup up down dagster api fmt lint typecheck test test-integration check clean
 
 help: ## List available targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
@@ -22,6 +22,9 @@ down: ## Stop local services (data stays in the pgdata volume)
 # from here, so RAW_ZONE_DIR and the other settings apply to the runs it launches.
 dagster: ## Start the Dagster UI and daemon at http://localhost:3000
 	DAGSTER_HOME=$(CURDIR)/dagster_home uv run dagster dev -m lineageheal.orchestration.definitions
+
+api: ## Start the HTTP API at http://localhost:8000 (OpenAPI docs at /docs)
+	uv run lineageheal api --reload
 
 fmt: ## Format code
 	uv run ruff format .

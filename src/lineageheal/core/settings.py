@@ -115,6 +115,12 @@ class Settings(BaseSettings):
     github_repository: str | None = Field(default=None, pattern=r"^[\w.-]+/[\w.-]+$")
     github_base_branch: str = "main"
 
+    # The HTTP API. Origins are comma-separated and need to list the dashboard's own origin,
+    # because sign-in uses a cookie and a wildcard cannot be combined with one.
+    api_host: str = "127.0.0.1"
+    api_port: int = Field(default=8000, ge=1, le=65535)
+    api_cors_origins: str = "http://localhost:5173"
+
     def require_database_url(self) -> str:
         """Return the database URL, or explain that it is not set.
 

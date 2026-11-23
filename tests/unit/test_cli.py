@@ -1334,3 +1334,26 @@ def test_github_smoke_reports_the_base_branch_commit(monkeypatch: pytest.MonkeyP
 
     assert result.exit_code == 0
     assert "acme/pipeline main is at 0123456789" in result.stdout
+
+
+def test_the_api_command_starts_uvicorn_with_the_app_factory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import uvicorn
+
+    started: dict[str, object] = {}
+    monkeypatch.setattr(
+        uvicorn, "run", lambda target, **options: started.update(target=target, **options)
+    )
+    monkeypatch.setenv("API_PORT", "9001")
+
+    result = runner.invoke(app, ["api"])
+
+    assert result.exit_code == 0, result.output
+    assert started == {
+        "target": "lineageheal.api.app:create_app",
+        "factory": True,
+        "host": "127.0.0.1",
+        "port": 9001,
+        "reload": False,
+    }
