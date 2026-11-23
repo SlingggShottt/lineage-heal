@@ -125,3 +125,22 @@ def test_llm_keys_are_optional_and_never_shown(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setenv("GEMINI_API_KEY", "sekret-value")
 
     assert "sekret-value" not in repr(make_settings())
+
+
+def test_approver_logins_are_split_trimmed_and_lower_cased(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert make_settings().approver_logins == frozenset()
+    monkeypatch.setenv("APPROVER_GITHUB_LOGINS", " Ada ,grace,, ")
+
+    assert make_settings().approver_logins == frozenset({"ada", "grace"})
+
+
+def test_sign_in_secrets_are_never_shown(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SESSION_SECRET", "s3cret-session-key")
+    monkeypatch.setenv("GITHUB_OAUTH_CLIENT_SECRET", "s3cret-client")
+
+    shown = repr(make_settings())
+
+    assert "s3cret-session-key" not in shown
+    assert "s3cret-client" not in shown

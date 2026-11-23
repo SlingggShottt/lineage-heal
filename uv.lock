@@ -1274,6 +1274,7 @@ source = { editable = "." }
 dependencies = [
     { name = "alembic" },
     { name = "boto3" },
+    { name = "cryptography" },
     { name = "dagster" },
     { name = "dagster-dbt" },
     { name = "dagster-webserver" },
@@ -1312,6 +1313,7 @@ dev = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.20.0" },
     { name = "boto3", specifier = ">=1.43.114" },
+    { name = "cryptography", specifier = ">=50.0.2" },
     { name = "dagster", specifier = ">=1.13.26" },
     { name = "dagster-dbt", specifier = ">=0.29.26" },
     { name = "dagster-webserver", specifier = ">=1.13.26" },

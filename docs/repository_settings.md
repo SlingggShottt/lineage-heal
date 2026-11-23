@@ -105,8 +105,36 @@ bot identity now and as the dashboard sign-in later (LH-060). You do this once, 
 10. Check it, reading only: `uv run lineageheal dev github-smoke`. It should print the commit
     `main` is at. An error names the setting that is wrong.
 
-Later steps (CI secrets for the workflow, the user sign-in callback) are added by the tasks that
-need them.
+### Dashboard sign-in (LH-059)
+
+The same App signs people in to the dashboard. In the App's settings:
+
+1. **Callback URL:** `<API_PUBLIC_URL>/auth/callback`, for example
+   `http://localhost:8000/auth/callback` while developing. It must equal what `API_PUBLIC_URL`
+   says, character for character.
+2. **Expire user authorization tokens:** leave it ticked. A session then ends when its GitHub
+   token does (8 hours), and a leaked token does not live for ever.
+3. **Request user authorization (OAuth) during installation:** leave it unticked, and leave
+   **Webhook** off.
+4. **Generate a new client secret** and note the **Client ID**.
+5. Set these in `.env`, never in chat or in the repository:
+
+   | Variable | Value |
+   |---|---|
+   | `GITHUB_OAUTH_CLIENT_ID` | the App's client ID (`Iv1....`) |
+   | `GITHUB_OAUTH_CLIENT_SECRET` | the client secret you generated |
+   | `SESSION_SECRET` | at least 32 random characters: `openssl rand -hex 32`. It encrypts the GitHub tokens kept for approvers, so changing it signs everyone out |
+   | `APPROVER_GITHUB_LOGINS` | comma-separated GitHub logins that may approve and reject, for example `alice,bob`; everyone else is read-only |
+   | `API_PUBLIC_URL`, `DASHBOARD_URL` | where a browser reaches the API and the dashboard |
+
+6. Check it: `make api`, then open `http://localhost:8000/auth/login` in a browser. After you
+   approve on GitHub you land on `DASHBOARD_URL`, and `http://localhost:8000/me` shows your
+   login with `is_approver` true if you are on the list.
+
+The dashboard and API are meant to share one origin (a dev proxy in Vite, a proxy on the
+dashboard host in production), so the session cookie stays `SameSite=Lax`; see D-60.
+
+Later steps (CI secrets for the workflow) are added by the tasks that need them.
 
 ## What this changes in practice
 
