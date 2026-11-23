@@ -60,17 +60,19 @@ export function IncidentPage() {
   return (
     <>
       <IncidentHeader incident={data} />
-      <div className="grid items-start gap-6 lg:grid-cols-2">
-        <div className="flex min-w-0 flex-col gap-6">
+      <div className="flex flex-col gap-6">
+        <LineageCard incidentId={id} />
+        <div className="grid items-start gap-6 lg:grid-cols-2">
           <RootCauseCard rootCause={data.root_cause} />
-          <FixCard incidentId={id} attempts={data.fixes} />
-          <EvidenceList evidence={data.investigation?.evidence ?? []} cited={citedEvidence} />
-        </div>
-        <div className="flex min-w-0 flex-col gap-6">
-          <LineageCard incidentId={id} />
           <SignalsCard signals={data.signals} />
-          <KnowledgeCard runbooks={data.related_runbooks} incidents={data.similar_incidents} />
-          <InvestigationCard investigation={data.investigation} />
+        </div>
+        <FixCard incidentId={id} attempts={data.fixes} />
+        <div className="grid items-start gap-6 lg:grid-cols-2">
+          <EvidenceList evidence={data.investigation?.evidence ?? []} cited={citedEvidence} />
+          <div className="flex min-w-0 flex-col gap-6">
+            <KnowledgeCard runbooks={data.related_runbooks} incidents={data.similar_incidents} />
+            <InvestigationCard investigation={data.investigation} />
+          </div>
         </div>
       </div>
     </>

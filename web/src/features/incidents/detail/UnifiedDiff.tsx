@@ -28,7 +28,7 @@ const STYLES: Record<LineKind, string> = {
 
 /**
  * A patch as git prints it, with added and removed lines tinted. The + and - stay visible, so
- * the meaning does not depend on colour. The side-by-side view replaces this in LH-102.
+ * the meaning does not depend on colour. The side-by-side view is the default; this is the plain form.
  */
 export function UnifiedDiff({ diff }: { diff: string }) {
   const lines = diff.replace(/\n$/, "").split("\n");
