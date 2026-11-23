@@ -1256,6 +1256,54 @@ def test_heal_says_so_when_the_run_has_no_incident(
     assert "no incidents to investigate" in result.output
 
 
+def test_heal_publish_without_github_settings_stops_before_any_work(
+    tmp_path: Path, database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store_summary(tmp_path, signals=(failing_signal(),))
+    unreachable_model(monkeypatch)
+    for name in ("GITHUB_APP_ID", "GITHUB_REPOSITORY"):
+        monkeypatch.delenv(name, raising=False)
+
+    result = runner.invoke(app, ["heal", RUN_ID, "--publish"])
+
+    assert result.exit_code == 1
+    assert "GITHUB_APP_ID" in result.output
+    engine = create_db_engine(database)
+    try:
+        assert InvestigationRepository(engine).latest_for(1) is None
+    finally:
+        engine.dispose()
+
+
+def test_heal_reports_the_fix_for_a_concluded_incident(
+    tmp_path: Path, database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from lineageheal.agents.graph import FixKind, FixOutcome, HealReport, IncidentOutcome
+    from lineageheal.agents.graph import OutcomeKind as Kind
+
+    store_summary(tmp_path, signals=(failing_signal(),))
+    unreachable_model(monkeypatch)
+    report = HealReport(
+        [IncidentOutcome(1, Kind.CONCLUDED, "why", root_cause_node="a.b", fix_location="dbt")],
+        [
+            FixOutcome(
+                1,
+                FixKind.PATCH_PUBLISHED,
+                "fixed 1 failing node(s)",
+                1,
+                pull_request_url="https://github.com/a/b/pull/7",
+            )
+        ],
+    )
+    monkeypatch.setattr(cli, "run_heal_report", lambda *args, **kwargs: report)
+
+    result = runner.invoke(app, ["heal", RUN_ID])
+
+    assert result.exit_code == 0
+    assert "incident 1 fix: patch_published" in result.output
+    assert "pull request: https://github.com/a/b/pull/7" in result.output
+
+
 # --- github-smoke ----------------------------------------------------------------------------
 
 

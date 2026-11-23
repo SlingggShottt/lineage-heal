@@ -2,10 +2,11 @@
 
 A drafted patch is stored as `unverified` (LH-052). The sandbox's verdicts are stored with
 `save_attempts` (LH-053), which also moves the incident to `fix_proposed` or `fix_unverified`
-in the same transaction. A suggestion for a root cause outside dbt is stored by
-`save_suggestion` and marked filed, with its issue, by `mark_filed` (LH-055). Publishing a pull
-request belongs to the GitHub client, and the database already refuses a patch marked verified
-without a sandbox result on record.
+in the same transaction, and a verified patch's pull request is recorded by `mark_published`
+(LH-056). A suggestion for a root cause outside dbt is stored by `save_suggestion` and marked
+filed, with its issue, by `mark_filed` (LH-055). Opening the pull request or issue belongs to the
+GitHub client, and the database already refuses a patch marked verified without a sandbox result
+on record.
 """
 
 from __future__ import annotations
@@ -190,6 +191,29 @@ class FixRepository:
         except SQLAlchemyError as exc:
             raise StorageError(
                 f"Could not save the suggestion: {explain_database_error(exc)}"
+            ) from exc
+
+    def mark_published(self, fix_id: int, branch: str, number: int, url: str, at: datetime) -> None:
+        """Record the pull request a verified patch was opened as.
+
+        The database refuses this for a patch with no sandbox result on record.
+
+        Raises:
+            StorageError: The fix is not a patch, or the database refused or failed.
+        """
+        try:
+            with Session(self._engine) as session, session.begin():
+                row = session.get(Fix, fix_id)
+                if row is None or row.kind != "dbt_patch":
+                    raise StorageError(f"Fix {fix_id} is not a dbt patch")
+                row.status = "published"
+                row.branch = branch
+                row.github_number = number
+                row.github_url = url
+                row.updated_at = at
+        except SQLAlchemyError as exc:
+            raise StorageError(
+                f"Could not record the pull request: {explain_database_error(exc)}"
             ) from exc
 
     def mark_filed(self, fix_id: int, number: int, url: str, at: datetime) -> None:

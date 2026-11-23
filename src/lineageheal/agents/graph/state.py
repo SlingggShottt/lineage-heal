@@ -36,6 +36,33 @@ class IncidentOutcome:
     llm_calls: int = 0
 
 
+class FixKind(StrEnum):
+    """How fixing one incident ended."""
+
+    PATCH_PUBLISHED = "patch_published"  # verified, and a pull request is open
+    PATCH_VERIFIED = "patch_verified"  # verified and stored; nothing opened (no --publish)
+    UNVERIFIED = "unverified"  # patches were tried and none passed the sandbox
+    NO_PATCH = "no_patch"  # the Fixer produced nothing to verify
+    SUGGESTION_FILED = "suggestion_filed"  # a root cause outside dbt, filed as an issue
+    SUGGESTION_DRAFTED = "suggestion_drafted"  # drafted and stored; nothing opened (no --publish)
+    NO_SUGGESTION = "no_suggestion"
+    FAILED = "failed"  # something crashed; the other incidents carry on
+    SKIPPED = "skipped"  # already fixed, decided or not investigated to a conclusion
+
+
+@dataclass(frozen=True, slots=True)
+class FixOutcome:
+    """What the graph did to fix one incident."""
+
+    incident_id: int
+    kind: FixKind
+    detail: str = ""
+    attempts: int = 0
+    pull_request_url: str | None = None
+    issue_url: str | None = None
+    llm_calls: int = 0
+
+
 class HealState(TypedDict):
     """The graph state."""
 
@@ -43,3 +70,5 @@ class HealState(TypedDict):
     only_incident: int | None  # investigate just this incident, if the run has it
     pending: list[int]
     outcomes: list[IncidentOutcome]
+    to_fix: list[int]  # concluded incidents still waiting for the Fixer
+    fixes: list[FixOutcome]
