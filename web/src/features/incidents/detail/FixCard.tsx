@@ -3,10 +3,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
+import { DiffView } from "./DiffView";
 import { SandboxVerdict } from "./SandboxVerdict";
 import { Section } from "./Section";
 import { SuggestionView } from "./SuggestionView";
-import { UnifiedDiff } from "./UnifiedDiff";
 import { isNotFound, useIncidentFix } from "./useIncident";
 
 type FixSummary = components["schemas"]["FixSummary"];
@@ -116,7 +116,7 @@ export function FixCard({ incidentId, attempts }: { incidentId: number; attempts
         </div>
       )}
       {data.sandbox && <SandboxVerdict sandbox={data.sandbox} />}
-      {data.patch && <UnifiedDiff diff={data.patch} />}
+      {data.patch && <DiffView diff={data.patch} />}
       {data.suggestion && <SuggestionView suggestion={data.suggestion} />}
       {attempts.length > 1 && <Attempts attempts={attempts} />}
     </Section>

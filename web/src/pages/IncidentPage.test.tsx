@@ -322,6 +322,16 @@ describe("the incident page", () => {
     ]);
   });
 
+  it("draws the lineage as a graph above the list, with the path still listed as text", async () => {
+    renderApp("/incidents/12", everything().fetch);
+
+    const heading = await screen.findByRole("heading", { name: "Lineage" });
+    const card = heading.closest("div[class*='rounded']") as HTMLElement;
+    expect(await within(card).findByLabelText("Lineage graph")).toBeInTheDocument();
+    expect(within(card).getByText("The path as a list (3 steps)")).toBeInTheDocument();
+    expect(within(card).getAllByText("Root cause").length).toBeGreaterThan(0);
+  });
+
   it("shows the fix: the pull request, the files, the sandbox verdict and the patch", async () => {
     renderApp("/incidents/12", everything().fetch);
 
@@ -337,10 +347,42 @@ describe("the incident page", () => {
     expect(card).toHaveTextContent("fixed 1 failing node(s) and broke nothing");
     expect(card).toHaveTextContent("not_null_brz_amfi__navall_nav_inr"); // without the id's prefix and hash
     expect(card).not.toHaveTextContent("5b0d921a09");
-    const patch = within(card).getByLabelText("Patch");
+    // Side by side is the default: the old line on the left, its replacement on the right.
+    const patch = within(card).getByRole("region", { name: "Patch, side by side" });
+    expect(patch).toHaveAttribute("tabindex", "0");
+    const changed = within(patch)
+      .getAllByRole("row")
+      .find((row) => row.textContent.includes("Net Asset Value"));
+    const cells = changed
+      ? within(changed)
+          .getAllByRole("cell")
+          .filter((cell) => cell.textContent.includes("try_cast"))
+      : [];
+    expect(cells[0]).toHaveTextContent('Removed: try_cast(trim("Net Asset Value")');
+    expect(cells[1]).toHaveTextContent('Added: try_cast(coalesce(trim("NAV")');
+    expect(card).toHaveTextContent("+1 −1");
+  });
+
+  it("switches the patch to the plain unified form and back", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderApp("/incidents/12", everything().fetch);
+    const group = await screen.findByRole("group", { name: "Diff layout" });
+    const side = within(group).getByRole("button", { name: "Side by side" });
+    const unified = within(group).getByRole("button", { name: "Unified" });
+    expect(side).toHaveAttribute("aria-pressed", "true");
+    expect(unified).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(unified);
+
+    const patch = screen.getByLabelText("Patch");
     expect(patch).toHaveTextContent('- try_cast(trim("Net Asset Value")');
     expect(patch).toHaveTextContent('+ try_cast(coalesce(trim("NAV")');
-    expect(patch).toHaveAttribute("tabindex", "0");
+    expect(unified).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("region", { name: "Patch, side by side" })).not.toBeInTheDocument();
+
+    await user.click(side);
+
+    expect(screen.getByRole("region", { name: "Patch, side by side" })).toBeInTheDocument();
   });
 
   it("shows the runbook sections the Investigator found, as short excerpts", async () => {
@@ -388,11 +430,11 @@ describe("the incident page", () => {
 
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual([
+      "Lineage",
       "Root cause",
+      "Signals",
       "Proposed fix",
       "Evidence",
-      "Lineage",
-      "Signals",
       "Related knowledge",
       "Investigation",
     ]);
@@ -507,6 +549,8 @@ describe("what the page says when something is missing", () => {
     expect(
       await screen.findByText(/No path from the root cause to the affected tables/),
     ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Lineage graph")).not.toBeInTheDocument();
+    expect(screen.queryByText(/The path as a list/)).not.toBeInTheDocument();
     expect(
       screen.getByText(/Not reached from the root: gld_mf_nav_daily, gld_market_daily_summary/),
     ).toBeInTheDocument();
