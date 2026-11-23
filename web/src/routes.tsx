@@ -1,6 +1,7 @@
 import type { RouteObject } from "react-router";
 
 import { AppShell } from "@/layout/AppShell";
+import { IncidentPage } from "@/pages/IncidentPage";
 import { IncidentsPage } from "@/pages/IncidentsPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { OverviewPage } from "@/pages/OverviewPage";
@@ -13,6 +14,7 @@ export const routes: RouteObject[] = [
     children: [
       { index: true, element: <OverviewPage /> },
       { path: "incidents", element: <IncidentsPage /> },
+      { path: "incidents/:id", element: <IncidentPage /> },
       { path: "runbooks", element: <RunbooksPage /> },
       { path: "*", element: <NotFoundPage /> },
     ],
