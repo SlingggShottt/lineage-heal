@@ -45,13 +45,21 @@ describe("the app shell and routes", () => {
 });
 
 describe("an incident's address", () => {
-  it("opens a placeholder for the incident with a way back to the list", async () => {
-    renderApp("/incidents/12", anonymous().fetch);
+  it("shows that no such incident exists, with a way back to the list", async () => {
+    const api = fakeApi({
+      "/me": { body: { signed_in: false, is_approver: false } },
+      "/incidents/12": {
+        status: 404,
+        body: { type: "urn:lineageheal:problem:not-found", title: "Not found", status: 404 },
+      },
+    });
+
+    renderApp("/incidents/12", api.fetch);
 
     expect(
-      await screen.findByRole("heading", { level: 1, name: "Incident #12" }),
+      await screen.findByRole("heading", { level: 1, name: "Incident not found" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "← All incidents" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Back to all incidents" })).toHaveAttribute(
       "href",
       "/incidents",
     );
