@@ -571,6 +571,14 @@ Migration 0006 enables the pgvector extension and adds an HNSW index on `embeddi
 | GET | `/runbooks`, `/runbooks/{slug}` | Public |
 | GET | `/benchmark/runs`, `/benchmark/runs/{id}` | Public |
 
+As built (LH-058) the app is created by `create_app(settings)` in `api/app.py`, so a test gets its own settings and database, and is served by `lineageheal api` or `make api`. Conventions every endpoint follows:
+
+- **Errors** are RFC 9457 `application/problem+json` with `type`, `title`, `status`, `detail`, `instance` and, for a rejected input, `errors` (a field and a message each, never the submitted value). `type` is `urn:lineageheal:problem:<slug>` and a slug never changes meaning. An endpoint raises `ApiError(status, slug, title, detail)`; unknown URLs, wrong methods and unhandled exceptions get the same shape, and a 500 carries no internals.
+- **Pagination** is `limit` (1 to 100, default 25) and `offset`, answered as `{items, total, limit, offset}`; a value out of range is a 422.
+- **Health.** `GET /health` is liveness and never uses the database. `GET /health/ready` runs `SELECT 1` and compares the migration revision with this code's head, answering 503 problems `database-unavailable` or `schema-out-of-date`.
+- **Cross-origin access** is limited to `API_CORS_ORIGINS` with credentials allowed, because sign-in will use a cookie.
+- **Database.** The engine is created on first use from `DATABASE_URL`; endpoints are plain `def` functions over the synchronous repositories (D-59).
+
 ### 10.2 Review sequence
 
 ```mermaid

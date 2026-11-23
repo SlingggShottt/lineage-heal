@@ -11,6 +11,7 @@ from alembic import command
 from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
+from sqlalchemy import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
 from lineageheal.core.errors import StorageError
@@ -51,6 +52,16 @@ def current_revision(url: str) -> str | None:
         raise StorageError(f"Could not read the database revision: {_summary(exc)}") from exc
     finally:
         engine.dispose()
+
+
+def engine_revision(engine: Engine) -> str | None:
+    """Return the revision the database behind an open engine is at, or None before any migration.
+
+    Unlike `current_revision` this reuses the caller's engine, for a server that checks on every
+    readiness probe and should not open a new connection pool each time.
+    """
+    with engine.connect() as connection:
+        return MigrationContext.configure(connection).get_current_revision()
 
 
 def upgrade_database(url: str, revision: str = "head") -> None:

@@ -239,7 +239,7 @@ Each model has an entry in a `_<layer>__models.yml` file in its folder, with a m
 - JSON fields in `snake_case`.
 - Dates as `YYYY-MM-DD`; timestamps as ISO 8601 in UTC with `Z`.
 - Errors as RFC 9457 problem details with a stable `type` URI.
-- Pagination with `limit` and an opaque `cursor`; responses include `next_cursor`.
+- Pagination with `limit` (1 to 100, default 25) and `offset`; responses are `{items, total, limit, offset}`. A value out of range is refused with a 422, never clamped. Offsets suit tables of thousands of rows and give the dashboard a total for its pager; revisit cursors if a list grows past that (D-59).
 - Every endpoint declares its response model, so the OpenAPI schema is complete.
 
 ## 8. Documentation

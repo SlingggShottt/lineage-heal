@@ -253,3 +253,18 @@ def test_an_investigation_round_trips_through_jsonb_and_the_run_constraints_hold
             )
         )  # no error text
     engine.dispose()
+
+
+def test_the_api_reports_ready_against_a_migrated_postgres(database_url: str) -> None:
+    from fastapi.testclient import TestClient
+
+    from lineageheal.api.app import create_app
+    from lineageheal.core.settings import Settings
+
+    upgrade_database(database_url)
+
+    with TestClient(create_app(Settings(database_url=database_url))) as client:  # type: ignore[arg-type]
+        response = client.get("/health/ready")
+
+    assert response.status_code == 200
+    assert response.json()["revision"] == head_revision()

@@ -146,8 +146,8 @@ A cross-encoder reranker (also via fastembed) will be evaluated during the build
 
 | Tool | Role |
 |---|---|
-| **FastAPI** + **Uvicorn** | REST API with automatic OpenAPI schema |
-| **SQLAlchemy 2.0 style** + **psycopg 3** | Database access. Synchronous today, for the CLI and loaders; an async session factory over the same models arrives with the API (LH-058) |
+| **FastAPI** (MIT) + **Uvicorn** (BSD-3-Clause) | REST API with automatic OpenAPI schema, added in LH-058. Alternatives considered: Litestar and Flask (a smaller ecosystem for generated TypeScript clients); Hypercorn (less Render documentation). Tests use FastAPI's `TestClient`, which needs only `httpx` |
+| **SQLAlchemy 2.0 style** + **psycopg 3** | Database access. Synchronous, for the CLI, loaders and the API alike: FastAPI runs plain `def` endpoints in a threadpool, so the repositories are shared unchanged (D-59) |
 | **Alembic** | Schema migrations |
 | **Authlib** | GitHub sign-in through the GitHub App's user-authorisation flow |
 | **httpx** + **PyJWT** (`pyjwt[crypto]`) with a **GitHub App** | Branches, pull requests, issues and merges by the LineageHeal bot: PyJWT (MIT, with `cryptography`, Apache-2.0 or BSD) signs the App's RS256 token; the calls go over httpx with timeouts and retries |

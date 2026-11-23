@@ -598,6 +598,30 @@ def heal(
             typer.echo(f"  issue: {fix.issue_url}")
 
 
+@app.command("api")
+def serve_api(
+    host: Annotated[
+        str | None, typer.Option(help="Interface to listen on; API_HOST by default.")
+    ] = None,
+    port: Annotated[
+        int | None, typer.Option(help="Port to listen on; API_PORT by default.")
+    ] = None,
+    reload: Annotated[bool, typer.Option(help="Restart on code changes (development).")] = False,
+) -> None:
+    """Serve the HTTP API for the dashboard."""
+    import uvicorn  # imported here so the other commands do not pay for the web stack
+
+    settings = get_settings()
+    configure_logging(settings.log_level, settings.log_format)
+    uvicorn.run(
+        "lineageheal.api.app:create_app",
+        factory=True,
+        host=host or settings.api_host,
+        port=port or settings.api_port,
+        reload=reload,
+    )
+
+
 @app.command("index")
 def index_knowledge(
     runbooks_dir: Annotated[
