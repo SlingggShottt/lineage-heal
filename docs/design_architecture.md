@@ -510,6 +510,7 @@ Seven tables hold the healing workflow's state. The benchmark tables in the diag
 | `evidence` | tool output | `agent_run_id`, `tool`, `arguments`, `output`, `hypothesis` |
 | `fix` | proposed change | `incident_id`, `kind` (`dbt_patch` or `suggestion`), `status`, `patch`, `files`, `sandbox_result`, `suggestion` (for a `suggestion` kind: title, target, change, sketch, how to verify, risks), `branch`, `github_url`, `github_number` |
 | `review` | approver decision | `fix_id`, `reviewer_login`, `decision`, `reason` |
+| `web_session` | signed-in dashboard session (LH-059) | `id_hash` (SHA-256 of the cookie's session id, so the table holds no usable cookie), `github_id`, `login`, `token_encrypted` (the approver's GitHub token, Fernet-encrypted with a key derived from `SESSION_SECRET`), `csrf_token`, `created_at`, `expires_at` (checked to be after creation). No foreign keys; expired rows are pruned at sign-in |
 
 - **The database enforces the lifecycle's rules,** as it does for the ingestion log, so a bug in the Fixer or the API cannot write a state the design forbids: an incident is `resolved` exactly when it has a resolution time; a confidence is between 0 and 1; a finished agent run has an end time and a failed one says why; a `dbt_patch` has a diff; **a patch cannot be `verified`, `published` or `merged` without a sandbox result on record** (the rule that no pull request is opened for an unverified patch); a published fix links to GitHub; a rejection has a non-blank reason.
 - **Deleting an incident** deletes its agent runs, evidence, fixes and reviews, but only releases its signals, which belong to the run that raised them.
@@ -562,7 +563,8 @@ Migration 0006 enables the pgvector extension and adds an HNSW index on `embeddi
 | Method | Path | Access |
 |---|---|---|
 | GET | `/health` | Public |
-| GET | `/auth/login`, `/auth/callback`; POST `/auth/logout`; GET `/me` | Public |
+| GET | `/auth/login`, `/auth/callback`; GET `/me` | Public |
+| POST | `/auth/logout` | Signed in (CSRF token) |
 | GET | `/feeds/health` | Public |
 | GET | `/incidents`, `/incidents/{id}` | Public |
 | GET | `/incidents/{id}/lineage`, `/incidents/{id}/fix` | Public |
@@ -687,8 +689,8 @@ The July 2024 replay configures the pipeline as it would have looked before NSE'
 
 - **Secrets:** environment variables locally, GitHub Actions secrets in CI, Render and Cloudflare environment settings in deployment. gitleaks runs in pre-commit and CI.
 - **GitHub App permissions:** Contents (read and write), Pull requests (read and write), Issues (read and write), Metadata (read), Actions (write, for workflow dispatch). Nothing else.
-- **Authentication:** GitHub sign-in through the App's user authorisation flow. Sessions are signed, HTTP-only, `SameSite=Lax` cookies, and state-changing requests require a CSRF token.
-- **Authorisation:** the approver allowlist is checked server-side on every state-changing endpoint.
+- **Authentication (LH-059, D-60):** GitHub sign-in through the App's user authorisation flow, written over httpx (`api/github_auth.py`). A random one-time `state` in a short-lived cookie is checked at the callback. A session is a server-side row (`web_session`); the browser holds only a random id in an `HttpOnly` cookie (`Secure` when `API_PUBLIC_URL` is https, `SameSite=Lax` by default, `SESSION_COOKIE_SAMESITE` to change it). The row lives no longer than the GitHub token, at most 8 hours; there is no refresh, so an approver signs in again. State-changing requests need the session's CSRF token in `X-CSRF-Token` (read from `/me`) and, when a browser sends an `Origin`, one of the dashboard's, the API's or `API_CORS_ORIGINS`.
+- **Authorisation:** the approver allowlist (`APPROVER_GITHUB_LOGINS`, compared case-insensitively) is checked server-side on every state-changing endpoint through one dependency, `approver_action`: a stranger gets 401, a signed-in non-approver 403 before the CSRF check, then the CSRF check. Everyone else, signed in or not, is read-only. A login can be renamed and reclaimed, so the session also stores the numeric `github_id` for a later move to comparing ids.
 - **Branch protection:** `main` requires pull requests and passing CI.
 - **Prompt injection:** feed data (such as scheme names) is untrusted. Tool outputs are delimited and truncated, the model never chooses which tools exist or what paths are writable, and patches are validated against the path allowlist outside the model.
 

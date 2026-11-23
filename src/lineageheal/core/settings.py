@@ -120,6 +120,31 @@ class Settings(BaseSettings):
     api_host: str = "127.0.0.1"
     api_port: int = Field(default=8000, ge=1, le=65535)
     api_cors_origins: str = "http://localhost:5173"
+    # Where the API is reached from a browser and where the dashboard lives. The first fixes the
+    # sign-in callback URL (it must equal the one registered on the GitHub App) and whether the
+    # session cookie is marked Secure; the second is where sign-in sends the browser afterwards.
+    api_public_url: str = "http://localhost:8000"
+    dashboard_url: str = "http://localhost:5173"
+    # Lax suits a dashboard and API served from one origin (a dev proxy locally, a proxy on the
+    # dashboard host in production). "none" is for two sites and many browsers block it.
+    session_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
+
+    # Dashboard sign-in through the GitHub App's user authorisation (FR-API-02). The secret
+    # encrypts stored GitHub tokens, so it must be long and random: `openssl rand -hex 32`.
+    github_oauth_client_id: str | None = None
+    github_oauth_client_secret: SecretStr | None = None
+    session_secret: SecretStr | None = None
+    # Comma-separated GitHub logins that may approve, reject and trigger actions (FR-REV-03).
+    approver_github_logins: str = ""
+
+    @property
+    def approver_logins(self) -> frozenset[str]:
+        """The approver logins, lower-cased because GitHub treats logins case-insensitively."""
+        return frozenset(
+            login.strip().lower()
+            for login in self.approver_github_logins.split(",")
+            if login.strip()
+        )
 
     def require_database_url(self) -> str:
         """Return the database URL, or explain that it is not set.

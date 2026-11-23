@@ -483,3 +483,26 @@ class KnowledgeChunk(Base):
     text: Mapped[str] = mapped_column(Text)
     embedding: Mapped[list[float]] = mapped_column(EmbeddingType)
     embedding_model: Mapped[str] = mapped_column(String(128))
+
+
+class WebSession(Base):
+    """A signed-in dashboard session (FR-API-02).
+
+    The browser holds a random session id; only its hash is stored, so a copy of this table
+    cannot be turned into working cookies. The GitHub token is kept encrypted (the application
+    key is not in the database) because approving and merging act as the approver (FR-REV-01).
+    """
+
+    __tablename__ = "web_session"
+    __table_args__ = (
+        CheckConstraint("expires_at > created_at", name="expires_after_creation"),
+        Index("ix_web_session_expires_at", "expires_at"),
+    )
+
+    id_hash: Mapped[str] = mapped_column(String(64), primary_key=True)  # sha256 hex
+    github_id: Mapped[int] = mapped_column(BigInteger)  # survives a login rename
+    login: Mapped[str] = mapped_column(String(64))
+    token_encrypted: Mapped[str] = mapped_column(Text)
+    csrf_token: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime())
+    expires_at: Mapped[datetime] = mapped_column(UTCDateTime())
