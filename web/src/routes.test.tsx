@@ -4,7 +4,11 @@ import { describe, expect, it } from "vitest";
 
 import { fakeApi, renderApp } from "@/test/render";
 
-const anonymous = () => fakeApi({ "/me": { body: { signed_in: false, is_approver: false } } });
+const anonymous = () =>
+  fakeApi({
+    "/me": { body: { signed_in: false, is_approver: false } },
+    "/incidents": { body: { items: [], total: 0, limit: 25, offset: 0 } },
+  });
 
 describe("the app shell and routes", () => {
   it("has a skip link, a main landmark and the three sections in the navigation", async () => {
@@ -37,5 +41,19 @@ describe("the app shell and routes", () => {
 
     expect(await screen.findByRole("heading", { name: "Page not found" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to the overview" })).toHaveAttribute("href", "/");
+  });
+});
+
+describe("an incident's address", () => {
+  it("opens a placeholder for the incident with a way back to the list", async () => {
+    renderApp("/incidents/12", anonymous().fetch);
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Incident #12" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "← All incidents" })).toHaveAttribute(
+      "href",
+      "/incidents",
+    );
   });
 });

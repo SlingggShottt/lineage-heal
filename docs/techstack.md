@@ -164,7 +164,7 @@ A cross-encoder reranker (also via fastembed) will be evaluated during the build
 | **TanStack Query** | Server state, caching, polling |
 | **React Router** 8 | Routing. The dev server and production host forward `/api/*` to the API with the prefix removed, so the dashboard and API share one origin and the session cookie stays `SameSite=Lax` (D-60, D-61) |
 | **React Flow** (`@xyflow/react`) | Interactive lineage graph |
-| **Monaco diff editor** | Side-by-side patch review |
+| **Side-by-side diff (own renderer)** | Patch review (LH-064). Monaco's diff editor needs the complete original and modified files, and the API holds only the unified diff the Fixer produced, so it is not used; a patch is at most 40 changed lines in a few files, so a small renderer for unified diffs (no dependency, tested) fits better than Monaco's several megabytes and worker setup (D-64) |
 | **Recharts** | Benchmark and pipeline-health charts |
 | **openapi-typescript** + **openapi-fetch** | API types and client generated from FastAPI's OpenAPI schema: `lineageheal dev openapi-schema` writes `web/openapi.json` and `make web-types` generates `src/api/schema.d.ts`; a Python test fails when the committed schema is stale. Both are committed |
 | **Vitest**, **React Testing Library** | Unit and component tests; the API is faked by passing a `fetch` to the client. MSW is not added yet (only if a task needs network-level mocking) |
