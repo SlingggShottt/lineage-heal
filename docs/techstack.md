@@ -159,18 +159,20 @@ A cross-encoder reranker (also via fastembed) will be evaluated during the build
 
 | Tool | Role |
 |---|---|
-| **React 19** + **TypeScript** (strict) + **Vite** | Single-page dashboard |
+| **React 19** + **TypeScript** (strict) + **Vite** | Single-page dashboard (LH-062). TypeScript is held at 6.0 because typescript-eslint supports versions below 6.1, and ESLint at 9 because eslint-plugin-jsx-a11y (the accessibility rules, NFR-USAB-01) supports up to 9; Dependabot ignores those majors until the tools catch up |
 | **Tailwind CSS** + **shadcn/ui** | Styling and accessible components (built on Radix) |
 | **TanStack Query** | Server state, caching, polling |
-| **React Router** | Routing |
+| **React Router** 8 | Routing. The dev server and production host forward `/api/*` to the API with the prefix removed, so the dashboard and API share one origin and the session cookie stays `SameSite=Lax` (D-60, D-61) |
 | **React Flow** (`@xyflow/react`) | Interactive lineage graph |
 | **Monaco diff editor** | Side-by-side patch review |
 | **Recharts** | Benchmark and pipeline-health charts |
-| **openapi-typescript** + **openapi-fetch** | API types and client generated from FastAPI's OpenAPI schema |
-| **Vitest**, **React Testing Library**, **MSW** | Unit and component tests with mocked API |
+| **openapi-typescript** + **openapi-fetch** | API types and client generated from FastAPI's OpenAPI schema: `lineageheal dev openapi-schema` writes `web/openapi.json` and `make web-types` generates `src/api/schema.d.ts`; a Python test fails when the committed schema is stale. Both are committed |
+| **Vitest**, **React Testing Library** | Unit and component tests; the API is faked by passing a `fetch` to the client. MSW is not added yet (only if a task needs network-level mocking) |
 | **Playwright** | End-to-end tests |
 | **ESLint** + **Prettier** | Linting and formatting |
-| **pnpm** | Package management |
+| **pnpm** | Package management, pinned in `web/package.json`; install it without `sudo` with corepack or `npm install -g pnpm --prefix ~/.local` |
+
+Shared UI components (button, badge, card, skeleton) are shadcn/ui source copied into `web/src/components/ui/`, with `class-variance-authority`, `clsx`, `tailwind-merge`, `lucide-react` and `@radix-ui/react-slot` as their only packages. React Flow, Monaco, Recharts and Playwright are added by the tasks that use them.
 
 **Considered:** Next.js (server rendering isn't needed when FastAPI is the backend), Streamlit (faster to build, but a weaker frontend engineering signal).
 

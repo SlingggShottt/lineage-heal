@@ -5,9 +5,6 @@
 # Weekly, on Monday morning in India, and a few pull requests at a time, so a week's updates
 # arrive together instead of one at a time. Titles start with a Conventional Commit type, which
 # is what the squash-merge message is made from (docs/style_guide.md, section 2.2).
-#
-# The web/ folder is added with the dashboard (LH-062): Dependabot reports an error for a
-# directory that does not exist yet.
 version: 2
 
 updates:
@@ -81,3 +78,29 @@ updates:
     commit-message:
       prefix: "build"
       include: "scope"
+
+  # --- Dashboard (web/package.json and pnpm-lock.yaml) -----------------------------------
+  - package-ecosystem: "npm"
+    directory: "/web"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Kolkata"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "build"
+      prefix-development: "build"
+      include: "scope"
+    groups:
+      web-minor-and-patch:
+        update-types: ["minor", "patch"]
+    ignore:
+      # Held back until the tools around them catch up: typescript-eslint supports TypeScript
+      # below 6.1, and eslint-plugin-jsx-a11y supports ESLint up to 9 (docs/techstack.md).
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@eslint/js"
+        update-types: ["version-update:semver-major"]

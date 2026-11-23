@@ -1357,3 +1357,12 @@ def test_the_api_command_starts_uvicorn_with_the_app_factory(
         "port": 9001,
         "reload": False,
     }
+
+
+def test_the_openapi_schema_command_prints_the_documented_api() -> None:
+    import json
+
+    result = runner.invoke(app, ["dev", "openapi-schema"])
+
+    assert result.exit_code == 0, result.output
+    assert "/me" in json.loads(result.stdout)["paths"]

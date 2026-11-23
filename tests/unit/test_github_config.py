@@ -73,7 +73,7 @@ def test_blank_issues_are_off_so_every_issue_starts_from_a_template() -> None:
 def test_dependabot_is_on_version_2_and_covers_every_ecosystem_the_repository_uses() -> None:
     assert DEPENDABOT["version"] == 2
     ecosystems = {update["package-ecosystem"] for update in UPDATES}
-    assert ecosystems == {"uv", "github-actions", "docker", "docker-compose"}
+    assert ecosystems == {"uv", "github-actions", "docker", "docker-compose", "npm"}
 
 
 def test_every_directory_dependabot_watches_exists() -> None:

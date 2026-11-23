@@ -131,6 +131,12 @@ The same App signs people in to the dashboard. In the App's settings:
    approve on GitHub you land on `DASHBOARD_URL`, and `http://localhost:8000/me` shows your
    login with `is_approver` true if you are on the list.
 
+To sign in through the dashboard (`make web`) instead of the bare API, the browser must reach
+the API through the dashboard's own origin. Set `API_PUBLIC_URL=http://localhost:5173/api` in
+`.env` and put `http://localhost:5173/api/auth/callback` as the App's callback URL (the App
+accepts several, so keep the `8000` one for the check above). The dev server forwards `/api/*`
+to the API with the prefix removed, which is what production's proxy will do too.
+
 The dashboard and API are meant to share one origin (a dev proxy in Vite, a proxy on the
 dashboard host in production), so the session cookie stays `SameSite=Lax`; see D-60.
 

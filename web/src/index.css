@@ -1,0 +1,83 @@
+/* Tailwind and the design tokens the shadcn/ui components read. Colours are CSS variables so
+   dark mode is a second set of values, not a second set of classes. Text and background pairs
+   are chosen to meet WCAG 2.1 AA contrast (NFR-USAB-01). */
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --background: oklch(0.99 0 0);
+  --foreground: oklch(0.2 0.01 260);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.2 0.01 260);
+  --muted: oklch(0.96 0.005 260);
+  --muted-foreground: oklch(0.44 0.02 260);
+  --primary: oklch(0.38 0.1 258);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.94 0.01 260);
+  --secondary-foreground: oklch(0.25 0.02 260);
+  --accent: oklch(0.94 0.02 258);
+  --accent-foreground: oklch(0.25 0.05 258);
+  --border: oklch(0.88 0.01 260);
+  --ring: oklch(0.55 0.15 258);
+  --success: oklch(0.42 0.1 150);
+  --warning: oklch(0.45 0.1 70);
+  --destructive: oklch(0.5 0.19 27);
+  --radius: 0.5rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --background: oklch(0.16 0.01 260);
+    --foreground: oklch(0.94 0.005 260);
+    --card: oklch(0.2 0.01 260);
+    --card-foreground: oklch(0.94 0.005 260);
+    --muted: oklch(0.24 0.01 260);
+    --muted-foreground: oklch(0.72 0.015 260);
+    --primary: oklch(0.78 0.1 258);
+    --primary-foreground: oklch(0.18 0.02 260);
+    --secondary: oklch(0.28 0.015 260);
+    --secondary-foreground: oklch(0.94 0.005 260);
+    --accent: oklch(0.3 0.04 258);
+    --accent-foreground: oklch(0.94 0.005 260);
+    --border: oklch(0.32 0.015 260);
+    --ring: oklch(0.7 0.13 258);
+    --success: oklch(0.78 0.12 150);
+    --warning: oklch(0.8 0.12 80);
+    --destructive: oklch(0.72 0.17 25);
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-destructive: var(--destructive);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+  :focus-visible {
+    @apply outline-ring outline-2 outline-offset-2;
+  }
+}

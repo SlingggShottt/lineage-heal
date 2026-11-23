@@ -598,6 +598,14 @@ def heal(
             typer.echo(f"  issue: {fix.issue_url}")
 
 
+@dev_app.command("openapi-schema")
+def openapi_schema() -> None:
+    """Print the API's OpenAPI schema; `make web-types` saves it for the dashboard's client."""
+    from lineageheal.api.app import openapi_document
+
+    typer.echo(openapi_document(), nl=False)
+
+
 @app.command("api")
 def serve_api(
     host: Annotated[
