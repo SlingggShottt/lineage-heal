@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -71,3 +72,13 @@ def create_app(
     app.include_router(health.router)
     app.include_router(auth.router)
     return app
+
+
+def openapi_document() -> str:
+    """The API's OpenAPI schema as stable text, for the dashboard's generated client.
+
+    The schema does not depend on any setting, so a clean `Settings` is used. Keys are sorted
+    so a regenerated file differs only when the API does.
+    """
+    schema = create_app(Settings(_env_file=None)).openapi()
+    return json.dumps(schema, indent=2, sort_keys=True) + "\n"

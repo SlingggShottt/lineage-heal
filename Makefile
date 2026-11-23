@@ -3,7 +3,7 @@
 # Targets for Docker, dbt and the frontend are added by the tasks that introduce them.
 
 .DEFAULT_GOAL := help
-.PHONY: help setup up down dagster api fmt lint typecheck test test-integration check clean
+.PHONY: help setup up down dagster api web web-types web-check fmt lint typecheck test test-integration check clean
 
 help: ## List available targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
@@ -25,6 +25,16 @@ dagster: ## Start the Dagster UI and daemon at http://localhost:3000
 
 api: ## Start the HTTP API at http://localhost:8000 (OpenAPI docs at /docs)
 	uv run lineageheal api --reload
+
+web: ## Start the dashboard at http://localhost:5173 (proxies /api to the API; run `make api` too)
+	pnpm --dir web dev
+
+web-types: ## Regenerate the dashboard's API schema and TypeScript types from the API
+	uv run lineageheal dev openapi-schema > web/openapi.json
+	pnpm --dir web generate
+
+web-check: ## Run the dashboard's lint, type check and tests
+	pnpm --dir web lint && pnpm --dir web typecheck && pnpm --dir web test
 
 fmt: ## Format code
 	uv run ruff format .

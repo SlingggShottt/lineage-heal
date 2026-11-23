@@ -581,6 +581,8 @@ As built (LH-058) the app is created by `create_app(settings)` in `api/app.py`, 
 - **Cross-origin access** is limited to `API_CORS_ORIGINS` with credentials allowed, because sign-in will use a cookie.
 - **Database.** The engine is created on first use from `DATABASE_URL`; endpoints are plain `def` functions over the synchronous repositories (D-59).
 
+**Dashboard and API on one origin (LH-062, D-61).** The dashboard calls the API under `/api`. In development Vite proxies `/api/*` to `localhost:8000`, removing the prefix because the API's own paths have none; production does the same with a proxy on the dashboard host (a deployment task). The browser therefore sees one origin, the session cookie is sent without `SameSite=None`, and CORS is not needed for credentials. `web/openapi.json` is the API's schema (`lineageheal dev openapi-schema`) and `web/src/api/schema.d.ts` the types generated from it by `make web-types`; a unit test compares the committed schema with the running API.
+
 ### 10.2 Review sequence
 
 ```mermaid

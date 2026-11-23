@@ -111,6 +111,8 @@ cp .env.example .env                 # Fill in values. Never commit .env.
 make up                              # Postgres with pgvector; the API and dashboard are added by later tasks
 make dagster                         # Dagster UI and daemon at http://localhost:3000 (raw assets by trade date)
 make api                             # HTTP API at http://localhost:8000 (OpenAPI docs at /docs); needs DATABASE_URL for /health/ready
+make web                             # Dashboard at http://localhost:5173 (proxies /api to the API; run make api too)
+make web-types                       # Regenerate web/openapi.json and src/api/schema.d.ts after an API change
 make down
 docker compose run --rm app ingest amfi --date 2026-10-15   # any lineageheal command, in a container
 

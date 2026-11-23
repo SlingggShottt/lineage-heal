@@ -130,7 +130,7 @@ Versions, alternatives considered and free-tier limits are documented in [`docs/
 - Linux or macOS (developed on Ubuntu)
 - Docker with Docker Compose
 - [uv](https://docs.astral.sh/uv/)
-- Node.js (LTS) and pnpm
+- Node.js 22 or newer and pnpm (`corepack enable pnpm --install-directory ~/.local/bin`, or `npm install -g pnpm --prefix ~/.local`, when a global install needs `sudo`)
 - Free-tier accounts: Cloudflare R2, MotherDuck, Neon, Google AI Studio (Gemini API), Groq, LangSmith, and a GitHub token for opening pull requests
 
 ### Setup
@@ -162,6 +162,9 @@ make up                   # Postgres with pgvector (more services as they are bu
 | `uv run dbt build --project-dir dbt --profiles-dir dbt --target dev` | Build the warehouse layers from the raw zone and run their quality tests |
 | `make dagster` | Start the Dagster UI and daemon (http://localhost:3000). Pick a raw asset and a date partition to ingest it with the same loaders and ingestion log as `lineageheal ingest` (a date the source published nothing for is a success marked `no_data`), or materialise the dbt models, which run `dbt build` with every test as a check |
 | `make api` | Start the HTTP API (http://localhost:8000, interactive docs at `/docs`). `/health` always answers; `/health/ready` needs `make up` and `lineageheal db upgrade`. Allowed browser origins come from `API_CORS_ORIGINS`. Dashboard sign-in needs the GitHub App's OAuth settings (`docs/repository_settings.md` §5): open `/auth/login`, then `/me` shows who you are |
+| `make web` | Start the dashboard (http://localhost:5173). It calls the API under `/api`, which the dev server proxies to `localhost:8000`, so run `make api` as well. For sign-in through the dashboard set `API_PUBLIC_URL=http://localhost:5173/api` (`docs/repository_settings.md` §5) |
+| `make web-types` | Regenerate `web/openapi.json` and the TypeScript types after the API changes; a test fails if they are stale |
+| `make web-check` | The dashboard's lint, type check and tests |
 | `uv run lineageheal dev inject-fault amfi --fault blank-nav --date 2026-10-16` | Store a damaged copy of an ingested report in the local raw zone, to rehearse a failure (refuses to run against R2) |
 | `uv run lineageheal index` | Split the runbooks in `docs/runbooks/` by section, embed them with a local model (about 130 MB, downloaded once) and store them in Postgres for the agents to retrieve. Needs `DATABASE_URL` and `make up`; safe to run again: unchanged runbooks are skipped, edited ones replaced, deleted ones removed |
 | `uv run lineageheal search "prices arrive in paise"` | Search the knowledge index as the Investigator does, by meaning and by words, with optional `--fault-class` and `--source` filters. Shows each hit's fused score and where each search ranked it. Needs `lineageheal index` to have run |
