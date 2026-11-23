@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, Engine, select, update
+from sqlalchemy import CursorResult, Engine, func, or_, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -189,6 +189,62 @@ class IncidentRepository:
             with Session(self._engine) as session:
                 row = session.get(Incident, incident_id)
                 return None if row is None else _to_stored(row)
+        except SQLAlchemyError as exc:
+            raise StorageError(f"Could not read incidents: {explain_database_error(exc)}") from exc
+
+    def list_incidents(
+        self,
+        *,
+        limit: int,
+        offset: int = 0,
+        status: str | None = None,
+        fault_class: str | None = None,
+        severity: str | None = None,
+        feed: str | None = None,
+    ) -> tuple[list[StoredIncident], int]:
+        """Return one page of incidents, newest first, and how many match in all.
+
+        Args:
+            limit: Rows in the page.
+            offset: Rows to skip.
+            status: Only incidents in this lifecycle state.
+            fault_class: Only incidents of this class.
+            severity: Only incidents of this severity.
+            feed: Only incidents whose root cause is in this feed (`amfi`, `nse`, ...), judged
+                by the model naming convention `<layer>_<feed>__<name>` or a raw `raw.<feed>.`
+                node, since an incident has no feed column.
+
+        Raises:
+            StorageError: The database could not be read.
+        """
+        conditions = []
+        if status is not None:
+            conditions.append(Incident.status == status)
+        if fault_class is not None:
+            conditions.append(Incident.fault_class == fault_class)
+        if severity is not None:
+            conditions.append(Incident.severity == severity)
+        if feed is not None:
+            escaped = feed.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            conditions.append(
+                or_(
+                    Incident.root_node.like(f"%\\_{escaped}\\_\\_%", escape="\\"),
+                    Incident.root_node.like(f"raw.{escaped}.%", escape="\\"),
+                )
+            )
+        page = (
+            select(Incident)
+            .where(*conditions)
+            .order_by(Incident.opened_at.desc(), Incident.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        try:
+            with Session(self._engine) as session:
+                total = session.scalar(
+                    select(func.count()).select_from(Incident).where(*conditions)
+                )
+                return [_to_stored(row) for row in session.scalars(page)], total or 0
         except SQLAlchemyError as exc:
             raise StorageError(f"Could not read incidents: {explain_database_error(exc)}") from exc
 

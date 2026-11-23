@@ -1,6 +1,117 @@
 {
   "components": {
     "schemas": {
+      "Affected": {
+        "description": "What the incident touches.",
+        "properties": {
+          "columns": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "gold_tables": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Gold Tables",
+            "type": "array"
+          },
+          "models": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Models",
+            "type": "array"
+          }
+        },
+        "required": [
+          "models",
+          "columns",
+          "gold_tables"
+        ],
+        "title": "Affected",
+        "type": "object"
+      },
+      "Alternative": {
+        "description": "A root cause the Investigator considered and ranked lower.",
+        "properties": {
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "explanation": {
+            "title": "Explanation",
+            "type": "string"
+          },
+          "fault_class": {
+            "title": "Fault Class",
+            "type": "string"
+          },
+          "node": {
+            "title": "Node",
+            "type": "string"
+          }
+        },
+        "required": [
+          "node",
+          "fault_class",
+          "explanation",
+          "confidence"
+        ],
+        "title": "Alternative",
+        "type": "object"
+      },
+      "EvidenceOut": {
+        "description": "One tool result the Investigator collected.",
+        "properties": {
+          "arguments": {
+            "additionalProperties": true,
+            "title": "Arguments",
+            "type": "object"
+          },
+          "collected_at": {
+            "format": "date-time",
+            "title": "Collected At",
+            "type": "string"
+          },
+          "hypothesis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hypothesis"
+          },
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "output": {
+            "additionalProperties": true,
+            "title": "Output",
+            "type": "object"
+          },
+          "tool": {
+            "title": "Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "number",
+          "tool",
+          "arguments",
+          "output",
+          "hypothesis",
+          "collected_at"
+        ],
+        "title": "EvidenceOut",
+        "type": "object"
+      },
       "FieldError": {
         "description": "One rejected input: where it was, and why. The submitted value is deliberately absent.",
         "properties": {
@@ -18,6 +129,788 @@
           "message"
         ],
         "title": "FieldError",
+        "type": "object"
+      },
+      "FixDetail": {
+        "description": "A fix with its diff, sandbox verdict and, for a root cause outside dbt, its suggestion.",
+        "properties": {
+          "branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "files": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Files",
+            "type": "array"
+          },
+          "github_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Github Number"
+          },
+          "github_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Github Url"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "incident_id": {
+            "title": "Incident Id",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "dbt_patch",
+              "suggestion"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "patch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patch"
+          },
+          "sandbox": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SandboxOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sandbox_passed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sandbox Passed"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "suggestion": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggestion"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "status",
+          "files",
+          "sandbox_passed",
+          "github_url",
+          "github_number",
+          "created_at",
+          "incident_id",
+          "patch",
+          "sandbox",
+          "suggestion",
+          "branch",
+          "updated_at"
+        ],
+        "title": "FixDetail",
+        "type": "object"
+      },
+      "FixSummary": {
+        "description": "A fix in brief; the full diff is at `/incidents/{id}/fix`.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "files": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Files",
+            "type": "array"
+          },
+          "github_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Github Number"
+          },
+          "github_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Github Url"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "dbt_patch",
+              "suggestion"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "sandbox_passed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sandbox Passed"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "status",
+          "files",
+          "sandbox_passed",
+          "github_url",
+          "github_number",
+          "created_at"
+        ],
+        "title": "FixSummary",
+        "type": "object"
+      },
+      "IncidentDetail": {
+        "description": "Everything the incident page shows except the lineage graph and the full diff.",
+        "properties": {
+          "affected": {
+            "$ref": "#/components/schemas/Affected"
+          },
+          "affected_gold_tables": {
+            "title": "Affected Gold Tables",
+            "type": "integer"
+          },
+          "affected_models": {
+            "title": "Affected Models",
+            "type": "integer"
+          },
+          "classified_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classified By"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "fault_class": {
+            "anyOf": [
+              {
+                "enum": [
+                  "schema_drift",
+                  "nulls",
+                  "duplicates",
+                  "unit_change",
+                  "late_data",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fault Class"
+          },
+          "fixes": {
+            "items": {
+              "$ref": "#/components/schemas/FixSummary"
+            },
+            "title": "Fixes",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "investigation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InvestigationOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "opened_at": {
+            "format": "date-time",
+            "title": "Opened At",
+            "type": "string"
+          },
+          "related_runbooks": {
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeHit"
+            },
+            "title": "Related Runbooks",
+            "type": "array"
+          },
+          "root_cause": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RootCause"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "root_node": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Root Node"
+          },
+          "severity": {
+            "enum": [
+              "error",
+              "warn"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "signals": {
+            "items": {
+              "$ref": "#/components/schemas/SignalOut"
+            },
+            "title": "Signals",
+            "type": "array"
+          },
+          "similar_incidents": {
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeHit"
+            },
+            "title": "Similar Incidents",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "detected",
+              "investigating",
+              "fix_proposed",
+              "suggestion_filed",
+              "fix_unverified",
+              "unresolved",
+              "approved",
+              "rejected",
+              "resolved"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "summary",
+          "severity",
+          "fault_class",
+          "confidence",
+          "classified_by",
+          "root_node",
+          "affected_models",
+          "affected_gold_tables",
+          "opened_at",
+          "updated_at",
+          "root_cause",
+          "affected",
+          "signals",
+          "investigation",
+          "similar_incidents",
+          "related_runbooks",
+          "fixes"
+        ],
+        "title": "IncidentDetail",
+        "type": "object"
+      },
+      "IncidentSummary": {
+        "description": "One row of the incidents list.",
+        "properties": {
+          "affected_gold_tables": {
+            "title": "Affected Gold Tables",
+            "type": "integer"
+          },
+          "affected_models": {
+            "title": "Affected Models",
+            "type": "integer"
+          },
+          "classified_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classified By"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "fault_class": {
+            "anyOf": [
+              {
+                "enum": [
+                  "schema_drift",
+                  "nulls",
+                  "duplicates",
+                  "unit_change",
+                  "late_data",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fault Class"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "opened_at": {
+            "format": "date-time",
+            "title": "Opened At",
+            "type": "string"
+          },
+          "root_node": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Root Node"
+          },
+          "severity": {
+            "enum": [
+              "error",
+              "warn"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "detected",
+              "investigating",
+              "fix_proposed",
+              "suggestion_filed",
+              "fix_unverified",
+              "unresolved",
+              "approved",
+              "rejected",
+              "resolved"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "summary",
+          "severity",
+          "fault_class",
+          "confidence",
+          "classified_by",
+          "root_node",
+          "affected_models",
+          "affected_gold_tables",
+          "opened_at",
+          "updated_at"
+        ],
+        "title": "IncidentSummary",
+        "type": "object"
+      },
+      "InvestigationOut": {
+        "description": "The Investigator's run on this incident.",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceOut"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "input_tokens": {
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "llm_calls": {
+            "title": "Llm Calls",
+            "type": "integer"
+          },
+          "models": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Models",
+            "type": "object"
+          },
+          "output_tokens": {
+            "title": "Output Tokens",
+            "type": "integer"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Url"
+          }
+        },
+        "required": [
+          "status",
+          "started_at",
+          "finished_at",
+          "llm_calls",
+          "input_tokens",
+          "output_tokens",
+          "models",
+          "error",
+          "trace_url",
+          "evidence"
+        ],
+        "title": "InvestigationOut",
+        "type": "object"
+      },
+      "KnowledgeHit": {
+        "description": "A past incident or runbook section the Investigator found similar.",
+        "properties": {
+          "document": {
+            "title": "Document",
+            "type": "string"
+          },
+          "fault_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fault Class"
+          },
+          "heading": {
+            "title": "Heading",
+            "type": "string"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "source": {
+            "enum": [
+              "runbook",
+              "incident"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "document",
+          "heading",
+          "fault_class",
+          "score",
+          "text"
+        ],
+        "title": "KnowledgeHit",
+        "type": "object"
+      },
+      "LineageEdgeOut": {
+        "description": "An upstream node feeding a downstream one.",
+        "properties": {
+          "inferred": {
+            "title": "Inferred",
+            "type": "boolean"
+          },
+          "kind": {
+            "enum": [
+              "direct",
+              "transform",
+              "aggregate",
+              "filter"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "target",
+          "kind",
+          "inferred"
+        ],
+        "title": "LineageEdgeOut",
+        "type": "object"
+      },
+      "LineageNodeOut": {
+        "description": "A node of the incident's lineage slice.",
+        "properties": {
+          "column": {
+            "title": "Column",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "raw",
+              "seed",
+              "model"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "root",
+              "affected",
+              "path"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "table": {
+            "title": "Table",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "table",
+          "column",
+          "kind",
+          "role"
+        ],
+        "title": "LineageNodeOut",
+        "type": "object"
+      },
+      "LineageOut": {
+        "description": "The paths from an incident's root cause to what it broke.",
+        "properties": {
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/LineageEdgeOut"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/LineageNodeOut"
+            },
+            "title": "Nodes",
+            "type": "array"
+          },
+          "root_node": {
+            "title": "Root Node",
+            "type": "string"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "unreached": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unreached",
+            "type": "array"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "root_node",
+          "nodes",
+          "edges",
+          "unreached",
+          "truncated"
+        ],
+        "title": "LineageOut",
         "type": "object"
       },
       "Liveness": {
@@ -90,6 +983,37 @@
           "signed_in"
         ],
         "title": "Me",
+        "type": "object"
+      },
+      "Page_IncidentSummary_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/IncidentSummary"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "Page[IncidentSummary]",
         "type": "object"
       },
       "Problem": {
@@ -174,6 +1098,245 @@
           "head"
         ],
         "title": "Readiness",
+        "type": "object"
+      },
+      "RootCause": {
+        "description": "The Investigator's conclusion, or its best guess when it ran out of budget.",
+        "properties": {
+          "alternatives": {
+            "items": {
+              "$ref": "#/components/schemas/Alternative"
+            },
+            "title": "Alternatives",
+            "type": "array"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "evidence_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Evidence Ids",
+            "type": "array"
+          },
+          "explanation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Explanation"
+          },
+          "fix_location": {
+            "anyOf": [
+              {
+                "enum": [
+                  "dbt",
+                  "external"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fix Location"
+          },
+          "fix_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fix Reason"
+          },
+          "node": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node"
+          },
+          "partial": {
+            "title": "Partial",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "node",
+          "explanation",
+          "confidence",
+          "fix_location",
+          "fix_reason",
+          "partial",
+          "evidence_ids",
+          "alternatives"
+        ],
+        "title": "RootCause",
+        "type": "object"
+      },
+      "SandboxOut": {
+        "description": "How the sandbox judged a patch: node statuses before and after, never the raw dbt output.",
+        "properties": {
+          "after": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "After",
+            "type": "object"
+          },
+          "before": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Before",
+            "type": "object"
+          },
+          "fixed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Fixed",
+            "type": "array"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "regressions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Regressions",
+            "type": "array"
+          },
+          "seconds": {
+            "title": "Seconds",
+            "type": "number"
+          },
+          "selector": {
+            "title": "Selector",
+            "type": "string"
+          },
+          "still_failing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Still Failing",
+            "type": "array"
+          }
+        },
+        "required": [
+          "passed",
+          "reason",
+          "selector",
+          "fixed",
+          "still_failing",
+          "regressions",
+          "before",
+          "after",
+          "seconds"
+        ],
+        "title": "SandboxOut",
+        "type": "object"
+      },
+      "SignalOut": {
+        "description": "One failure the Detector grouped into the incident.",
+        "properties": {
+          "check_type": {
+            "title": "Check Type",
+            "type": "string"
+          },
+          "column": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column"
+          },
+          "detected_at": {
+            "format": "date-time",
+            "title": "Detected At",
+            "type": "string"
+          },
+          "failures": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failures"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "severity",
+          "name",
+          "check_type",
+          "model",
+          "column",
+          "failures",
+          "message",
+          "detected_at"
+        ],
+        "title": "SignalOut",
         "type": "object"
       }
     }
@@ -819,6 +1982,658 @@
         ]
       }
     },
+    "/incidents": {
+      "get": {
+        "description": "Incidents, newest first, optionally filtered.",
+        "operationId": "list_incidents_incidents_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "detected",
+                    "investigating",
+                    "fix_proposed",
+                    "suggestion_filed",
+                    "fix_unverified",
+                    "unresolved",
+                    "approved",
+                    "rejected",
+                    "resolved"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "fault_class",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "schema_drift",
+                    "nulls",
+                    "duplicates",
+                    "unit_change",
+                    "late_data",
+                    "unknown"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Fault Class"
+            }
+          },
+          {
+            "in": "query",
+            "name": "severity",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "error",
+                    "warn"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Severity"
+            }
+          },
+          {
+            "description": "The feed the root cause is in.",
+            "in": "query",
+            "name": "feed",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "amfi",
+                    "nse",
+                    "fbil"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The feed the root cause is in.",
+              "title": "Feed"
+            }
+          },
+          {
+            "description": "Rows per page.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "description": "Rows per page.",
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Rows to skip.",
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "description": "Rows to skip.",
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_IncidentSummary_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "List incidents",
+        "tags": [
+          "incidents"
+        ]
+      }
+    },
+    "/incidents/{incident_id}": {
+      "get": {
+        "description": "The incident with its root cause, signals, evidence, similar knowledge and fixes.",
+        "operationId": "get_incident_incidents__incident_id__get",
+        "parameters": [
+          {
+            "description": "The incident's id.",
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "description": "The incident's id.",
+              "maximum": 9223372036854775807,
+              "minimum": 1,
+              "title": "Incident Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncidentDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "One incident",
+        "tags": [
+          "incidents"
+        ]
+      }
+    },
+    "/incidents/{incident_id}/fix": {
+      "get": {
+        "description": "The newest patch or suggestion, with its diff and sandbox verdict.",
+        "operationId": "get_fix_incidents__incident_id__fix_get",
+        "parameters": [
+          {
+            "description": "The incident's id.",
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "description": "The incident's id.",
+              "maximum": 9223372036854775807,
+              "minimum": 1,
+              "title": "Incident Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FixDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "An incident's latest fix",
+        "tags": [
+          "incidents"
+        ]
+      }
+    },
+    "/incidents/{incident_id}/lineage": {
+      "get": {
+        "description": "The paths from the root cause to the failing columns and gold tables.",
+        "operationId": "get_lineage_incidents__incident_id__lineage_get",
+        "parameters": [
+          {
+            "description": "The incident's id.",
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "description": "The incident's id.",
+              "maximum": 9223372036854775807,
+              "minimum": 1,
+              "title": "Incident Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LineageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "An incident's lineage slice",
+        "tags": [
+          "incidents"
+        ]
+      }
+    },
     "/me": {
       "get": {
         "description": "Report the signed-in person, and whether they may approve.",
@@ -949,6 +2764,10 @@
     {
       "description": "GitHub sign-in and the current session.",
       "name": "auth"
+    },
+    {
+      "description": "Detected failures, their diagnosis, lineage and fixes.",
+      "name": "incidents"
     }
   ]
 }

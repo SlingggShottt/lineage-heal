@@ -104,6 +104,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/incidents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List incidents
+         * @description Incidents, newest first, optionally filtered.
+         */
+        get: operations["list_incidents_incidents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/incidents/{incident_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One incident
+         * @description The incident with its root cause, signals, evidence, similar knowledge and fixes.
+         */
+        get: operations["get_incident_incidents__incident_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/incidents/{incident_id}/fix": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * An incident's latest fix
+         * @description The newest patch or suggestion, with its diff and sandbox verdict.
+         */
+        get: operations["get_fix_incidents__incident_id__fix_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/incidents/{incident_id}/lineage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * An incident's lineage slice
+         * @description The paths from the root cause to the failing columns and gold tables.
+         */
+        get: operations["get_lineage_incidents__incident_id__lineage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me": {
         parameters: {
             query?: never;
@@ -129,6 +209,57 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * Affected
+         * @description What the incident touches.
+         */
+        Affected: {
+            /** Columns */
+            columns: string[];
+            /** Gold Tables */
+            gold_tables: string[];
+            /** Models */
+            models: string[];
+        };
+        /**
+         * Alternative
+         * @description A root cause the Investigator considered and ranked lower.
+         */
+        Alternative: {
+            /** Confidence */
+            confidence: number;
+            /** Explanation */
+            explanation: string;
+            /** Fault Class */
+            fault_class: string;
+            /** Node */
+            node: string;
+        };
+        /**
+         * EvidenceOut
+         * @description One tool result the Investigator collected.
+         */
+        EvidenceOut: {
+            /** Arguments */
+            arguments: {
+                [key: string]: unknown;
+            };
+            /**
+             * Collected At
+             * Format: date-time
+             */
+            collected_at: string;
+            /** Hypothesis */
+            hypothesis: string | null;
+            /** Number */
+            number: number;
+            /** Output */
+            output: {
+                [key: string]: unknown;
+            };
+            /** Tool */
+            tool: string;
+        };
+        /**
          * FieldError
          * @description One rejected input: where it was, and why. The submitted value is deliberately absent.
          */
@@ -137,6 +268,282 @@ export interface components {
             field: string;
             /** Message */
             message: string;
+        };
+        /**
+         * FixDetail
+         * @description A fix with its diff, sandbox verdict and, for a root cause outside dbt, its suggestion.
+         */
+        FixDetail: {
+            /** Branch */
+            branch: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Files */
+            files: string[];
+            /** Github Number */
+            github_number: number | null;
+            /** Github Url */
+            github_url: string | null;
+            /** Id */
+            id: number;
+            /** Incident Id */
+            incident_id: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "dbt_patch" | "suggestion";
+            /** Patch */
+            patch: string | null;
+            sandbox: components["schemas"]["SandboxOut"] | null;
+            /** Sandbox Passed */
+            sandbox_passed: boolean | null;
+            /** Status */
+            status: string;
+            /** Suggestion */
+            suggestion: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * FixSummary
+         * @description A fix in brief; the full diff is at `/incidents/{id}/fix`.
+         */
+        FixSummary: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Files */
+            files: string[];
+            /** Github Number */
+            github_number: number | null;
+            /** Github Url */
+            github_url: string | null;
+            /** Id */
+            id: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "dbt_patch" | "suggestion";
+            /** Sandbox Passed */
+            sandbox_passed: boolean | null;
+            /** Status */
+            status: string;
+        };
+        /**
+         * IncidentDetail
+         * @description Everything the incident page shows except the lineage graph and the full diff.
+         */
+        IncidentDetail: {
+            affected: components["schemas"]["Affected"];
+            /** Affected Gold Tables */
+            affected_gold_tables: number;
+            /** Affected Models */
+            affected_models: number;
+            /** Classified By */
+            classified_by: string | null;
+            /** Confidence */
+            confidence: number | null;
+            /** Fault Class */
+            fault_class: ("schema_drift" | "nulls" | "duplicates" | "unit_change" | "late_data" | "unknown") | null;
+            /** Fixes */
+            fixes: components["schemas"]["FixSummary"][];
+            /** Id */
+            id: number;
+            investigation: components["schemas"]["InvestigationOut"] | null;
+            /**
+             * Opened At
+             * Format: date-time
+             */
+            opened_at: string;
+            /** Related Runbooks */
+            related_runbooks: components["schemas"]["KnowledgeHit"][];
+            root_cause: components["schemas"]["RootCause"] | null;
+            /** Root Node */
+            root_node: string | null;
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "error" | "warn";
+            /** Signals */
+            signals: components["schemas"]["SignalOut"][];
+            /** Similar Incidents */
+            similar_incidents: components["schemas"]["KnowledgeHit"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "detected" | "investigating" | "fix_proposed" | "suggestion_filed" | "fix_unverified" | "unresolved" | "approved" | "rejected" | "resolved";
+            /** Summary */
+            summary: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * IncidentSummary
+         * @description One row of the incidents list.
+         */
+        IncidentSummary: {
+            /** Affected Gold Tables */
+            affected_gold_tables: number;
+            /** Affected Models */
+            affected_models: number;
+            /** Classified By */
+            classified_by: string | null;
+            /** Confidence */
+            confidence: number | null;
+            /** Fault Class */
+            fault_class: ("schema_drift" | "nulls" | "duplicates" | "unit_change" | "late_data" | "unknown") | null;
+            /** Id */
+            id: number;
+            /**
+             * Opened At
+             * Format: date-time
+             */
+            opened_at: string;
+            /** Root Node */
+            root_node: string | null;
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "error" | "warn";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "detected" | "investigating" | "fix_proposed" | "suggestion_filed" | "fix_unverified" | "unresolved" | "approved" | "rejected" | "resolved";
+            /** Summary */
+            summary: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * InvestigationOut
+         * @description The Investigator's run on this incident.
+         */
+        InvestigationOut: {
+            /** Error */
+            error: string | null;
+            /** Evidence */
+            evidence: components["schemas"]["EvidenceOut"][];
+            /** Finished At */
+            finished_at: string | null;
+            /** Input Tokens */
+            input_tokens: number;
+            /** Llm Calls */
+            llm_calls: number;
+            /** Models */
+            models: {
+                [key: string]: string;
+            };
+            /** Output Tokens */
+            output_tokens: number;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Status */
+            status: string;
+            /** Trace Url */
+            trace_url: string | null;
+        };
+        /**
+         * KnowledgeHit
+         * @description A past incident or runbook section the Investigator found similar.
+         */
+        KnowledgeHit: {
+            /** Document */
+            document: string;
+            /** Fault Class */
+            fault_class: string | null;
+            /** Heading */
+            heading: string;
+            /** Score */
+            score: number;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "runbook" | "incident";
+            /** Text */
+            text: string;
+        };
+        /**
+         * LineageEdgeOut
+         * @description An upstream node feeding a downstream one.
+         */
+        LineageEdgeOut: {
+            /** Inferred */
+            inferred: boolean;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "direct" | "transform" | "aggregate" | "filter";
+            /** Source */
+            source: string;
+            /** Target */
+            target: string;
+        };
+        /**
+         * LineageNodeOut
+         * @description A node of the incident's lineage slice.
+         */
+        LineageNodeOut: {
+            /** Column */
+            column: string;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "raw" | "seed" | "model";
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "root" | "affected" | "path";
+            /** Table */
+            table: string;
+        };
+        /**
+         * LineageOut
+         * @description The paths from an incident's root cause to what it broke.
+         */
+        LineageOut: {
+            /** Edges */
+            edges: components["schemas"]["LineageEdgeOut"][];
+            /** Nodes */
+            nodes: components["schemas"]["LineageNodeOut"][];
+            /** Root Node */
+            root_node: string;
+            /** Truncated */
+            truncated: boolean;
+            /** Unreached */
+            unreached: string[];
+            /** Version */
+            version: string;
         };
         /**
          * Liveness
@@ -167,6 +574,17 @@ export interface components {
             /** Signed In */
             signed_in: boolean;
         };
+        /** Page[IncidentSummary] */
+        Page_IncidentSummary_: {
+            /** Items */
+            items: components["schemas"]["IncidentSummary"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
         /**
          * Problem
          * @description The body of every error response.
@@ -196,6 +614,83 @@ export interface components {
             revision: string;
             /** Status */
             status: string;
+        };
+        /**
+         * RootCause
+         * @description The Investigator's conclusion, or its best guess when it ran out of budget.
+         */
+        RootCause: {
+            /** Alternatives */
+            alternatives: components["schemas"]["Alternative"][];
+            /** Confidence */
+            confidence: number | null;
+            /** Evidence Ids */
+            evidence_ids: number[];
+            /** Explanation */
+            explanation: string | null;
+            /** Fix Location */
+            fix_location: ("dbt" | "external") | null;
+            /** Fix Reason */
+            fix_reason: string | null;
+            /** Node */
+            node: string | null;
+            /** Partial */
+            partial: boolean;
+        };
+        /**
+         * SandboxOut
+         * @description How the sandbox judged a patch: node statuses before and after, never the raw dbt output.
+         */
+        SandboxOut: {
+            /** After */
+            after: {
+                [key: string]: string;
+            };
+            /** Before */
+            before: {
+                [key: string]: string;
+            };
+            /** Fixed */
+            fixed: string[];
+            /** Passed */
+            passed: boolean;
+            /** Reason */
+            reason: string;
+            /** Regressions */
+            regressions: string[];
+            /** Seconds */
+            seconds: number;
+            /** Selector */
+            selector: string;
+            /** Still Failing */
+            still_failing: string[];
+        };
+        /**
+         * SignalOut
+         * @description One failure the Detector grouped into the incident.
+         */
+        SignalOut: {
+            /** Check Type */
+            check_type: string;
+            /** Column */
+            column: string | null;
+            /**
+             * Detected At
+             * Format: date-time
+             */
+            detected_at: string;
+            /** Failures */
+            failures: number | null;
+            /** Kind */
+            kind: string;
+            /** Message */
+            message: string;
+            /** Model */
+            model: string | null;
+            /** Name */
+            name: string;
+            /** Severity */
+            severity: string;
         };
     };
     responses: never;
@@ -660,6 +1155,465 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Readiness"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    list_incidents_incidents_get: {
+        parameters: {
+            query?: {
+                status?: ("detected" | "investigating" | "fix_proposed" | "suggestion_filed" | "fix_unverified" | "unresolved" | "approved" | "rejected" | "resolved") | null;
+                fault_class?: ("schema_drift" | "nulls" | "duplicates" | "unit_change" | "late_data" | "unknown") | null;
+                severity?: ("error" | "warn") | null;
+                /** @description The feed the root cause is in. */
+                feed?: ("amfi" | "nse" | "fbil") | null;
+                /** @description Rows per page. */
+                limit?: number;
+                /** @description Rows to skip. */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_IncidentSummary_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    get_incident_incidents__incident_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The incident's id. */
+                incident_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    get_fix_incidents__incident_id__fix_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The incident's id. */
+                incident_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    get_lineage_incidents__incident_id__lineage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The incident's id. */
+                incident_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LineageOut"];
                 };
             };
             /** @description Bad Request */

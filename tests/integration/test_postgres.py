@@ -268,3 +268,34 @@ def test_the_api_reports_ready_against_a_migrated_postgres(database_url: str) ->
 
     assert response.status_code == 200
     assert response.json()["revision"] == head_revision()
+
+
+def test_the_incident_list_filters_and_pages_on_postgres(database_url: str) -> None:
+    from lineageheal.store.incidents import IncidentDraft, IncidentRepository
+
+    upgrade_database(database_url)
+    engine = create_db_engine(database_url)
+    repository = IncidentRepository(engine)
+    for minutes, root in enumerate(
+        ["brz_amfi__navall.nav_inr", "raw.nse.bhavcopy.ClsPric", "gld_x.rows"]
+    ):
+        repository.create(
+            IncidentDraft(
+                "s", "error", f"fp-{root}", root, {}, None, "nulls", 0.5, "rules",
+                T0 + timedelta(minutes=minutes),
+            )
+        )  # fmt: skip
+
+    everything, total = repository.list_incidents(limit=2)
+    amfi, _ = repository.list_incidents(limit=10, feed="amfi")
+    nse, _ = repository.list_incidents(limit=10, feed="nse")
+    wildcard = repository.list_incidents(limit=10, feed="%")
+
+    assert total >= 3
+    assert everything[0].root_node == "gld_x.rows"  # newest first
+    assert [i.root_node for i in amfi if i.fingerprint.startswith("fp-")] == [
+        "brz_amfi__navall.nav_inr"
+    ]
+    assert [i.root_node for i in nse] == ["raw.nse.bhavcopy.ClsPric"]
+    assert wildcard == ([], 0)
+    engine.dispose()

@@ -155,3 +155,77 @@ def test_the_database_itself_refuses_to_delete_a_version_an_incident_uses(
 
     with engine.begin() as connection, pytest.raises(IntegrityError):
         connection.execute(text("DELETE FROM lineage_version WHERE version = 'v1'"))
+
+
+def open_incident(
+    repository: IncidentRepository,
+    minutes: int,
+    *,
+    root: str,
+    fault_class: str = "nulls",
+    severity: str = "error",
+) -> int:
+    fields = draft(fingerprint=f"fp-{minutes}").__dict__ | {
+        "root_node": root,
+        "fault_class": fault_class,
+        "severity": severity,
+        "opened_at": NOW + timedelta(minutes=minutes),
+    }
+    return repository.create(IncidentDraft(**fields)).id
+
+
+def test_incidents_are_listed_newest_first_with_the_total(repository: IncidentRepository) -> None:
+    ids = [open_incident(repository, m, root="brz_amfi__navall.nav_inr") for m in (0, 5, 5, 9)]
+
+    page, total = repository.list_incidents(limit=3)
+    rest, _ = repository.list_incidents(limit=3, offset=3)
+
+    assert total == 4
+    # the two opened at the same minute are ordered by id, newest first
+    assert [i.id for i in page] == [ids[3], ids[2], ids[1]]
+    assert [i.id for i in rest] == [ids[0]]
+
+
+def test_filters_narrow_both_the_rows_and_the_total(repository: IncidentRepository) -> None:
+    a = open_incident(repository, 0, root="brz_amfi__navall.nav_inr", fault_class="nulls")
+    b = open_incident(repository, 1, root="brz_nse__bhavcopy.close", fault_class="unit_change")
+    c = open_incident(
+        repository, 2, root="raw.nse.bhavcopy.ClsPric", fault_class="schema_drift", severity="warn"
+    )
+
+    by_class, n_class = repository.list_incidents(limit=10, fault_class="unit_change")
+    by_severity, _ = repository.list_incidents(limit=10, severity="warn")
+    by_status, n_status = repository.list_incidents(limit=10, status="detected")
+    nothing, n_nothing = repository.list_incidents(limit=10, status="approved")
+
+    assert [i.id for i in by_class] == [b]
+    assert n_class == 1
+    assert [i.id for i in by_severity] == [c]
+    assert n_status == 3
+    assert {i.id for i in by_status} == {a, b, c}
+    assert (nothing, n_nothing) == ([], 0)
+
+
+def test_the_feed_filter_follows_the_naming_convention_for_models_and_raw_nodes(
+    repository: IncidentRepository,
+) -> None:
+    amfi = open_incident(repository, 0, root="brz_amfi__navall.nav_inr")
+    nse_model = open_incident(repository, 1, root="slv_nse__prices.close")
+    nse_raw = open_incident(repository, 2, root="raw.nse.bhavcopy.ClsPric")
+    open_incident(repository, 3, root="gld_market_daily_summary.rows")  # no feed in the name
+
+    nse, n_nse = repository.list_incidents(limit=10, feed="nse")
+    only_amfi, _ = repository.list_incidents(limit=10, feed="amfi")
+
+    assert {i.id for i in nse} == {nse_model, nse_raw}
+    assert n_nse == 2
+    assert [i.id for i in only_amfi] == [amfi]
+
+
+def test_a_feed_name_with_wildcard_characters_matches_nothing(
+    repository: IncidentRepository,
+) -> None:
+    open_incident(repository, 0, root="brz_amfi__navall.nav_inr")
+
+    for feed in ("%", "_", "a%", "am_i", "\\"):
+        assert repository.list_incidents(limit=10, feed=feed) == ([], 0)
