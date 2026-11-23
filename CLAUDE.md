@@ -90,6 +90,7 @@ lineage-heal/
 │   ├── store/                SQLAlchemy models, repositories, Alembic migrations (Postgres)
 │   ├── api/                  FastAPI app: routers, schemas, dependencies, auth
 │   ├── benchmark/            Fault injectors, runner, metrics, baselines
+│   ├── demo/                 Sample incidents for `dev seed-demo` (nothing imports it)
 │   └── cli.py                Typer entry point: ingest, backfill, detect, heal, index, bench
 ├── dbt/                      dbt project: models/{bronze,silver,gold}, macros, tests, seeds
 ├── web/                      React + TypeScript dashboard (Vite)
@@ -132,6 +133,7 @@ uv run lineageheal heal RUN_ID                   # detect, investigate, then ver
 uv run lineageheal dev inject-fault amfi --fault blank-nav --date 2026-10-15   # local raw zone only
 uv run lineageheal dev llm-smoke                 # one tiny call per LLM provider and tier; needs your own keys in .env
 uv run lineageheal dev github-smoke              # signs in as the GitHub App and reads the base branch; needs the GITHUB_* settings in .env
+uv run lineageheal dev seed-demo                 # three sample incidents in the local database for the dashboard, no model call; needs `dbt compile`, DATABASE_URL (local only) and GITHUB_REPOSITORY; --reset removes them
 
 # Quality gates — all must pass before proposing a commit
 uv run ruff format . && uv run ruff check .

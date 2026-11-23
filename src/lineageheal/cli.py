@@ -5,6 +5,7 @@ ingestion. Results go to stdout; logs go to stderr (see `core.logging`).
 """
 
 import enum
+import json
 from collections import Counter
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
@@ -16,7 +17,13 @@ from typing import Annotated
 import typer
 
 from lineageheal.agents.graph import HealDependencies, run_heal_report
-from lineageheal.agents.wiring import Detection, build_fixing, build_investigator, detect_run
+from lineageheal.agents.wiring import (
+    REPO_ROOT,
+    Detection,
+    build_fixing,
+    build_investigator,
+    detect_run,
+)
 from lineageheal.benchmark.faults import AMFI_FAULTS
 from lineageheal.core.errors import BenchmarkError, ConfigurationError, LineageHealError
 from lineageheal.core.logging import configure_logging
@@ -596,6 +603,65 @@ def heal(
             typer.echo(f"  pull request: {fix.pull_request_url}")
         if fix.issue_url:
             typer.echo(f"  issue: {fix.issue_url}")
+
+
+@dev_app.command("seed-demo")
+def seed_demo(
+    manifest: Annotated[
+        Path | None,
+        typer.Option(help="A compiled dbt manifest; dbt/target/manifest.json by default."),
+    ] = None,
+    repository: Annotated[
+        str | None,
+        typer.Option(help="owner/name for the pull request and issue links; GITHUB_REPOSITORY."),
+    ] = None,
+    first_number: Annotated[
+        int, typer.Option(min=1, help="The pull request or issue number of the first incident.")
+    ] = 101,
+    reset: Annotated[
+        bool, typer.Option("--reset", help="Remove the seeded incidents instead of adding them.")
+    ] = False,
+) -> None:
+    """Store three sample incidents so the dashboard has something to show, with no model call.
+
+    Writes only to a database on this machine. Safe to run twice; `--reset` removes exactly what
+    this command stored and never touches real incidents.
+    """
+    from lineageheal.demo import seed as demo_seed
+    from lineageheal.lineage.builder import build_lineage
+
+    with _exit_on_project_errors():
+        settings = get_settings()
+        url = settings.require_database_url()
+        demo_seed.require_local_database(url)
+        engine = create_db_engine(url)
+        if reset:
+            incidents, runs = demo_seed.reset(engine)
+            typer.echo(f"removed {incidents} seeded incident(s) and {runs} run(s)")
+            return
+        path = manifest or REPO_ROOT / "dbt" / "target" / "manifest.json"
+        if not path.is_file():
+            raise ConfigurationError(f"No manifest at {path}; run `dbt compile` first or pass one")
+        compiled = json.loads(path.read_text(encoding="utf-8"))
+        demo_seed.require_compiled(compiled)
+        slug = repository or settings.github_repository
+        if slug is None:
+            raise ConfigurationError(
+                "Set GITHUB_REPOSITORY in .env or pass --repository owner/name"
+            )
+        result = demo_seed.seed(
+            engine,
+            graph=build_lineage(compiled),
+            manifest=compiled,
+            repo_root=REPO_ROOT,
+            repository=slug,
+            now=datetime.now(UTC),
+            first_number=first_number,
+        )
+    for key, incident_id in result.seeded:
+        typer.echo(f"seeded {key} as incident {incident_id}")
+    for key in result.skipped:
+        typer.echo(f"{key} is already stored")
 
 
 @dev_app.command("openapi-schema")
