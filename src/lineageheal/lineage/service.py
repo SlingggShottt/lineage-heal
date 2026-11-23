@@ -67,6 +67,7 @@ class LineageService:
         self._graph = graph
         self._flow: nx.DiGraph[str] = nx.DiGraph()
         self._flow.add_nodes_from(node.id for node in graph.nodes)
+        self._kinds = {node.id: node.kind.value for node in graph.nodes}
         for edge in graph.edges:
             self._flow.add_edge(edge.source, edge.target, edge=edge)
 
@@ -79,6 +80,11 @@ class LineageService:
     def node_ids(self) -> tuple[str, ...]:
         """Every node id in the graph, sorted; callers use it to suggest a near match."""
         return tuple(sorted(self._flow))
+
+    def kind_of(self, node: str) -> str:
+        """What the node's table is: `raw`, `seed` or `model`."""
+        self._require(node)
+        return str(self._kinds[node])
 
     def upstream(
         self, node: str, depth: int | None = None, *, include_filters: bool = True

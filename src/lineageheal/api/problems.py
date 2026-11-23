@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from lineageheal.core.errors import LineageHealError
+from lineageheal.core.errors import LineageHealError, StorageError
 
 log = structlog.get_logger()
 
@@ -155,6 +155,19 @@ def install_problem_handlers(app: FastAPI) -> None:
             detail=exc.detail if isinstance(exc.detail, str) else None,
             instance=request.url.path,
             headers=dict(exc.headers) if exc.headers else None,
+        )
+
+    @app.exception_handler(StorageError)
+    async def _storage(request: Request, exc: StorageError) -> JSONResponse:
+        # The message names the failing statement's error class, which helps the operator and
+        # nobody else, so it goes to the log.
+        log.error("api_storage_error", path=request.url.path, error=str(exc))
+        return problem_response(
+            503,
+            "database-unavailable",
+            "Database unavailable",
+            detail="The database could not be read.",
+            instance=request.url.path,
         )
 
     @app.exception_handler(Exception)
