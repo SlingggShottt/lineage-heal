@@ -177,16 +177,16 @@ def test_a_dataset_without_an_injector_is_refused_not_guessed() -> None:
             "id": "nse-nulls-001",
             "class": "nulls",
             "source": "nse",
-            "dataset": "cm_bhavcopy",
+            "dataset": "security_master",
             "trade_date": "2026-10-15",
             "split": "test",
             "seed": 1,
             "injection": {"type": "blank_value", "column": "ClsPric"},
-            "expected": {"root_cause": "raw.nse.cm_bhavcopy.ClsPric", "fix_location": "dbt"},
+            "expected": {"root_cause": "raw.nse.security_master.ClsPric", "fix_location": "dbt"},
         }
     )
 
-    with pytest.raises(BenchmarkError, match="no injector for nse/cm_bhavcopy"):
+    with pytest.raises(BenchmarkError, match="no injector for nse/security_master"):
         apply_fault(nse, b"x")
 
 
@@ -200,7 +200,7 @@ def test_every_example_specification_damages_the_sample_report() -> None:
         "unit_change",
         "late_data",
     }
-    for example in cases:
+    for example in (c for c in cases if c.source == "amfi"):
         damaged = apply_fault(example, REPORT)
         assert damaged != REPORT, example.id
 

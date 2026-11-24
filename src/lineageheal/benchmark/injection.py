@@ -10,14 +10,11 @@ a random generator whose sequence could change between Python versions.
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable
+from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 
-from lineageheal.benchmark.faults import (
-    column_index,
-    data_row_indexes,
-    join_lines,
-    report_lines,
-)
+from lineageheal.benchmark import csv_report, faults
 from lineageheal.benchmark.spec import (
     BlankValue,
     DuplicateRow,
@@ -27,10 +24,67 @@ from lineageheal.benchmark.spec import (
     StaleDate,
     WithholdFile,
 )
+from lineageheal.benchmark.zip_io import read_single_csv, write_single_csv
 from lineageheal.core.errors import BenchmarkError
 
-# Sources and datasets the injectors know how to read. NSE and FBIL follow (LH-105, LH-080).
-SUPPORTED: frozenset[tuple[str, str]] = frozenset({("amfi", "navall")})
+# Sources and datasets the injectors know how to read. The other NSE datasets and FBIL follow
+# (LH-080).
+SUPPORTED: frozenset[tuple[str, str]] = frozenset({("amfi", "navall"), ("nse", "cm_bhavcopy")})
+
+
+@dataclass
+class _Table:
+    """A report's lines with what is needed to edit fields in them and write them back."""
+
+    lines: list[str]
+    separator: str
+    eol: str
+    column_index: Callable[[str, str], int]
+    data_rows: Callable[[list[str]], list[int]]
+    split: Callable[[str], list[str]]
+
+    def fields(self, row: int) -> list[str]:
+        """The fields of one line."""
+        return self.split(self.lines[row])
+
+    def set_fields(self, row: int, fields: list[str]) -> None:
+        """Replace one line with these fields."""
+        self.lines[row] = self.separator.join(fields)
+
+    def column(self, name: str) -> int:
+        """Where a column is, found by name in the header."""
+        return self.column_index(self.lines[0], name)
+
+    def rows(self) -> list[int]:
+        """Indexes of the data rows."""
+        return self.data_rows(self.lines)
+
+    def to_bytes(self) -> bytes:
+        """The report as bytes, with its original line ending."""
+        return self.eol.join(self.lines).encode("utf-8")
+
+
+def _amfi_table(content: bytes) -> _Table:
+    return _Table(
+        faults.report_lines(content),
+        ";",
+        "\r\n",
+        faults.column_index,
+        faults.data_row_indexes,
+        lambda line: line.split(";"),
+    )
+
+
+def _csv_table(content: bytes) -> _Table:
+    lines, eol = csv_report.split_lines(content)
+    return _Table(
+        lines,
+        ",",
+        eol,
+        csv_report.column_index,
+        csv_report.data_row_indexes,
+        csv_report.split_fields,
+    )
 
 
 def apply_fault(case: FaultCase, content: bytes) -> bytes | None:
@@ -38,7 +92,7 @@ def apply_fault(case: FaultCase, content: bytes) -> bytes | None:
 
     Args:
         case: The fault to inject.
-        content: The file as published.
+        content: The file as published (a zip for NSE bhavcopy).
 
     Returns:
         The damaged bytes, or None when the fault is that no file arrives.
@@ -47,29 +101,37 @@ def apply_fault(case: FaultCase, content: bytes) -> bytes | None:
         BenchmarkError: The dataset has no injector yet, or the file does not have what the fault
             needs (a column, a data row), so it cannot be damaged as specified.
     """
-    if (case.source, case.dataset) not in SUPPORTED:
+    key = (case.source, case.dataset)
+    if key not in SUPPORTED:
         raise BenchmarkError(
             f"{case.id}: there is no injector for {case.source}/{case.dataset} yet"
         )
-    injection = case.injection
-    if isinstance(injection, WithholdFile):
+    if isinstance(case.injection, WithholdFile):
         return None
-    lines = report_lines(content)
+    if key == ("nse", "cm_bhavcopy"):
+        # The zip is opened, its CSV damaged and a new zip written with the same entry name.
+        name, csv_bytes = read_single_csv(content)
+        return write_single_csv(name, _damage(case, _csv_table(csv_bytes)))
+    return _damage(case, _amfi_table(content))
+
+
+def _damage(case: FaultCase, table: _Table) -> bytes:
+    injection = case.injection
     if isinstance(injection, RenameColumn):
-        return _rename_column(lines, injection)
+        return _rename_column(table, injection)
     if isinstance(injection, StaleDate):
-        return _stale_date(lines, injection)
+        return _stale_date(table, injection)
     if isinstance(injection, ScaleValues):
-        return _scale_values(lines, injection)
-    rows = data_row_indexes(lines)
+        return _scale_values(table, injection)
+    rows = table.rows()
     if not rows:
         raise BenchmarkError(f"{case.id}: the file has no data rows, so it cannot be damaged")
     row = rows[_pick(case.seed, len(rows))]
     if isinstance(injection, BlankValue):
-        return _blank_value(lines, row, injection)
+        return _blank_value(table, row, injection)
     if isinstance(injection, DuplicateRow):
-        lines.insert(row + 1, lines[row])
-        return join_lines(lines)
+        table.lines.insert(row + 1, table.lines[row])
+        return table.to_bytes()
     raise BenchmarkError(f"{case.id}: unhandled injection {injection.type}")  # pragma: no cover
 
 
@@ -78,53 +140,53 @@ def _pick(seed: int, count: int) -> int:
     return int(hashlib.sha256(f"fault-row:{seed}".encode()).hexdigest(), 16) % count
 
 
-def _rename_column(lines: list[str], injection: RenameColumn) -> bytes:
-    fields = lines[0].split(";")
-    fields[column_index(lines[0], injection.column)] = injection.new_name
-    lines[0] = ";".join(fields)
-    return join_lines(lines)
+def _rename_column(table: _Table, injection: RenameColumn) -> bytes:
+    fields = table.fields(0)
+    fields[table.column(injection.column)] = injection.new_name
+    table.set_fields(0, fields)
+    return table.to_bytes()
 
 
-def _blank_value(lines: list[str], row: int, injection: BlankValue) -> bytes:
-    index = column_index(lines[0], injection.column)
-    fields = lines[row].split(";")
+def _blank_value(table: _Table, row: int, injection: BlankValue) -> bytes:
+    index = table.column(injection.column)
+    fields = table.fields(row)
     fields[index] = ""
-    lines[row] = ";".join(fields)
-    return join_lines(lines)
+    table.set_fields(row, fields)
+    return table.to_bytes()
 
 
-def _stale_date(lines: list[str], injection: StaleDate) -> bytes:
-    index = column_index(lines[0], injection.column)
-    rows = _require_rows(lines)
-    for row in rows:
-        fields = lines[row].split(";")
+def _stale_date(table: _Table, injection: StaleDate) -> bytes:
+    index = table.column(injection.column)
+    for row in _require_rows(table):
+        fields = table.fields(row)
         fields[index] = injection.value
-        lines[row] = ";".join(fields)
-    return join_lines(lines)
+        table.set_fields(row, fields)
+    return table.to_bytes()
 
 
-def _scale_values(lines: list[str], injection: ScaleValues) -> bytes:
+def _scale_values(table: _Table, injection: ScaleValues) -> bytes:
     """Multiply every numeric value in a column, keeping its decimal places.
 
-    Non-numeric values (AMFI publishes `N.A.` for some schemes) are left exactly as they were.
+    Non-numeric values (AMFI publishes `N.A.` for some schemes; bhavcopy leaves some prices
+    empty) are left exactly as they were.
     """
-    index = column_index(lines[0], injection.column)
+    index = table.column(injection.column)
     changed = 0
-    for row in _require_rows(lines):
-        fields = lines[row].split(";")
+    for row in _require_rows(table):
+        fields = table.fields(row)
         try:
             fields[index] = str(Decimal(fields[index]) * injection.factor)
         except InvalidOperation:
             continue
-        lines[row] = ";".join(fields)
+        table.set_fields(row, fields)
         changed += 1
     if changed == 0:
         raise BenchmarkError(f"no numeric values in {injection.column!r} to scale")
-    return join_lines(lines)
+    return table.to_bytes()
 
 
-def _require_rows(lines: list[str]) -> list[int]:
-    rows = data_row_indexes(lines)
+def _require_rows(table: _Table) -> list[int]:
+    rows = table.rows()
     if not rows:
         raise BenchmarkError("the file has no data rows, so it cannot be damaged")
     return rows
