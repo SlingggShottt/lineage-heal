@@ -29,7 +29,8 @@ from lineageheal.lineage.graph import LineageGraph
 from lineageheal.lineage.service import LineageService
 from lineageheal.llm.client import LLMClient
 from lineageheal.orchestration.run_artifacts import load_manifest, load_run_summary, run_prefix
-from lineageheal.rag.embeddings import build_embedder
+from lineageheal.rag.embeddings import Embedder, build_embedder
+from lineageheal.rag.indexer import LIVE_NAMESPACE
 from lineageheal.rag.retriever import Retriever
 from lineageheal.store.fixes import FixRepository
 from lineageheal.store.incidents import IncidentRepository
@@ -87,15 +88,24 @@ def build_investigator(
     store: ObjectStore,
     detection: Detection,
     client: LLMClient,
+    *,
+    namespace: str = LIVE_NAMESPACE,
+    embedder: Embedder | None = None,
 ) -> Investigator:
-    """An Investigator whose tools read this run's records, the raw zone and the warehouse."""
+    """An Investigator whose tools read this run's records, the raw zone and the warehouse.
+
+    `namespace` picks which knowledge index it retrieves from (a benchmark run uses its own) and
+    `embedder` lets a caller that investigates many faults load the model once.
+    """
     lineage = LineageService(detection.graph)
     context = ToolContext(
         lineage=lineage,
         manifest=detection.manifest,
         summary=detection.summary,
         ingestion_log=IngestionLogRepository(engine),
-        retriever=Retriever(KnowledgeRepository(engine), build_embedder(settings)),
+        retriever=Retriever(
+            KnowledgeRepository(engine), embedder or build_embedder(settings), namespace=namespace
+        ),
         raw_files=RawFileReader(RawZone(store)),
         warehouse=Warehouse(settings.warehouse_path),
     )

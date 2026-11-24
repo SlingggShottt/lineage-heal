@@ -104,6 +104,11 @@ class ScenarioBuilder:
             build_seconds=time.monotonic() - started,
         )
 
+    @staticmethod
+    def discard(scenario: Scenario) -> None:
+        """Delete a scenario's sandbox."""
+        _remove(scenario.root)
+
     def _fill(self, case: FaultCase, sandbox: ObjectStore) -> None:
         zone = RawZone(self.source)
         target = RawZone(sandbox)

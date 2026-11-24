@@ -112,7 +112,7 @@ class BenchmarkRunner:
                 self._run_system(case, system, scenario, began, report)
         finally:
             if not self._keep:
-                shutil.rmtree(scenario.root, ignore_errors=True)
+                self._builder.discard(scenario)
 
     def _run_system(
         self, case: FaultCase, system: System, scenario: Scenario, began: float, report: RunReport

@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
 from lineageheal.benchmark.corpus import summarise
+from lineageheal.benchmark.knowledge import build_index
 from lineageheal.benchmark.loader import load_cases
 from lineageheal.benchmark.models import System
 from lineageheal.benchmark.provenance import build_manifest
@@ -17,22 +19,57 @@ from lineageheal.benchmark.results import ResultStore
 from lineageheal.benchmark.runner import BenchmarkRunner, NoneSystem, scratch_folder
 from lineageheal.benchmark.scenario import ScenarioBuilder
 from lineageheal.benchmark.spec import FaultCase
+from lineageheal.benchmark.systems.lineageheal import LineageHealSystem
 from lineageheal.benchmark.systems.plain_llm import PlainLLMSystem
 from lineageheal.benchmark.systems.rule_based import RuleBasedSystem
 from lineageheal.core.errors import LineageHealError
-from lineageheal.core.settings import get_settings
+from lineageheal.core.settings import Settings, get_settings
 from lineageheal.ingestion.object_stores import LocalObjectStore
 from lineageheal.llm.factory import build_client
+from lineageheal.rag.embeddings import build_embedder
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_CASES = REPO_ROOT / "benchmark" / "cases"
 
-# Systems the runner can evaluate by name. LineageHeal itself (LH-106) registers here when it
-# exists. `plain-llm` needs a model key and fails with a clear message without one.
-SYSTEMS: dict[str, Callable[[], System]] = {
-    "none": NoneSystem,
-    "rule-based": RuleBasedSystem,
-    "plain-llm": lambda: PlainLLMSystem(build_client(get_settings())),
+
+@dataclass(frozen=True)
+class BenchContext:
+    """What a system may need to be built for one run."""
+
+    settings: Settings
+    store: ResultStore
+    builder: ScenarioBuilder
+    cases: list[FaultCase]  # the whole corpus, not just the selection
+
+
+def _lineageheal(context: BenchContext) -> System:
+    """LineageHeal with the run's isolated index, built once and reused when a run resumes."""
+    client = build_client(context.settings)
+    embedder = build_embedder(context.settings)
+    ready = context.store.root / "knowledge.db"
+    if not ready.exists():
+        building = context.store.root / "knowledge.partial"
+        building.unlink(missing_ok=True)
+        context.store.root.mkdir(parents=True, exist_ok=True)
+        seeds = [c for c in context.cases if c.split == "seed"]
+        report = build_index(
+            building, seeds, context.builder, embedder, context.settings.runbooks_dir
+        )
+        building.rename(ready)
+        typer.echo(
+            f"isolated index: {report.runbooks} runbooks, {len(report.incidents)} seed incidents"
+            f", {len(report.skipped)} seed cases could not be built"
+        )
+    return LineageHealSystem(context.settings, client, ready, embedder)
+
+
+# Systems the runner can evaluate by name. `plain-llm` and `lineageheal` need a model key and
+# fail with a clear message without one.
+SYSTEMS: dict[str, Callable[[BenchContext], System]] = {
+    "none": lambda _: NoneSystem(),
+    "rule-based": lambda _: RuleBasedSystem(),
+    "plain-llm": lambda context: PlainLLMSystem(build_client(context.settings)),
+    "lineageheal": _lineageheal,
 }
 
 bench_app = typer.Typer(no_args_is_help=True, help="The fault-injection benchmark.")
@@ -100,7 +137,8 @@ def run(
         raise typer.BadParameter(f"unknown system {unknown}; choose from {', '.join(SYSTEMS)}")
     settings = get_settings()
     try:
-        cases = _select(load_cases(cases_dir), split, fault_class, limit)
+        corpus = load_cases(cases_dir)
+        cases = _select(corpus, split, fault_class, limit)
         if not cases:
             raise typer.BadParameter("no cases match those filters")
         store = ResultStore(settings.bench_dir / "results", run_id)
@@ -109,8 +147,9 @@ def run(
             repo_root=REPO_ROOT,
             scratch_root=scratch_folder(settings.bench_dir, run_id),
         )
+        context = BenchContext(settings, store, builder, corpus)
         runner = BenchmarkRunner(
-            builder, store, [SYSTEMS[n]() for n in system], keep_scenarios=keep_scenarios
+            builder, store, [SYSTEMS[n](context) for n in system], keep_scenarios=keep_scenarios
         )
         report = runner.run(cases, build_manifest(settings, REPO_ROOT, run_id, cases, system))
     except LineageHealError as exc:

@@ -169,3 +169,13 @@ def test_an_exhausted_fake_says_so() -> None:
 
     with pytest.raises(LLMError, match="no scripted answer"):
         FakeProvider("gemini", []).complete(REQUEST)
+
+
+def test_usage_counts_each_answered_call_and_its_tokens_but_not_failures() -> None:
+    llm = client(FakeProvider("a", [ServerError("down"), "one two three"]), attempts=3)
+
+    llm.complete(REQUEST)
+
+    assert llm.usage.calls == 1  # the failed attempt was not billed
+    assert llm.usage.input_tokens == len(REQUEST.prompt.split())
+    assert llm.usage.output_tokens == 3
