@@ -1,3 +1,4 @@
+import { useSignInHref } from "./useSignInHref";
 import { useMe } from "@/api/queries";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,7 @@ import { useLogout } from "./useLogout";
 export function SessionBadge() {
   const { data, isPending, isError } = useMe();
   const logout = useLogout();
+  const signInHref = useSignInHref();
 
   if (isPending) {
     return <Skeleton className="h-8 w-40" />;
@@ -23,7 +25,7 @@ export function SessionBadge() {
   if (!data.signed_in) {
     return (
       <Button asChild size="sm" variant="outline">
-        <a href="/api/auth/login">Sign in with GitHub</a>
+        <a href={signInHref}>Sign in with GitHub</a>
       </Button>
     );
   }

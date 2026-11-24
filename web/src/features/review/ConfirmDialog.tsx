@@ -1,3 +1,4 @@
+import { useSignInHref } from "@/features/session/useSignInHref";
 import { useEffect, useId, useRef, type ReactNode, type SyntheticEvent } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,7 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  const signInHref = useSignInHref();
 
   useEffect(() => {
     const dialog = ref.current;
@@ -90,7 +92,7 @@ export function ConfirmDialog({
             <p>{failure.detail}</p>
             {failure.signInAgain && (
               <p className="mt-2">
-                <a href="/api/auth/login" className="underline">
+                <a href={signInHref} className="underline">
                   Sign in with GitHub
                 </a>
               </p>

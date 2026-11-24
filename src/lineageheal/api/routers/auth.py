@@ -27,10 +27,12 @@ from lineageheal.api.dependencies import (
 from lineageheal.api.github_auth import OAuthError
 from lineageheal.api.problems import PROBLEM_RESPONSES, ApiError
 from lineageheal.api.security import (
+    NEXT_COOKIE,
     SESSION_COOKIE,
     STATE_COOKIE,
     hash_session_id,
     new_token,
+    safe_next_path,
     tokens_match,
 )
 from lineageheal.core.settings import Settings
@@ -76,8 +78,19 @@ def me(session: OptionalSessionDep, settings: SettingsDep) -> Me:
     response_class=RedirectResponse,
     responses={503: PROBLEM_RESPONSES[503]},
 )
-def login(request: Request, settings: SettingsDep) -> RedirectResponse:
-    """Send the browser to GitHub, with a one-time `state` kept in a short-lived cookie."""
+def login(
+    request: Request,
+    settings: SettingsDep,
+    next: Annotated[  # noqa: A002 - the public query parameter's name
+        str | None,
+        Query(description="A path on the dashboard to return to after signing in."),
+    ] = None,
+) -> RedirectResponse:
+    """Send the browser to GitHub, with a one-time `state` kept in a short-lived cookie.
+
+    `next` is remembered the same way and used only if it is a path on this site; anything else
+    means the dashboard's home page.
+    """
     oauth = oauth_of(request)
     state = new_token()
     response = RedirectResponse(oauth.authorize_url(state), status_code=302)
@@ -86,6 +99,15 @@ def login(request: Request, settings: SettingsDep) -> RedirectResponse:
     response.set_cookie(
         STATE_COOKIE,
         state,
+        max_age=STATE_LIFETIME_SECONDS,
+        path="/auth",
+        httponly=True,
+        secure=_secure(settings),
+        samesite="lax",
+    )
+    response.set_cookie(
+        NEXT_COOKIE,
+        safe_next_path(next),
         max_age=STATE_LIFETIME_SECONDS,
         path="/auth",
         httponly=True,
@@ -119,8 +141,10 @@ def callback(
             "Sign-in could not be verified",
             "The sign-in attempt did not start here, or took too long. Try again.",
         )
+    # Checked again: the cookie is the browser's to edit, so what it holds is not trusted.
+    destination = safe_next_path(request.cookies.get(NEXT_COOKIE))
     if error or not code:
-        return _back_to_dashboard(settings, "denied")
+        return _back_to_dashboard(settings, "denied", destination)
 
     oauth = oauth_of(request)
     cipher = cipher_of(request)
@@ -129,7 +153,7 @@ def callback(
         user = oauth.fetch_user(token.value)
     except OAuthError as exc:
         log.warning("sign_in_failed", reason=str(exc))
-        return _back_to_dashboard(settings, "failed")
+        return _back_to_dashboard(settings, "failed", destination)
 
     now = now_of(request)
     lifetime = (
@@ -150,7 +174,7 @@ def callback(
         )
     )
     log.info("signed_in", login=user.login)
-    response = _back_to_dashboard(settings, None)
+    response = _back_to_dashboard(settings, None, destination)
     response.set_cookie(
         SESSION_COOKIE,
         session_id,
@@ -190,10 +214,13 @@ def _secure(settings: Settings) -> bool:
     return settings.api_public_url.startswith("https://")
 
 
-def _back_to_dashboard(settings: Settings, problem: str | None) -> RedirectResponse:
-    target = settings.dashboard_url.rstrip("/") + "/"
+def _back_to_dashboard(
+    settings: Settings, problem: str | None, destination: str = "/"
+) -> RedirectResponse:
+    target = settings.dashboard_url.rstrip("/") + destination
     if problem:
-        target += f"?sign_in={problem}"
+        target += ("&" if "?" in destination else "?") + f"sign_in={problem}"
     response = RedirectResponse(target, status_code=302)
     response.delete_cookie(STATE_COOKIE, path="/auth")
+    response.delete_cookie(NEXT_COOKIE, path="/auth")
     return response

@@ -34,6 +34,9 @@ export interface paths {
         /**
          * Start signing in with GitHub
          * @description Send the browser to GitHub, with a one-time `state` kept in a short-lived cookie.
+         *
+         *     `next` is remembered the same way and used only if it is a path on this site; anything else
+         *     means the dashboard's home page.
          */
         get: operations["login_auth_login_get"];
         put?: never;
@@ -912,7 +915,10 @@ export interface operations {
     };
     login_auth_login_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description A path on the dashboard to return to after signing in. */
+                next?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;

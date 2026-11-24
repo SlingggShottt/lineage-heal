@@ -96,7 +96,7 @@ describe("who sees the controls", () => {
       .parentElement as HTMLElement;
     expect(within(review).getByRole("link", { name: "Sign in with GitHub" })).toHaveAttribute(
       "href",
-      "/api/auth/login",
+      "/api/auth/login?next=%2Fincidents%2F12",
     );
     expect(screen.queryByRole("button", { name: "Approve and merge…" })).not.toBeInTheDocument();
   });
@@ -284,7 +284,7 @@ describe("approving", () => {
     expect(alert).toHaveTextContent("Sign in again");
     expect(within(alert).getByRole("link", { name: "Sign in with GitHub" })).toHaveAttribute(
       "href",
-      "/api/auth/login",
+      "/api/auth/login?next=%2Fincidents%2F12",
     );
   });
 

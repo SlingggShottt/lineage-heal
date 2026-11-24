@@ -15,7 +15,19 @@ describe("SessionBadge", () => {
     renderApp("/", api.fetch);
 
     const link = await screen.findByRole("link", { name: "Sign in with GitHub" });
-    expect(link).toHaveAttribute("href", "/api/auth/login");
+    expect(link).toHaveAttribute("href", "/api/auth/login?next=%2F");
+  });
+
+  it("brings the visitor back to the page and filters they were on", async () => {
+    const api = me({ signed_in: false, is_approver: false });
+
+    renderApp("/incidents?status=fix_proposed", api.fetch);
+
+    const link = await screen.findByRole("link", { name: "Sign in with GitHub" });
+    expect(link).toHaveAttribute(
+      "href",
+      "/api/auth/login?next=%2Fincidents%3Fstatus%3Dfix_proposed",
+    );
   });
 
   it("shows an approver by login", async () => {
