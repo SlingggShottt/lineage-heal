@@ -102,6 +102,11 @@ class GitHubClient:
         """A pull request's current state."""
         return _pull_request(self._call("GET", f"/repos/{self._repo}/pulls/{number}"))
 
+    def issue_is_open(self, number: int) -> bool:
+        """Whether an issue is still open."""
+        data = self._call("GET", f"/repos/{self._repo}/issues/{number}")
+        return str(data["state"]) == "open"
+
     # -- as the App ------------------------------------------------------------------------
 
     def create_branch(self, incident_id: int, sha: str) -> str:

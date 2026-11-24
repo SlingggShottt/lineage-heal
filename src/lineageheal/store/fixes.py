@@ -242,6 +242,26 @@ class FixRepository:
                 f"Could not record the issue: {explain_database_error(exc)}"
             ) from exc
 
+    def mark_issue_closed(self, fix_id: int, at: datetime) -> None:
+        """Record that the issue a suggestion was filed as has been closed on GitHub.
+
+        The incident's status is left alone: closing an issue is not a decision on a fix.
+
+        Raises:
+            StorageError: The fix is not a published suggestion, or the database failed.
+        """
+        try:
+            with Session(self._engine) as session, session.begin():
+                row = session.get(Fix, fix_id)
+                if row is None or row.kind != "suggestion" or row.status != "published":
+                    raise StorageError(f"Fix {fix_id} is not a filed suggestion")
+                row.status = "closed"
+                row.updated_at = at
+        except SQLAlchemyError as exc:
+            raise StorageError(
+                f"Could not record the closed issue: {explain_database_error(exc)}"
+            ) from exc
+
     def for_incident(self, incident_id: int) -> list[StoredFix]:
         """An incident's fixes, oldest first.
 
