@@ -142,7 +142,7 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 | LH-083 | Demo fault injector: five AMFI faults and a local-only `dev inject-fault` command (first slice of LH-067) | FR-BEN-02 | Done | 2 |
 | LH-068 | Fault corpus of about 100 with seed/test split | FR-BEN-01, FR-BEN-07 | Done | 6 |
 | LH-069 | Benchmark runner: sandbox setup, isolated index, resumable results | FR-BEN-03, FR-BEN-06, FR-KB-03 | Done | 6 |
-| LH-070 | Baselines: rule-based and plain LLM | FR-BEN-03 | Todo | |
+| LH-070 | Baselines: rule-based and plain LLM | FR-BEN-03 | Done | 6 |
 | LH-094 | Evaluate a cross-encoder reranker (fastembed) on top of hybrid retrieval, and keep it only if it measurably improves root-cause accuracy on the benchmark's seed split (`docs/techstack.md`) | FR-KB-02 | Todo | |
 | LH-071 | July 2024 NSE held-out replay | FR-BEN-05 | Todo | |
 | LH-072 | Metrics and Markdown/JSON report generation | FR-BEN-04, NFR-REPRO-01 | Todo | |
@@ -155,6 +155,7 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 | LH-079 | Documentation polish: README results, demo video, final diagrams | — | Todo | |
 | LH-105 | NSE bhavcopy fault injectors: unzip the raw file, damage the CSV in each of the five ways and rezip deterministically (fixed timestamps), so the same specification gives the same bytes. Split from LH-067 | FR-BEN-01, FR-BEN-02 | Done | 6 |
 | LH-106 | The LineageHeal benchmark system and the isolated retrieval index: runs detect, investigate and fix inside the scenario's sandbox without opening pull requests, and retrieves from a namespace holding only runbooks and the seed split's incidents. Split from LH-069 | FR-BEN-03, FR-KB-03, FR-BEN-07 | Todo | |
+| LH-107 | Patches in the benchmark: systems may return a patch in their diagnosis and the runner verifies it in a sandbox on the scenario's warehouse, the same way for every system; the plain-LLM baseline drafts a patch through the Fixer's builder, the rule-based baseline a templated one for the rename pattern. Split from LH-070 | FR-BEN-03, FR-BEN-04 | Todo | |
 
 ## Done log
 
@@ -240,3 +241,4 @@ A running record of completed work, used for the weekly diary.
 | 6 | LH-105 | `apply_fault` now handles NSE `cm_bhavcopy`: `zip_io.py` reads the one CSV and writes a deterministic zip (original entry name, fixed time, compression and attributes), `csv_report.py` splits lines and quote-aware fields keeping raw text and the file's line ending, and the engine shares one table abstraction between AMFI and CSV. Five example specifications, one per class, damage the sample file; tests cover each fault, determinism, quoted commas, CRLF and corrupt input (D-75). |
 | 6 | LH-068 | `benchmark/cases/` holds 100 generated specifications (AMFI and NSE bhavcopy, five classes, ten each; 30 seed and 70 test), written by `scripts/make_corpus.py` with dates picked by hash on publishing days and clear of July 2024. `benchmark/corpus.py` validates the whole set; tests run it on the committed files and check they match the generator. FBIL has no cases until LH-080 (D-76). |
 | 6 | LH-069 | The benchmark runner: `ScenarioBuilder` builds each fault into a throwaway raw zone and DuckDB (recent clean files copied from a read-only source zone, fault injected into the copy, `dbt build` on the bench target, signals recorded), `BenchmarkRunner` shows that one scenario to every system and stores a result per fault and system (`ResultStore`, atomic JSON beside a manifest with lockfile hash, models, prompts and seeds), skips finished pairs on rerun and records a crashing system or an unbuildable scenario instead of stopping. `lineageheal bench list` and `bench run`; the `none` system checks the corpus is runnable. `BENCH_DIR` and `BENCH_SOURCE_RAW_ZONE` settings (D-77). |
+| 6 | LH-070 | Two baselines behind the runner's `System` interface, registered as `rule-based` and `plain-llm`: the rule-based one walks the manifest's model dependencies to the nearest raw source and ranks its columns by name, the plain-LLM one sends the first failing check and that model's SQL through the shared `LLMClient` with the new locked prompt `baseline.plain.v1`. Neither sees lineage, tools, retrieval or raw files; patches are LH-107 (D-78). |
