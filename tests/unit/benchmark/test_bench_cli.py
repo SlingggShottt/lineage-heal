@@ -44,3 +44,19 @@ def test_run_records_a_failed_scenario_when_history_is_not_backfilled(
     assert result.exit_code == 1
     assert "2 scenarios failed" in result.output
     assert len(list((tmp_path / "bench" / "results" / "t1" / "results").glob("*.json"))) == 2
+
+
+def test_the_plain_llm_system_without_a_model_key_fails_with_a_message(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for key in ("GEMINI_API_KEY", "GROQ_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.chdir(tmp_path)  # so a developer's own .env is not read
+    monkeypatch.setenv("BENCH_DIR", str(tmp_path))
+
+    result = CliRunner().invoke(
+        app, ["bench", "run", "--run-id", "t2", "--system", "plain-llm", "--limit", "1"]
+    )
+
+    assert result.exit_code == 1
+    assert "error:" in result.output

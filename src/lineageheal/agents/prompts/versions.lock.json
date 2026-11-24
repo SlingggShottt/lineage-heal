@@ -1,4 +1,5 @@
 {
+  "baseline.plain.v1": "b830588b3ac4971a084fa7b5d56ec7ef1d6d50b8a40d04305b10df61d10fcdf5",
   "detector.classify.v1": "41e2842dca540a5b7303bb043b407c0f0e3a210ceed2547d5196ebcacc7bb77c",
   "fixer.patch.v1": "28ac3535ccac3b024c1864ef7b24cf667b72a269e7c4c420f76bfdd26b29d06d",
   "fixer.suggest.v1": "dbd4030eb8f896ea06bde5dbf54f3596c45f11dac36efac1e9a3a14f2447cf2c",

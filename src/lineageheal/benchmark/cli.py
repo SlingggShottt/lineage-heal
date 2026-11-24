@@ -17,16 +17,23 @@ from lineageheal.benchmark.results import ResultStore
 from lineageheal.benchmark.runner import BenchmarkRunner, NoneSystem, scratch_folder
 from lineageheal.benchmark.scenario import ScenarioBuilder
 from lineageheal.benchmark.spec import FaultCase
+from lineageheal.benchmark.systems.plain_llm import PlainLLMSystem
+from lineageheal.benchmark.systems.rule_based import RuleBasedSystem
 from lineageheal.core.errors import LineageHealError
 from lineageheal.core.settings import get_settings
 from lineageheal.ingestion.object_stores import LocalObjectStore
+from lineageheal.llm.factory import build_client
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_CASES = REPO_ROOT / "benchmark" / "cases"
 
-# Systems the runner can evaluate by name. The baselines (LH-070) and LineageHeal itself
-# (LH-106) register here when they exist.
-SYSTEMS: dict[str, Callable[[], System]] = {"none": NoneSystem}
+# Systems the runner can evaluate by name. LineageHeal itself (LH-106) registers here when it
+# exists. `plain-llm` needs a model key and fails with a clear message without one.
+SYSTEMS: dict[str, Callable[[], System]] = {
+    "none": NoneSystem,
+    "rule-based": RuleBasedSystem,
+    "plain-llm": lambda: PlainLLMSystem(build_client(get_settings())),
+}
 
 bench_app = typer.Typer(no_args_is_help=True, help="The fault-injection benchmark.")
 
