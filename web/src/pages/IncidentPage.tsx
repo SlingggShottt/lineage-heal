@@ -66,7 +66,12 @@ export function IncidentPage() {
           <RootCauseCard rootCause={data.root_cause} />
           <SignalsCard signals={data.signals} />
         </div>
-        <FixCard incidentId={id} attempts={data.fixes} />
+        <FixCard
+          incidentId={id}
+          incidentStatus={data.status}
+          decision={data.decision}
+          attempts={data.fixes}
+        />
         <div className="grid items-start gap-6 lg:grid-cols-2">
           <EvidenceList evidence={data.investigation?.evidence ?? []} cited={citedEvidence} />
           <div className="flex min-w-0 flex-col gap-6">

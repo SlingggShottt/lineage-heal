@@ -28,3 +28,19 @@ Object.defineProperty(globalThis, "DOMMatrixReadOnly", {
   value: DOMMatrixReadOnlyStub,
   configurable: true,
 });
+
+// jsdom has no modal <dialog>; these stand-ins open and close it the way a browser does, closed
+// content staying out of the accessibility tree.
+Object.defineProperty(HTMLDialogElement.prototype, "showModal", {
+  value(this: HTMLDialogElement) {
+    this.setAttribute("open", "");
+  },
+  configurable: true,
+});
+Object.defineProperty(HTMLDialogElement.prototype, "close", {
+  value(this: HTMLDialogElement) {
+    this.removeAttribute("open");
+    this.dispatchEvent(new Event("close"));
+  },
+  configurable: true,
+});

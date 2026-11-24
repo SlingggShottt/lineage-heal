@@ -8,11 +8,12 @@ import { ApiClientContext } from "@/api/context";
 import { routes } from "@/routes";
 
 type Answer = { status?: number; body: unknown };
-type Answerer = Answer | ((url: URL) => Answer);
+type Answerer = Answer | ((url: URL, request: Request) => Answer | Promise<Answer>);
 
 /**
- * A fake `fetch` that answers by path and records the requests it saw. An answer may be a
- * function of the request URL, to reply differently to different filters or to fail once.
+ * A fake `fetch` that answers by path and records the requests it saw. A key may be a bare path
+ * or `"METHOD /path"`, which wins for that method. An answer may be a function of the request,
+ * to reply differently to different filters, to fail once, or to wait (return a promise).
  */
 export function fakeApi(answers: Record<string, Answerer>) {
   const seen: Request[] = [];
@@ -21,16 +22,18 @@ export function fakeApi(answers: Record<string, Answerer>) {
     seen.push(request);
     const url = new URL(request.url);
     const path = url.pathname.replace(/^\/api/, "");
-    const answerer = answers[path];
+    const answerer = answers[`${request.method} ${path}`] ?? answers[path];
     if (!answerer) {
       return Promise.resolve(new Response("no such fake route", { status: 599 }));
     }
-    const answer = typeof answerer === "function" ? answerer(url) : answerer;
-    return Promise.resolve(
-      new Response(JSON.stringify(answer.body), {
-        status: answer.status ?? 200,
-        headers: { "content-type": "application/json" },
-      }),
+    return Promise.resolve(typeof answerer === "function" ? answerer(url, request) : answerer).then(
+      (answer) =>
+        answer.status === 204
+          ? new Response(null, { status: 204 })
+          : new Response(JSON.stringify(answer.body), {
+              status: answer.status ?? 200,
+              headers: { "content-type": "application/json" },
+            }),
     );
   };
   return { fetch: fetchFake, seen };

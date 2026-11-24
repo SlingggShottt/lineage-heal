@@ -1,4 +1,5 @@
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
 import { fakeApi, renderApp } from "@/test/render";
@@ -49,5 +50,51 @@ describe("SessionBadge", () => {
 
     expect(await screen.findByRole("status")).toHaveTextContent("Sign-in status unavailable");
     expect(screen.queryByRole("link", { name: "Sign in with GitHub" })).not.toBeInTheDocument();
+  });
+
+  it("signs out with the CSRF token and goes back to offering sign-in", async () => {
+    const user = userEvent.setup();
+    let signedIn = true;
+    const api = fakeApi({
+      "/me": () => ({
+        body: signedIn
+          ? { signed_in: true, login: "ada", is_approver: true, csrf_token: "csrf-abc" }
+          : { signed_in: false, is_approver: false },
+      }),
+      "POST /auth/logout": () => {
+        signedIn = false;
+        return { status: 204, body: null };
+      },
+    });
+    renderApp("/", api.fetch);
+
+    await user.click(await screen.findByRole("button", { name: "Sign out" }));
+
+    expect(await screen.findByRole("link", { name: "Sign in with GitHub" })).toBeInTheDocument();
+    expect(screen.queryByText("ada")).not.toBeInTheDocument();
+    const logout = api.seen.find((request) => request.method === "POST");
+    expect(new URL(logout?.url ?? "").pathname).toBe("/api/auth/logout");
+    expect(logout?.headers.get("x-csrf-token")).toBe("csrf-abc");
+  });
+
+  it("says so, and stays signed in, when signing out fails", async () => {
+    const user = userEvent.setup();
+    const api = fakeApi({
+      "/me": { body: { signed_in: true, login: "ada", is_approver: false, csrf_token: "t" } },
+      "POST /auth/logout": {
+        status: 403,
+        body: {
+          type: "urn:lineageheal:problem:csrf-failed",
+          title: "Request refused",
+          status: 403,
+        },
+      },
+    });
+    renderApp("/", api.fetch);
+
+    await user.click(await screen.findByRole("button", { name: "Sign out" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not sign out");
+    expect(screen.getByText("ada")).toBeInTheDocument();
   });
 });

@@ -45,3 +45,10 @@ export function unwrap<T>(result: { data?: T; error?: unknown; response: Respons
   }
   return result.data;
 }
+
+/** Check a call that answers with no body (a 204): an error answer becomes an `ApiProblem`. */
+export function expectOk(result: { error?: unknown; response: Response }): void {
+  if (!result.response.ok) {
+    throw new ApiProblem(result.response.status, result.error as Problem | undefined);
+  }
+}

@@ -3,13 +3,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
-/**
- * Shows who is signed in, or a link to sign in with GitHub.
- *
- * Signing out needs the CSRF token on a POST and arrives with the review controls (LH-065).
- */
+import { useLogout } from "./useLogout";
+
+/** Shows who is signed in with a way to sign out, or a link to sign in with GitHub. */
 export function SessionBadge() {
   const { data, isPending, isError } = useMe();
+  const logout = useLogout();
 
   if (isPending) {
     return <Skeleton className="h-8 w-40" />;
@@ -29,11 +28,26 @@ export function SessionBadge() {
     );
   }
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <span className="text-sm font-medium">{data.login}</span>
       <Badge variant={data.is_approver ? "success" : "secondary"}>
         {data.is_approver ? "Approver" : "Read-only"}
       </Badge>
+      <Button
+        variant="ghost"
+        size="sm"
+        disabled={logout.isPending}
+        onClick={() => {
+          logout.mutate();
+        }}
+      >
+        Sign out
+      </Button>
+      {logout.isError && (
+        <span role="alert" className="text-destructive text-xs">
+          Could not sign out. Try again.
+        </span>
+      )}
     </div>
   );
 }
