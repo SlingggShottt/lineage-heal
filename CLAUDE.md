@@ -135,6 +135,9 @@ uv run lineageheal dev llm-smoke                 # one tiny call per LLM provide
 uv run lineageheal dev github-smoke              # signs in as the GitHub App and reads the base branch; needs the GITHUB_* settings in .env
 uv run lineageheal dev seed-demo                 # three sample incidents in the local database for the dashboard, no model call; needs `dbt compile`, DATABASE_URL (local only) and GITHUB_REPOSITORY; --reset removes them
 
+uv run lineageheal bench list                    # the fault corpus (benchmark/cases): counts, ids; --split, --fault-class
+uv run lineageheal bench run --run-id r1 --system none --limit 3   # build fault sandboxes and run systems; results in BENCH_DIR; rerun the id to resume; needs the feeds backfilled around each fault date
+
 # Quality gates — all must pass before proposing a commit
 uv run ruff format . && uv run ruff check .
 uv run mypy src

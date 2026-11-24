@@ -63,6 +63,12 @@ class Settings(BaseSettings):
     # missing makes the list empty instead of failing, since the API host may not ship docs.
     runbooks_dir: Path = Path("docs/runbooks")
 
+    # The benchmark's results and scratch sandboxes, and where it reads clean raw files from
+    # (read only; the raw zone itself is never written, FR-BEN-02). The source defaults to
+    # RAW_ZONE_DIR.
+    bench_dir: Path = Path(".data/bench")
+    bench_source_raw_zone: Path | None = None
+
     # Gap between requests to a source site (FR-ING-10). Raise it if a source pushes back.
     ingest_min_interval_seconds: float = Field(default=3.0, ge=0)
 
