@@ -1,3 +1,5 @@
+import { Link } from "react-router";
+
 import type { components } from "@/api/schema";
 
 import { Section } from "./Section";
@@ -22,7 +24,7 @@ function excerpt(hit: Hit): string {
   return plain.length > EXCERPT_CHARACTERS ? `${plain.slice(0, EXCERPT_CHARACTERS)}…` : plain;
 }
 
-function HitList({ title, hits }: { title: string; hits: Hit[] }) {
+function HitList({ title, hits, link }: { title: string; hits: Hit[]; link?: boolean }) {
   return (
     <div>
       <h3 className="mb-1 font-medium">{title}</h3>
@@ -30,7 +32,17 @@ function HitList({ title, hits }: { title: string; hits: Hit[] }) {
         {hits.map((hit) => (
           <li key={`${hit.document}-${hit.heading}`} className="border-l-2 pl-3">
             <p className="font-medium">
-              {hit.document} · {hit.heading}
+              {link ? (
+                <Link
+                  to={`/runbooks/${hit.document}`}
+                  className="text-primary underline-offset-4 hover:underline"
+                >
+                  {hit.document}
+                </Link>
+              ) : (
+                hit.document
+              )}{" "}
+              · {hit.heading}
             </p>
             <p className="text-muted-foreground">{excerpt(hit)}</p>
           </li>
@@ -50,7 +62,7 @@ export function KnowledgeCard({ runbooks, incidents }: { runbooks: Hit[]; incide
       {runbooks.length === 0 && incidents.length === 0 && (
         <p className="text-muted-foreground">Nothing similar was found.</p>
       )}
-      {runbooks.length > 0 && <HitList title="Runbook sections" hits={runbooks} />}
+      {runbooks.length > 0 && <HitList title="Runbook sections" hits={runbooks} link />}
       {incidents.length > 0 && <HitList title="Similar past incidents" hits={incidents} />}
     </Section>
   );
