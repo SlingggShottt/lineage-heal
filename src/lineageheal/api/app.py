@@ -56,6 +56,8 @@ def create_app(
     app.state.oauth = None
     app.state.cipher = None
     app.state.github = None
+    # When each fix was last compared with GitHub (api/reconcile.py).
+    app.state.reconciled = {}
     app.state.clock = clock or (lambda: datetime.now(UTC))
     install_problem_handlers(app)
 

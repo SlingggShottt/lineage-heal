@@ -250,3 +250,13 @@ def test_a_merged_pull_request_names_who_merged_it(
     github.get(f"/repos/{REPO}/pulls/7").mock(return_value=httpx.Response(200, json=body))
 
     assert client.pull_request(7).merged_by == "ada"
+
+
+def test_an_issue_reports_whether_it_is_open(
+    client: GitHubClient, github: respx.MockRouter
+) -> None:
+    github.get(f"/repos/{REPO}/issues/7").mock(
+        return_value=httpx.Response(200, json={"number": 7, "state": "closed"})
+    )
+
+    assert client.issue_is_open(7) is False

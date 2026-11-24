@@ -17,10 +17,12 @@ from sqlalchemy import Engine
 from lineageheal.api.decisions import DecisionService
 from lineageheal.api.github_auth import GitHubOAuth
 from lineageheal.api.problems import ApiError
+from lineageheal.api.reconcile import Reconciler
 from lineageheal.api.security import SESSION_COOKIE, TokenCipher, hash_session_id, tokens_match
 from lineageheal.core.errors import ConfigurationError
 from lineageheal.core.settings import Settings
 from lineageheal.store.database import create_db_engine
+from lineageheal.store.fixes import FixRepository
 from lineageheal.store.reviews import ReviewRepository
 from lineageheal.store.sessions import SessionRepository, StoredSession
 from lineageheal.vcs.client import GitHubClient
@@ -131,6 +133,25 @@ def github_of(request: Request) -> GitHubClient:
     return github
 
 
+def reconciler_of(request: Request) -> Reconciler:
+    """The reconciler for this request; without GitHub configured it has nothing to ask."""
+
+    def github() -> GitHubClient | None:
+        try:
+            return github_of(request)
+        except ApiError:
+            return None
+
+    engine = engine_of(request)
+    return Reconciler(
+        FixRepository(engine),
+        ReviewRepository(engine),
+        github,
+        lambda: now_of(request),
+        request.app.state.reconciled,
+    )
+
+
 def decisions_of(request: Request) -> DecisionService:
     """The service that carries out approvals and rejections."""
     return DecisionService(
@@ -211,3 +232,4 @@ def approver_action(
 OptionalSessionDep = Annotated[StoredSession | None, Depends(optional_session)]
 ApproverDep = Annotated[StoredSession, Depends(approver_action)]
 DecisionServiceDep = Annotated[DecisionService, Depends(decisions_of)]
+ReconcilerDep = Annotated[Reconciler, Depends(reconciler_of)]

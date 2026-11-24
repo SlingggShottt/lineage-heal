@@ -1,7 +1,9 @@
 """Read-only incident endpoints: the list, one incident, its lineage and its fix (FR-API-01).
 
 Public on purpose (FR-API-02): anyone may look, only approvers may act, and acting lives in other
-endpoints guarded by `approver_action`. Nothing here changes state.
+endpoints guarded by `approver_action`. Reading one incident or its fix first reconciles with
+GitHub (FR-API-04), which can record a decision a person already made there; nothing else here
+changes state.
 """
 
 from __future__ import annotations
@@ -10,7 +12,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Path, Query
 
-from lineageheal.api.dependencies import EngineDep
+from lineageheal.api.dependencies import EngineDep, ReconcilerDep
 from lineageheal.api.incident_schemas import (
     FaultClass,
     Feed,
@@ -64,8 +66,16 @@ def list_incidents(
 
 
 @router.get("/incidents/{incident_id}", summary="One incident")
-def get_incident(incident_id: IncidentId, engine: EngineDep) -> IncidentDetail:
-    """The incident with its root cause, signals, evidence, similar knowledge and fixes."""
+def get_incident(
+    incident_id: IncidentId, engine: EngineDep, reconciler: ReconcilerDep
+) -> IncidentDetail:
+    """The incident with its root cause, signals, evidence, similar knowledge and fixes.
+
+    A merge or close made on GitHub since the last read is recorded first (FR-API-04); if GitHub
+    cannot be asked, the stored state is served.
+    """
+    _incident(engine, incident_id)
+    reconciler.reconcile(incident_id)
     incident = _incident(engine, incident_id)
     return to_detail(
         incident,
@@ -103,9 +113,10 @@ def get_lineage(incident_id: IncidentId, engine: EngineDep) -> LineageOut:
 
 
 @router.get("/incidents/{incident_id}/fix", summary="An incident's latest fix")
-def get_fix(incident_id: IncidentId, engine: EngineDep) -> FixDetail:
+def get_fix(incident_id: IncidentId, engine: EngineDep, reconciler: ReconcilerDep) -> FixDetail:
     """The newest patch or suggestion, with its diff and sandbox verdict."""
     _incident(engine, incident_id)
+    reconciler.reconcile(incident_id)
     fixes = FixRepository(engine).for_incident(incident_id)
     if not fixes:
         raise ApiError(404, "not-found", "Fix not found", f"Incident {incident_id} has no fix yet.")

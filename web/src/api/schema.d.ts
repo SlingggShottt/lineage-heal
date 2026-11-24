@@ -137,6 +137,9 @@ export interface paths {
         /**
          * One incident
          * @description The incident with its root cause, signals, evidence, similar knowledge and fixes.
+         *
+         *     A merge or close made on GitHub since the last read is recorded first (FR-API-04); if GitHub
+         *     cannot be asked, the stored state is served.
          */
         get: operations["get_incident_incidents__incident_id__get"];
         put?: never;
