@@ -1,0 +1,15 @@
+# An example fault specification (design 12.1), used to test loading and injection; the corpus is LH-068.
+id: amfi-schema-drift-001
+class: schema_drift
+source: amfi
+dataset: navall
+trade_date: 2026-10-15
+split: seed
+seed: 1
+injection:
+  type: rename_column
+  column: Net Asset Value
+  new_name: NAV
+expected:
+  root_cause: raw.amfi.navall.Net Asset Value
+  fix_location: dbt

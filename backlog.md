@@ -138,7 +138,7 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 
 | ID | Task | Refs | Status | Week done |
 |---|---|---|---|---|
-| LH-067 | Fault specification schema and injectors for five classes. AMFI report injectors exist from LH-083; NSE and FBIL injectors and the spec schema remain | FR-BEN-01, FR-BEN-02 | Todo | |
+| LH-067 | Fault specification schema, loader and injection engine, with AMFI injectors for all five classes. AMFI demo injectors exist from LH-083; NSE bhavcopy is LH-105 and FBIL waits for LH-080 | FR-BEN-01, FR-BEN-02 | Done | 6 |
 | LH-083 | Demo fault injector: five AMFI faults and a local-only `dev inject-fault` command (first slice of LH-067) | FR-BEN-02 | Done | 2 |
 | LH-068 | Fault corpus of about 100 with seed/test split | FR-BEN-01, FR-BEN-07 | Todo | |
 | LH-069 | Benchmark runner: sandbox setup, isolated index, resumable results | FR-BEN-03, FR-BEN-06, FR-KB-03 | Todo | |
@@ -153,6 +153,7 @@ Planned and completed work for LineageHeal, organised by diary week. Requirement
 | LH-077 | Playwright end-to-end test of the review flow | FR-UI-06, FR-REV-01 | Todo | |
 | LH-078 | Live demo rehearsal: corrupted source file to approved fix | FR-FIX-04, FR-REV-01 | Todo | |
 | LH-079 | Documentation polish: README results, demo video, final diagrams | — | Todo | |
+| LH-105 | NSE bhavcopy fault injectors: unzip the raw file, damage the CSV in each of the five ways and rezip deterministically (fixed timestamps), so the same specification gives the same bytes. Split from LH-067 | FR-BEN-01, FR-BEN-02 | Todo | |
 
 ## Done log
 
@@ -234,3 +235,4 @@ A running record of completed work, used for the weekly diary.
 | 5 | LH-098 | `GET /feeds/health` (`api/feed_health.py`): the four datasets from the ingestion log (`IngestionLogRepository.feed_state`) with status `ok`, `late` (more than 3 days behind the newest date any feed has), `failing` or `no_data`, plus the newest run with error and warning counts (`RunRepository.latest`); `GET /runbooks` (paginated) and `/runbooks/{slug}` (`api/runbook_view.py`, the index's `parse_runbook`, markdown plus sections, slug pattern-checked). New setting `RUNBOOKS_DIR`. The API image still needs `docs/runbooks` at deploy time. OpenAPI snapshot and generated types refreshed. No new dependency |
 | 5 | LH-101 | The overview page (`features/overview/`): Feeds, Latest pipeline run and Open incidents cards that load and fail on their own, each with a retry. Feed status labels are a `Record` over the generated type; open incidents ask once per open status for the newest five and merge, so the count is exact without an API change. Benchmark figures wait for results. The session badge tests now render at an unknown path so the overview's own alerts do not join theirs. No new dependency |
 | 5 | LH-066 | The runbooks screen (`features/runbooks/`): a list of runbook cards (title, fault class, feeds) and `/runbooks/:slug` with each section in file order, a not-found state and a retry. `Markdown` renders paragraphs, lists, bold and inline code as React elements (no HTML, no package); `blocks.ts` does the grouping. Runbook sections cited on an incident link to their runbook. No API change, no new dependency. `pages/Placeholder.tsx` is now unused, to be removed with approval |
+| 6 | LH-067 | `FaultCase` (`benchmark/spec.py`, pydantic, strict) mirrors design 12.1 and refuses a class that does not match the injection, a late-data fault fixed in dbt, a date before 2024 and a root cause outside the fault's dataset; `loader.py` reads YAML files and refuses duplicate ids; `injection.py` applies a case to AMFI `navall` bytes (rename column, blank a value, duplicate a row, scale values, stale date, withhold file) choosing the row from a hash of the seed. The demo injectors in `faults.py` are unchanged presets and their helpers are now public. Six example specs under `tests/fixtures/benchmark/`. No new dependency, no CLI change |

@@ -31,22 +31,25 @@ class FaultSpec:
     apply: Callable[[bytes], bytes]
 
 
-def _lines(content: bytes) -> list[str]:
+def report_lines(content: bytes) -> list[str]:
+    """A report's lines, split on the CRLF the publisher uses so no other byte changes."""
     return content.decode("utf-8").split(_SEPARATOR)
 
 
-def _join(lines: list[str]) -> bytes:
+def join_lines(lines: list[str]) -> bytes:
+    """The inverse of `report_lines`."""
     return _SEPARATOR.join(lines).encode("utf-8")
 
 
-def _column_index(header: str, column: str) -> int:
+def column_index(header: str, column: str) -> int:
+    """Where a column is in the header, found by name because the two layouts differ."""
     fields = header.split(";")
     if column not in fields:
         raise BenchmarkError(f"Report has no '{column}' column, so the fault cannot be injected")
     return fields.index(column)
 
 
-def _data_row_indexes(lines: list[str]) -> list[int]:
+def data_row_indexes(lines: list[str]) -> list[int]:
     """Indexes of the data rows: same width as the header and a numeric scheme code."""
     width = lines[0].count(";")
     return [
@@ -57,20 +60,20 @@ def _data_row_indexes(lines: list[str]) -> list[int]:
 
 
 def _first_data_row(lines: list[str]) -> int:
-    rows = _data_row_indexes(lines)
+    rows = data_row_indexes(lines)
     if not rows:
         raise BenchmarkError("Report has no data rows, so the fault cannot be injected")
     return rows[0]
 
 
 def _edit_first_nav(content: bytes, edit: Callable[[str], str]) -> bytes:
-    lines = _lines(content)
-    nav = _column_index(lines[0], NAV_COLUMN)
+    lines = report_lines(content)
+    nav = column_index(lines[0], NAV_COLUMN)
     row = _first_data_row(lines)
     fields = lines[row].split(";")
     fields[nav] = edit(fields[nav])
     lines[row] = ";".join(fields)
-    return _join(lines)
+    return join_lines(lines)
 
 
 def blank_nav(content: bytes) -> bytes:
@@ -85,33 +88,33 @@ def negative_nav(content: bytes) -> bytes:
 
 def duplicate_row(content: bytes) -> bytes:
     """Repeat the first data row directly after itself."""
-    lines = _lines(content)
+    lines = report_lines(content)
     row = _first_data_row(lines)
     lines.insert(row + 1, lines[row])
-    return _join(lines)
+    return join_lines(lines)
 
 
 def wrong_date(content: bytes) -> bytes:
     """Give every data row an old NAV date, as if a stale report were served."""
-    lines = _lines(content)
-    date = _column_index(lines[0], DATE_COLUMN)
-    rows = _data_row_indexes(lines)
+    lines = report_lines(content)
+    date = column_index(lines[0], DATE_COLUMN)
+    rows = data_row_indexes(lines)
     if not rows:
         raise BenchmarkError("Report has no data rows, so the fault cannot be injected")
     for row in rows:
         fields = lines[row].split(";")
         fields[date] = WRONG_DATE
         lines[row] = ";".join(fields)
-    return _join(lines)
+    return join_lines(lines)
 
 
 def rename_nav_column(content: bytes) -> bytes:
     """Rename the NAV column in the header, as if the publisher changed its schema."""
-    lines = _lines(content)
+    lines = report_lines(content)
     fields = lines[0].split(";")
-    fields[_column_index(lines[0], NAV_COLUMN)] = RENAMED_NAV_COLUMN
+    fields[column_index(lines[0], NAV_COLUMN)] = RENAMED_NAV_COLUMN
     lines[0] = ";".join(fields)
-    return _join(lines)
+    return join_lines(lines)
 
 
 AMFI_FAULTS: dict[str, FaultSpec] = {

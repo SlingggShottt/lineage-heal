@@ -1,0 +1,15 @@
+# An example fault specification (design 12.1), used to test loading and injection; the corpus is LH-068.
+id: amfi-late-data-002
+class: late_data
+source: amfi
+dataset: navall
+trade_date: 2026-10-15
+split: test
+seed: 6
+injection:
+  type: stale_date
+  column: Date
+  value: 01-Jan-2020
+expected:
+  root_cause: raw.amfi.navall.Date
+  fix_location: outside_dbt

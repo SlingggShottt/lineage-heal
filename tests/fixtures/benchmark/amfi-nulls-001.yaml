@@ -1,0 +1,14 @@
+# An example fault specification (design 12.1), used to test loading and injection; the corpus is LH-068.
+id: amfi-nulls-001
+class: nulls
+source: amfi
+dataset: navall
+trade_date: 2026-10-15
+split: test
+seed: 2
+injection:
+  type: blank_value
+  column: Net Asset Value
+expected:
+  root_cause: raw.amfi.navall.Net Asset Value
+  fix_location: outside_dbt
