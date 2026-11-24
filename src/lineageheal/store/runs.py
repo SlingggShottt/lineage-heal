@@ -5,9 +5,10 @@ Detector and the dashboard can query runs and signals without reading object sto
 """
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import Engine, select
+from sqlalchemy import Engine, func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -16,6 +17,18 @@ from lineageheal.core.signals import RunSummary, Severity, Signal, SignalKind
 from lineageheal.store.database import explain_database_error
 from lineageheal.store.models import PipelineRun
 from lineageheal.store.models import Signal as SignalRow
+
+
+@dataclass(frozen=True)
+class RunOverview:
+    """The newest run in brief, for the overview screen."""
+
+    run_id: str
+    status: str
+    generated_at: datetime
+    errors: int
+    warnings: int
+    skipped_models: int
 
 
 class RunRepository:
@@ -70,6 +83,38 @@ class RunRepository:
                 return True
         except SQLAlchemyError as exc:
             raise StorageError(f"Could not record the run: {explain_database_error(exc)}") from exc
+
+    def latest(self) -> RunOverview | None:
+        """The most recently generated run with its signal counts, or None if there is none.
+
+        Raises:
+            StorageError: The database could not be read.
+        """
+        try:
+            with Session(self._engine) as session:
+                run = session.scalars(
+                    select(PipelineRun)
+                    .order_by(PipelineRun.generated_at.desc(), PipelineRun.recorded_at.desc())
+                    .limit(1)
+                ).first()
+                if run is None:
+                    return None
+                rows = session.execute(
+                    select(SignalRow.severity, func.count())
+                    .where(SignalRow.run_id == run.run_id)
+                    .group_by(SignalRow.severity)
+                ).all()
+                counts = {str(severity): int(total) for severity, total in rows}
+                return RunOverview(
+                    run_id=run.run_id,
+                    status=run.status,
+                    generated_at=run.generated_at,
+                    errors=counts.get("error", 0),
+                    warnings=counts.get("warn", 0),
+                    skipped_models=len(run.skipped_models),
+                )
+        except SQLAlchemyError as exc:
+            raise StorageError(f"Could not read the run: {explain_database_error(exc)}") from exc
 
     def add_signals(self, run_id: str, signals: Sequence[Signal]) -> int:
         """Attach more signals to a recorded run, skipping any it already has.

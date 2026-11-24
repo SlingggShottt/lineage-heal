@@ -59,6 +59,10 @@ class Settings(BaseSettings):
     # target's file by default; the benchmark points it at the sandbox it is replaying in.
     warehouse_path: Path = Path(".data/dev.duckdb")
 
+    # Where the API reads runbooks from for the dashboard's runbooks screen. A folder that is
+    # missing makes the list empty instead of failing, since the API host may not ship docs.
+    runbooks_dir: Path = Path("docs/runbooks")
+
     # Gap between requests to a source site (FR-ING-10). Raise it if a source pushes back.
     ingest_min_interval_seconds: float = Field(default=3.0, ge=0)
 

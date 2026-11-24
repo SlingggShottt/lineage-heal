@@ -35,6 +35,17 @@ class IngestionAttempt:
 
 
 @dataclass(frozen=True)
+class FeedState:
+    """What the log says about one dataset: its newest stored day and its latest attempt."""
+
+    source: str
+    dataset: str
+    latest_trade_date: date | None  # newest day with a stored or unchanged file
+    latest_stored_at: datetime | None  # when that day's file was last confirmed
+    last_attempt: IngestionAttempt | None
+
+
+@dataclass(frozen=True)
 class StoredVersion:
     """A raw object that was stored for a trade date, and when it first arrived."""
 
@@ -126,6 +137,40 @@ class IngestionLogRepository:
         try:
             with Session(self._engine) as session:
                 return [_to_attempt(row) for row in session.scalars(statement.limit(limit))]
+        except SQLAlchemyError as exc:
+            raise StorageError(
+                f"Could not read the ingestion log: {explain_database_error(exc)}"
+            ) from exc
+
+    def feed_state(self, source: str, dataset: str) -> FeedState:
+        """Summarise one dataset for the feed health view.
+
+        Raises:
+            StorageError: The database could not be read.
+        """
+        have_file = IngestionLog.outcome.in_(("stored", "unchanged"))
+        try:
+            with Session(self._engine) as session:
+                newest = session.scalars(
+                    select(IngestionLog)
+                    .where(IngestionLog.source == source, IngestionLog.dataset == dataset)
+                    .where(have_file)
+                    .order_by(IngestionLog.trade_date.desc(), IngestionLog.finished_at.desc())
+                    .limit(1)
+                ).first()
+                last = session.scalars(
+                    select(IngestionLog)
+                    .where(IngestionLog.source == source, IngestionLog.dataset == dataset)
+                    .order_by(IngestionLog.finished_at.desc(), IngestionLog.id.desc())
+                    .limit(1)
+                ).first()
+                return FeedState(
+                    source=source,
+                    dataset=dataset,
+                    latest_trade_date=None if newest is None else newest.trade_date,
+                    latest_stored_at=None if newest is None else newest.finished_at,
+                    last_attempt=None if last is None else _to_attempt(last),
+                )
         except SQLAlchemyError as exc:
             raise StorageError(
                 f"Could not read the ingestion log: {explain_database_error(exc)}"
