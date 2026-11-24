@@ -24,6 +24,7 @@ from lineageheal.agents.wiring import (
     build_investigator,
     detect_run,
 )
+from lineageheal.benchmark.cli import bench_app
 from lineageheal.benchmark.faults import AMFI_FAULTS
 from lineageheal.core.errors import BenchmarkError, ConfigurationError, LineageHealError
 from lineageheal.core.logging import configure_logging
@@ -79,6 +80,7 @@ calendar_app = typer.Typer(
     help="The NSE calendar seed: the days a file is expected, so a holiday is not a missing file.",
 )
 app.add_typer(calendar_app, name="calendar")
+app.add_typer(bench_app, name="bench")
 
 
 class Source(enum.StrEnum):
