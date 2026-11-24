@@ -17,7 +17,7 @@ from lineageheal.api.app import create_app
 from lineageheal.api.dependencies import ApproverDep
 from lineageheal.api.github_auth import TOKEN_URL, USER_URL
 from lineageheal.api.problems import TYPE_PREFIX
-from lineageheal.api.security import SESSION_COOKIE, STATE_COOKIE, TokenCipher
+from lineageheal.api.security import NEXT_COOKIE, SESSION_COOKIE, STATE_COOKIE, TokenCipher
 from lineageheal.core.settings import Settings
 from lineageheal.store.database import create_db_engine
 from lineageheal.store.migrate import upgrade_database
@@ -395,3 +395,92 @@ def test_the_schema_documents_the_auth_endpoints(client: TestClient) -> None:
     paths = client.get("/openapi.json").json()["paths"]
 
     assert {"/me", "/auth/login", "/auth/callback", "/auth/logout"} <= set(paths)
+
+
+def _sign_in_with_next(
+    client: TestClient, github: respx.MockRouter, next_path: str | None
+) -> httpx.Response:
+    params = {"next": next_path} if next_path is not None else None
+    started = client.get("/auth/login", params=params, follow_redirects=False)
+    state = parse_qs(urlsplit(started.headers["location"]).query)["state"][0]
+    github.post(TOKEN_URL).mock(
+        return_value=httpx.Response(200, json={"access_token": GITHUB_TOKEN})
+    )
+    github.get(USER_URL).mock(
+        return_value=httpx.Response(200, json={"id": 4_000_000_001, "login": "ada"})
+    )
+    return client.get(
+        "/auth/callback", params={"code": "one-time", "state": state}, follow_redirects=False
+    )
+
+
+def test_signing_in_returns_to_the_page_the_visitor_came_from(
+    client: TestClient, github: respx.MockRouter
+) -> None:
+    response = _sign_in_with_next(client, github, "/incidents/42?tab=fix")
+
+    assert response.headers["location"] == DASHBOARD + "/incidents/42?tab=fix"
+
+
+def test_signing_in_without_a_page_returns_to_the_home_page(
+    client: TestClient, github: respx.MockRouter
+) -> None:
+    response = _sign_in_with_next(client, github, None)
+
+    assert response.headers["location"] == DASHBOARD + "/"
+
+
+@pytest.mark.parametrize(
+    "unsafe",
+    [
+        "//evil.example/x",
+        "/\\evil.example",
+        "https://evil.example/",
+        "evil.example",
+        "javascript:alert(1)",
+        "/ok\r\nSet-Cookie: a=b",
+        "/" + "a" * 600,
+    ],
+)
+def test_a_next_path_that_could_leave_the_site_is_ignored(
+    client: TestClient, github: respx.MockRouter, unsafe: str
+) -> None:
+    response = _sign_in_with_next(client, github, unsafe)
+
+    assert response.headers["location"] == DASHBOARD + "/"
+
+
+def test_a_tampered_next_cookie_is_checked_again_at_the_callback(
+    client: TestClient, github: respx.MockRouter
+) -> None:
+    started = client.get("/auth/login", params={"next": "/incidents/1"}, follow_redirects=False)
+    state = parse_qs(urlsplit(started.headers["location"]).query)["state"][0]
+    real = next(c for c in client.cookies.jar if c.name == NEXT_COOKIE)
+    client.cookies.set(NEXT_COOKIE, "//evil.example", domain=real.domain, path="/auth")
+    github.post(TOKEN_URL).mock(
+        return_value=httpx.Response(200, json={"access_token": GITHUB_TOKEN})
+    )
+    github.get(USER_URL).mock(
+        return_value=httpx.Response(200, json={"id": 4_000_000_001, "login": "ada"})
+    )
+
+    response = client.get(
+        "/auth/callback", params={"code": "one-time", "state": state}, follow_redirects=False
+    )
+
+    assert response.headers["location"] == DASHBOARD + "/"
+
+
+def test_a_refused_sign_in_still_returns_to_the_page_and_says_why(
+    client: TestClient,
+) -> None:
+    started = client.get("/auth/login", params={"next": "/incidents/7?a=1"}, follow_redirects=False)
+    state = parse_qs(urlsplit(started.headers["location"]).query)["state"][0]
+
+    response = client.get(
+        "/auth/callback",
+        params={"error": "access_denied", "state": state},
+        follow_redirects=False,
+    )
+
+    assert response.headers["location"] == DASHBOARD + "/incidents/7?a=1&sign_in=denied"

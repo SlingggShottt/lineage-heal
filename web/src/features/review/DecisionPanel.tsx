@@ -1,3 +1,4 @@
+import { useSignInHref } from "@/features/session/useSignInHref";
 import { useState } from "react";
 
 import { useMe } from "@/api/queries";
@@ -43,6 +44,7 @@ function Recorded({ decision }: { decision: DecisionRecord }) {
  */
 export function DecisionPanel({ incidentId, incidentStatus, decision, fix }: DecisionPanelProps) {
   const { data: me, isPending, isError } = useMe();
+  const signInHref = useSignInHref();
   const [dialog, setDialog] = useState<"approve" | "reject" | null>(null);
 
   if (decision) {
@@ -70,7 +72,7 @@ export function DecisionPanel({ incidentId, incidentStatus, decision, fix }: Dec
   } else if (!me.signed_in) {
     body = (
       <p>
-        <a href="/api/auth/login" className="text-primary underline underline-offset-4">
+        <a href={signInHref} className="text-primary underline underline-offset-4">
           Sign in with GitHub
         </a>{" "}
         to review this fix.

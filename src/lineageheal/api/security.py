@@ -20,6 +20,7 @@ from lineageheal.core.errors import ConfigurationError, LineageHealError
 SESSION_COOKIE = "lh_session"
 # Carries the OAuth `state` between the redirect to GitHub and the callback.
 STATE_COOKIE = "lh_oauth_state"
+NEXT_COOKIE = "lh_oauth_next"
 MIN_SECRET_LENGTH = 32
 
 
@@ -80,3 +81,23 @@ class TokenCipher:
             return self._fernet.decrypt(token.encode()).decode()
         except InvalidToken as exc:
             raise TokenError("The stored token cannot be decrypted with this secret") from exc
+
+
+_MAX_NEXT_LENGTH = 512
+
+
+def safe_next_path(value: str | None) -> str:
+    r"""Return `value` if it is a path on this site the dashboard may be sent back to, else `/`.
+
+    It is checked once when sign-in starts and again when it ends, because the cookie that carries
+    it between the two is not signed. Only a single leading slash is accepted: `//host` and
+    `/\host` are read by browsers as another site, and anything with a scheme, a backslash or a
+    control character is refused rather than repaired.
+    """
+    if not value or len(value) > _MAX_NEXT_LENGTH or not value.startswith("/"):
+        return "/"
+    if value.startswith("//") or "\\" in value:
+        return "/"
+    if any(ord(char) < 0x20 or ord(char) == 0x7F for char in value):
+        return "/"
+    return value

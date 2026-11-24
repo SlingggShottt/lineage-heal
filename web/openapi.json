@@ -1643,8 +1643,28 @@
     },
     "/auth/login": {
       "get": {
-        "description": "Send the browser to GitHub, with a one-time `state` kept in a short-lived cookie.",
+        "description": "Send the browser to GitHub, with a one-time `state` kept in a short-lived cookie.\n\n`next` is remembered the same way and used only if it is a path on this site; anything else\nmeans the dashboard's home page.",
         "operationId": "login_auth_login_get",
+        "parameters": [
+          {
+            "description": "A path on the dashboard to return to after signing in.",
+            "in": "query",
+            "name": "next",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A path on the dashboard to return to after signing in.",
+              "title": "Next"
+            }
+          }
+        ],
         "responses": {
           "302": {
             "description": "Successful Response"
