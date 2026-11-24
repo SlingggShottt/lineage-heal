@@ -200,6 +200,14 @@ describe("the incident page", () => {
     expect(card).not.toHaveTextContent("Similar past incidents"); // none exist to cite
   });
 
+  it("links a related runbook to its page, so the procedure is one click away", async () => {
+    renderApp("/incidents/12", everything().fetch);
+
+    const link = await screen.findByRole("link", { name: "schema-drift" });
+
+    expect(link).toHaveAttribute("href", "/runbooks/schema-drift");
+  });
+
   it("says one row, not one rows", async () => {
     const body = detail();
     body.signals[0] = { ...(body.signals[0] as Detail["signals"][number]), failures: 1 };
