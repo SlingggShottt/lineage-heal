@@ -1,0 +1,13 @@
+# An example fault specification (design 12.1), used to test loading and injection; the corpus is LH-068.
+id: nse-duplicates-001
+class: duplicates
+source: nse
+dataset: cm_bhavcopy
+trade_date: 2024-07-05
+split: test
+seed: 3
+injection:
+  type: duplicate_row
+expected:
+  root_cause: raw.nse.cm_bhavcopy.*
+  fix_location: dbt

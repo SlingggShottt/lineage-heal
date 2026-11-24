@@ -15,7 +15,7 @@ def test_the_example_specifications_load_ordered_by_id() -> None:
     cases = load_cases(SPECS)
 
     assert [c.id for c in cases] == sorted(c.id for c in cases)
-    assert len(cases) == 6
+    assert len(cases) == 11
     assert {c.split for c in cases} == {"seed", "test"}
 
 
