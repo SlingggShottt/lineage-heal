@@ -3,6 +3,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
+import { DecisionPanel } from "@/features/review/DecisionPanel";
+
 import { DiffView } from "./DiffView";
 import { SandboxVerdict } from "./SandboxVerdict";
 import { Section } from "./Section";
@@ -40,7 +42,17 @@ function Attempts({ attempts }: { attempts: FixSummary[] }) {
 }
 
 /** The proposed change: a patch with its sandbox verdict, or a suggestion for a cause outside dbt. */
-export function FixCard({ incidentId, attempts }: { incidentId: number; attempts: FixSummary[] }) {
+export function FixCard({
+  incidentId,
+  incidentStatus,
+  decision,
+  attempts,
+}: {
+  incidentId: number;
+  incidentStatus: string;
+  decision: components["schemas"]["DecisionRecord"] | null;
+  attempts: FixSummary[];
+}) {
   const { data, error, isPending, isError, refetch } = useIncidentFix(incidentId);
 
   if (isPending) {
@@ -119,6 +131,12 @@ export function FixCard({ incidentId, attempts }: { incidentId: number; attempts
       {data.patch && <DiffView diff={data.patch} />}
       {data.suggestion && <SuggestionView suggestion={data.suggestion} />}
       {attempts.length > 1 && <Attempts attempts={attempts} />}
+      <DecisionPanel
+        incidentId={incidentId}
+        incidentStatus={incidentStatus}
+        decision={decision}
+        fix={data}
+      />
     </Section>
   );
 }
