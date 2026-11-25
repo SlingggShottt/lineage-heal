@@ -155,6 +155,7 @@ class Sandbox:
         *,
         timeout_seconds: float = 600.0,
         builder: Builder | None = None,
+        target: str = DBT_TARGET,
     ) -> None:
         """Create a sandbox.
 
@@ -164,12 +165,16 @@ class Sandbox:
             raw_zone: The raw zone folder dbt reads source files from.
             timeout_seconds: Longest one `dbt build` may run.
             builder: Runs one build; replaced in tests. Defaults to a real `dbt build`.
+            target: The dbt target the warehouse file belongs to: `dev` for the live pipeline,
+                `bench` for a benchmark scenario. It names the copied file and the target dbt
+                builds on, so the sandbox can never reach `prod`.
         """
         self._repo = repo_root
         self._warehouse = warehouse
         self._raw_zone = raw_zone
         self._timeout = timeout_seconds
         self._builder = builder or self._dbt_build
+        self._target = target
 
     def verify(self, patch: Patch, model: str) -> SandboxResult:
         """Build `model` and everything downstream of it without and with the patch.
@@ -200,7 +205,7 @@ class Sandbox:
     def _build(self, tree: Path, data_dir: Path, selector: str) -> BuildResult:
         data_dir.mkdir(parents=True)
         try:
-            shutil.copy2(self._warehouse, data_dir / "dev.duckdb")
+            shutil.copy2(self._warehouse, data_dir / f"{self._target}.duckdb")
         except OSError as exc:
             raise SandboxError(f"Could not copy the warehouse: {exc}") from exc
         return self._builder(tree / "dbt", data_dir, selector, self._timeout)
@@ -238,7 +243,7 @@ class Sandbox:
             "build",
             "--project-dir", str(project),
             "--profiles-dir", str(project),
-            "--target", DBT_TARGET,
+            "--target", self._target,
             "--select", selector,
         ]  # fmt: skip
         started = time.monotonic()

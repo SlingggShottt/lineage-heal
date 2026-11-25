@@ -70,9 +70,23 @@ class VerificationOutcome:
 
 
 def model_of(incident: StoredIncident) -> str | None:
-    """The dbt model at an incident's root cause: its node id without the column."""
-    node = (incident.root_cause or {}).get("node")
-    return node.rsplit(".", 1)[0] if isinstance(node, str) and "." in node else None
+    """What to build to test a fix for an incident: dbt's name for the root cause's table.
+
+    A column of a dbt model gives that model. A raw column (`raw.<feed>.<dataset>.<column>`) is
+    not a model, so it gives the source, whose downstream is what a fix would change: dbt selects
+    that as `source:raw_<feed>.<dataset>`.
+    """
+    return model_for_node((incident.root_cause or {}).get("node"))
+
+
+def model_for_node(node: object) -> str | None:
+    """`model_of` for a bare root cause node, which the benchmark has without an incident."""
+    if not isinstance(node, str) or "." not in node:
+        return None
+    if node.startswith("raw."):
+        parts = node.split(".", 3)
+        return f"source:raw_{parts[1]}.{parts[2]}" if len(parts) >= 3 else None
+    return node.rsplit(".", 1)[0]
 
 
 def verify_incident(

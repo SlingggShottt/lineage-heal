@@ -8,6 +8,7 @@ project's own description of itself.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Any
 
 from lineageheal.benchmark.models import Scenario
@@ -32,3 +33,18 @@ def read_manifest(scenario: Scenario) -> dict[str, Any] | None:
         return load_manifest(LocalObjectStore(scenario.raw_zone), scenario.run_id)
     except LineageHealError:
         return None
+
+
+# The repository holds `dbt/` and `src/` side by side; patch paths are relative to it.
+REPO_ROOT = Path(__file__).resolve().parents[4]
+
+
+def model_file(manifest: dict[str, Any], model: str | None) -> str | None:
+    """The repository path of a dbt model's SQL file, from the manifest, or None if unknown."""
+    if model is None:
+        return None
+    for node in manifest.get("nodes", {}).values():
+        if node.get("resource_type") == "model" and node.get("name") == model:
+            original = node.get("original_file_path")
+            return f"dbt/{original}" if original else None
+    return None

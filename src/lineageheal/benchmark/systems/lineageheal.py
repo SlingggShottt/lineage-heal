@@ -1,30 +1,35 @@
-"""LineageHeal as a benchmark system: detect and investigate inside the scenario's sandbox.
+"""LineageHeal as a benchmark system: detect, investigate and fix inside the scenario's sandbox.
 
 The same graph `lineageheal heal` runs, with three differences that keep a benchmark run safe and
 fair: the application database is a throwaway SQLite copy of the run's isolated index (so nothing
 live can be read and nothing written outside the scenario), the tools read the scenario's own
-raw zone and warehouse, and nothing is opened on GitHub. Fixing is not part of this system yet;
-patches are verified for every system the same way in LH-107.
+raw zone and warehouse, and nothing is opened on GitHub. For the most confident incident whose
+fix belongs in dbt, the Fixer drafts a patch and the sandbox verifies it on the scenario's
+warehouse, with its normal retries from the failure output, as production does.
 """
 
 from __future__ import annotations
 
 import shutil
 import time
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import structlog
 
+from lineageheal.agents.fixer import Fixer, PatchLimits, Sandbox
+from lineageheal.agents.fixer.verify import verify_incident
 from lineageheal.agents.graph import run_heal_report
 from lineageheal.agents.graph.nodes import HealDependencies
 from lineageheal.agents.graph.state import OutcomeKind
-from lineageheal.agents.wiring import Detection, build_investigator, detect_run
+from lineageheal.agents.wiring import REPO_ROOT, Detection, build_investigator, detect_run
 from lineageheal.benchmark.knowledge import BENCH_NAMESPACE
-from lineageheal.benchmark.models import Diagnosis, Scenario
+from lineageheal.benchmark.models import Diagnosis, PatchRecord, Scenario
 from lineageheal.core.settings import Settings
 from lineageheal.ingestion.object_stores import LocalObjectStore
+from lineageheal.lineage.service import LineageService
 from lineageheal.llm.client import LLMClient
 from lineageheal.rag.embeddings import Embedder
 from lineageheal.store.database import create_db_engine
@@ -70,23 +75,69 @@ class LineageHealSystem:
         shutil.copy2(self._template, database)
         engine = create_db_engine(f"sqlite+pysqlite:///{database}")
         try:
-            incidents = self._heal(scenario, engine)
+            incidents, detection = self._heal(scenario, engine)
         finally:
             engine.dispose()
-        usage = self._client.usage
         ranked = rank(incidents)
         top = ranked[0] if ranked else None
+        patch = self._fix(scenario, top, detection)
+        usage = self._client.usage
+        sandbox_seconds = patch.sandbox_seconds if patch else 0.0
         return Diagnosis(
             root_causes=tuple(node for node, _ in _ranked_nodes(ranked))[:TOP_N],
             fix_location=_fix_location(top),
-            seconds=time.perf_counter() - started,
+            patch=patch.record if patch else None,
+            sandbox_passed=patch.passed if patch else None,
+            sandbox_reason=patch.reason if patch else "",
+            patch_attempts=patch.attempts if patch else 0,
+            seconds=time.perf_counter() - started - sandbox_seconds,
+            sandbox_seconds=sandbox_seconds,
             llm_calls=usage.calls - before[0],
             input_tokens=usage.input_tokens - before[1],
             output_tokens=usage.output_tokens - before[2],
-            notes=_notes(incidents),
+            notes=_notes(incidents) + (f"; {patch.note}" if patch and patch.note else ""),
         )
 
-    def _heal(self, scenario: Scenario, engine: Any) -> list[StoredIncident]:
+    def _fix(
+        self, scenario: Scenario, top: StoredIncident | None, detection: Detection | None
+    ) -> _Fix | None:
+        """Draft and verify a dbt patch for the most confident incident, as production does."""
+        if top is None or detection is None or _fix_location(top) != "dbt":
+            return None
+        settings = self._settings
+        fixer = Fixer(
+            self._client,
+            LineageService(detection.graph),
+            REPO_ROOT,
+            limits=PatchLimits(
+                max_files=settings.fixer_max_files,
+                max_changed_lines=settings.fixer_max_changed_lines,
+            ),
+            max_llm_calls=settings.fixer_max_llm_calls,
+        )
+        sandbox = Sandbox(
+            REPO_ROOT,
+            scenario.warehouse,
+            scenario.raw_zone,
+            timeout_seconds=settings.sandbox_timeout_seconds,
+            target="bench",
+        )
+        outcome = verify_incident(fixer, sandbox, top, max_attempts=settings.fixer_max_attempts)
+        chosen = outcome.verified or (outcome.attempts[-1] if outcome.attempts else None)
+        if chosen is None:
+            return _Fix(None, False, outcome.reason, 0, 0.0, f"no patch: {outcome.reason}")
+        return _Fix(
+            PatchRecord.of(chosen.patch),
+            chosen.result.passed,
+            chosen.result.reason,
+            len(outcome.attempts),
+            sum(a.result.seconds for a in outcome.attempts),
+            "",
+        )
+
+    def _heal(
+        self, scenario: Scenario, engine: Any
+    ) -> tuple[list[StoredIncident], Detection | None]:
         settings = self._settings.model_copy(
             update={
                 "warehouse_path": scenario.warehouse,
@@ -122,7 +173,19 @@ class LineageHealSystem:
         for outcome in failed:
             log.warning("benchmark_investigation_failed", detail=outcome.detail)
         found = (repository.get(o.incident_id) for o in report.outcomes)
-        return [i for i in found if i is not None]
+        return [i for i in found if i is not None], (holder[0] if holder else None)
+
+
+@dataclass(frozen=True)
+class _Fix:
+    """What the Fixer and sandbox made of the top incident."""
+
+    record: PatchRecord | None
+    passed: bool
+    reason: str
+    attempts: int
+    sandbox_seconds: float
+    note: str
 
 
 def rank(incidents: list[StoredIncident]) -> list[StoredIncident]:

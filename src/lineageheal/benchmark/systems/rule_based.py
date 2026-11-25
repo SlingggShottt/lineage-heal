@@ -2,8 +2,10 @@
 
 It maps the most serious failing check to the nearest raw source of the failing model, using only
 dbt's own model dependencies, and guesses the column by how much its name resembles the failing
-column's. It decides where the fix belongs from the check type alone. It is the "what a good
-rule of thumb gets you" line the LineageHeal agents must beat (PRD goal G4).
+column's. It decides where the fix belongs from the check type alone, and has one template: when
+the newest file's header differs from the one before by exactly one renamed column, the model
+reads the new name too. Beyond the manifest that is the only thing it reads, two header lines.
+It is the "what a good rule of thumb gets you" line the LineageHeal agents must beat (PRD G4).
 """
 
 from __future__ import annotations
@@ -11,11 +13,24 @@ from __future__ import annotations
 import re
 import time
 from collections import deque
+from pathlib import Path
 from typing import Any
 
 from lineageheal.agents.detector.classify import rule_class
-from lineageheal.benchmark.models import Diagnosis, Scenario
-from lineageheal.benchmark.systems.common import first_signal, read_manifest
+from lineageheal.agents.fixer.patch import (
+    DEFAULT_LIMITS,
+    Patch,
+    PatchError,
+    PatchLimits,
+    build_patch,
+)
+from lineageheal.benchmark.models import Diagnosis, PatchRecord, Scenario
+from lineageheal.benchmark.systems.common import (
+    REPO_ROOT,
+    first_signal,
+    model_file,
+    read_manifest,
+)
 
 TOP_N = 3
 _NOT_RAW = {"raw_zone"}  # the meta source that lists every file is not a feed
@@ -23,9 +38,21 @@ _WORD = re.compile(r"[a-z0-9]+|[A-Z][a-z0-9]*")
 
 
 class RuleBasedSystem:
-    """Nearest upstream source plus a column-name guess."""
+    """Nearest upstream source plus a column-name guess, and a template for one known pattern."""
 
     name = "rule-based"
+
+    def __init__(
+        self, *, repo_root: Path = REPO_ROOT, limits: PatchLimits = DEFAULT_LIMITS
+    ) -> None:
+        """Create the baseline.
+
+        Args:
+            repo_root: The repository holding the dbt project, for the model file it patches.
+            limits: The patch size limits, the same ones the Fixer is held to.
+        """
+        self._root = repo_root
+        self._limits = limits
 
     def diagnose(self, scenario: Scenario) -> Diagnosis:
         """Name the likely raw column and where the fix belongs, from the manifest alone."""
@@ -51,12 +78,87 @@ class RuleBasedSystem:
             if signal.column is None
             else tuple(f"{node}.{c}" for c in rank_columns(signal.column, columns)[:TOP_N])
         )
+        patch = None if late else self._renamed_column_patch(scenario, manifest, node)
         return Diagnosis(
             root_causes=causes or (f"{node}.*",),
             fix_location="outside_dbt" if late else "dbt",
+            patch=PatchRecord.of(patch[0]) if patch else None,
+            patch_attempts=1 if patch else 0,
             seconds=time.perf_counter() - started,
-            notes=f"nearest source {node} of {signal.model}",
+            notes=f"nearest source {node} of {signal.model}" + (f"; {patch[1]}" if patch else ""),
         )
+
+    def _renamed_column_patch(
+        self, scenario: Scenario, manifest: dict[str, Any], node: str
+    ) -> tuple[Patch, str] | None:
+        """The one template this baseline has: a column the publisher renamed.
+
+        The rule is the one an engineer would script: compare the newest file's header with the
+        one before it, and if exactly one column disappeared and exactly one appeared, the model
+        reads the new name as well as the old (older files keep the old layout). Anything else
+        gets no patch.
+        """
+        _, feed, dataset = node.split(".", 2)
+        headers = newest_headers(scenario.raw_zone, feed, dataset)
+        if headers is None:
+            return None
+        previous, newest = headers
+        removed, added = (
+            [c for c in previous if c not in newest],
+            [c for c in newest if c not in previous],
+        )
+        if len(removed) != 1 or len(added) != 1:
+            return None
+        readers = models_reading(manifest, feed, dataset)
+        path = model_file(manifest, readers[0]) if len(readers) == 1 else None
+        if path is None:
+            return None
+        old, new = removed[0], added[0]
+        try:
+            text = (self._root / path).read_text(encoding="utf-8")
+            if f'"{old}"' not in text:
+                return None
+            patched = text.replace(f'"{old}"', f'coalesce("{new}", "{old}")')
+            return build_patch(self._root, [(path, patched)], self._limits), f"{old} became {new}"
+        except (OSError, PatchError):
+            return None
+
+
+def models_reading(manifest: dict[str, Any], feed: str, dataset: str) -> list[str]:
+    """The models that read a raw source directly, by name, sorted."""
+    uid = next(
+        (
+            u
+            for u, n in manifest.get("sources", {}).items()
+            if n.get("source_name") == f"raw_{feed}" and n.get("name") == dataset
+        ),
+        None,
+    )
+    return sorted(
+        n["name"]
+        for n in manifest.get("nodes", {}).values()
+        if n.get("resource_type") == "model" and uid in n.get("depends_on", {}).get("nodes", [])
+    )
+
+
+def newest_headers(raw_zone: Path, feed: str, dataset: str) -> tuple[list[str], list[str]] | None:
+    """The column names of the second newest and the newest stored file of a dataset.
+
+    Archived feeds are read from their staged copy, which is the same file unzipped. None when
+    fewer than two dates have a file.
+    """
+    area = "staged" if feed == "nse" else "raw"
+    separator = ";" if feed == "amfi" else ","
+    folders = sorted(
+        (raw_zone / area / f"source={feed}" / f"dataset={dataset}").glob("trade_date=*")
+    )
+    headers: list[list[str]] = []
+    for folder in folders:
+        files = sorted(p for p in folder.iterdir() if p.is_file())
+        if files:
+            with files[-1].open(encoding="utf-8") as handle:
+                headers.append(handle.readline().rstrip("\r\n").split(separator))
+    return (headers[-2], headers[-1]) if len(headers) >= 2 else None
 
 
 def nearest_source(manifest: dict[str, Any], model: str) -> tuple[str, list[str]] | None:

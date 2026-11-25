@@ -19,6 +19,8 @@ from typing import Any
 
 import structlog
 
+from lineageheal.agents.fixer.sandbox import SandboxError
+from lineageheal.agents.fixer.verify import PatchVerifier, model_for_node
 from lineageheal.benchmark.models import CaseResult, Diagnosis, Scenario, System
 from lineageheal.benchmark.results import ResultStore
 from lineageheal.benchmark.scenario import ScenarioBuilder
@@ -60,6 +62,7 @@ class BenchmarkRunner:
         *,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
         keep_scenarios: bool = False,
+        verifier: Callable[[Scenario], PatchVerifier] | None = None,
     ) -> None:
         """Create a runner.
 
@@ -69,6 +72,9 @@ class BenchmarkRunner:
             systems: The systems to evaluate, in order.
             now: The clock, replaced in tests.
             keep_scenarios: Keep sandboxes after use, for debugging.
+            verifier: Builds the sandbox that judges a patch on a scenario's warehouse. Every
+                patch a system returns without a verdict is judged by it, the same way for all
+                systems; without one patches are stored unverified.
         """
         if not systems:
             raise BenchmarkError("At least one system is required")
@@ -80,6 +86,7 @@ class BenchmarkRunner:
         self._systems = list(systems)
         self._now = now
         self._keep = keep_scenarios
+        self._verifier = verifier
 
     def run(self, cases: Sequence[FaultCase], manifest: dict[str, Any]) -> RunReport:
         """Evaluate every system on every case, skipping what is already stored."""
@@ -119,7 +126,7 @@ class BenchmarkRunner:
     ) -> None:
         started = self._now()
         try:
-            diagnosis = system.diagnose(scenario)
+            diagnosis = self._verified(system.diagnose(scenario), scenario)
         except Exception as exc:
             log.warning("system_errored", case=case.id, system=system.name, error=str(exc))
             self._store.save(
@@ -137,6 +144,29 @@ class BenchmarkRunner:
         )
         report.ran += 1
         log.info("case_done", case=case.id, system=system.name)
+
+    def _verified(self, diagnosis: Diagnosis, scenario: Scenario) -> Diagnosis:
+        """Judge the system's patch in the sandbox, unless it already carries a verdict."""
+        if diagnosis.patch is None or diagnosis.sandbox_passed is not None or not self._verifier:
+            return diagnosis
+        model = model_for_node(diagnosis.root_causes[0] if diagnosis.root_causes else None)
+        if model is None:
+            return diagnosis.model_copy(
+                update={"sandbox_passed": False, "sandbox_reason": "the patch names no model"}
+            )
+        try:
+            verdict = self._verifier(scenario).verify(diagnosis.patch.to_patch(), model)
+        except SandboxError as exc:
+            return diagnosis.model_copy(
+                update={"sandbox_passed": False, "sandbox_reason": f"sandbox error: {exc}"}
+            )
+        return diagnosis.model_copy(
+            update={
+                "sandbox_passed": verdict.passed,
+                "sandbox_reason": verdict.reason,
+                "sandbox_seconds": diagnosis.sandbox_seconds + verdict.seconds,
+            }
+        )
 
     def _result(
         self,
