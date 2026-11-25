@@ -1,0 +1,15 @@
+<style> td { mso-number-format:\@; } </style> <table cellspacing="0" rules="all" border="1" style="border-collapse:collapse;">
+	<tr style="font-weight:bold;">
+		<td>Date</td><td>USD (INR / 1 USD)</td><td>GBP (INR / 1 GBP)</td><td>EUR (INR / 1 EUR)</td><td>JPY (INR / 100 JPY)</td>
+	</tr><tr>
+		<td>20/11/2026</td><td>92.9699</td><td>121.9337</td><td>102.1504</td><td>58.4300</td>
+	</tr><tr>
+		<td>19/11/2026</td><td>93.3461</td><td>122.6577</td><td>102.3770</td><td>58.5200</td>
+	</tr><tr>
+		<td>18/11/2026</td><td>93.3558</td><td>123.1363</td><td>102.4994</td><td>58.6000</td>
+	</tr><tr>
+		<td>17/11/2026</td><td>93.5703</td><td>123.4613</td><td>102.9969</td><td>58.7700</td>
+	</tr><tr>
+		<td>16/11/2026</td><td>94.1159</td><td>124.3353</td><td>103.7301</td><td>59.0400</td>
+	</tr>
+</table>
