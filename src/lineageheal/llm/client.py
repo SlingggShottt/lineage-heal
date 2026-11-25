@@ -36,6 +36,15 @@ log = structlog.get_logger(__name__)
 _FENCE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", re.DOTALL)
 
 
+@dataclass(slots=True)
+class Usage:
+    """What a client has used so far: successful calls and the tokens they were billed for."""
+
+    calls: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+
 @dataclass(frozen=True, slots=True)
 class Endpoint:
     """A provider and the limiter that keeps calls to it within its quota."""
@@ -69,6 +78,8 @@ class LLMClient:
         self._attempts = attempts
         self._base_delay = base_delay_seconds
         self._sleep = sleep
+        # Cumulative; the benchmark takes the difference around one fault to cost its systems.
+        self.usage = Usage()
 
     def complete(self, request: LLMRequest) -> Completion:
         """Get an answer from the first provider that gives one.
@@ -91,6 +102,9 @@ class LLMClient:
                 )
                 last = error
                 continue
+            self.usage.calls += 1
+            self.usage.input_tokens += completion.input_tokens
+            self.usage.output_tokens += completion.output_tokens
             log.info(
                 "llm_call",
                 provider=completion.provider,
