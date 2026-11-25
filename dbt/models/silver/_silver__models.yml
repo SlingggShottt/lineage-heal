@@ -75,6 +75,65 @@ models:
         data_tests:
           - not_null
 
+  - name: slv_fbil__reference_rates
+    description: >
+      FBIL's rupee reference rates, one row per currency per date, taken from the latest stored
+      version of each day's file. Bronze has a column per currency; silver has a row per currency,
+      with `rate_inr` in rupees per one unit of it. FBIL quotes the yen per 100 yen, so that rate
+      is converted by multiplying with 0.01, and the published figure and the quantity it refers
+      to stay beside it (`quoted_rate_inr`, `quoted_units`), so the conversion can be checked.
+      FBIL publishes on bank working days only: a holiday has no rows.
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [rate_date, currency]
+      # The longest gap between two published dates from 2024 to 2026 was five calendar days (over
+      # Easter), so a table older than that is late. AMFI's three days would warn on holidays.
+      - fresh_within:
+          arguments:
+            date_column: rate_date
+            max_age_days: 5
+          config:
+            severity: warn
+    columns:
+      - name: rate_date
+        description: The date the rate applies to.
+        data_tests:
+          - not_null
+      - name: currency
+        description: ISO code of the currency, USD, GBP, EUR or JPY.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [USD, GBP, EUR, JPY]
+      - name: rate_inr
+        description: Rupees per one unit of the currency, converted from the published quote.
+        data_tests:
+          - not_null
+          - positive
+      - name: quoted_rate_inr
+        description: The rate as FBIL published it, in rupees per `quoted_units` units.
+        data_tests:
+          - not_null
+          - positive
+      - name: quoted_units
+        description: How many units of the currency the published rate refers to; 100 for the yen.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [1, 100]
+                quote: false
+      - name: _file_version
+        description: Hash prefix of the raw file version the row came from.
+        data_tests:
+          - not_null
+      - name: _source_file
+        description: Path of the staged file the row came from.
+        data_tests:
+          - not_null
+
   - name: slv_nse__securities
     description: >
       NSE's instrument list, one snapshot per day, taken from the latest stored version of each
