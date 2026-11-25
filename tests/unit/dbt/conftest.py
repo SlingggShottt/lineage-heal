@@ -26,15 +26,23 @@ from dbt.cli.main import dbtRunner
 
 from lineageheal.ingestion.object_stores import LocalObjectStore
 from lineageheal.ingestion.raw_zone import RawZone, StoredObject
-from lineageheal.ingestion.staging import ZipStager
+from lineageheal.ingestion.staging import HtmlTableStager, ZipStager
 
 REPO_ROOT = Path(__file__).parents[3]
 DBT_DIR = REPO_ROOT / "dbt"
 
-# Where each dataset's files are stored unless a test says otherwise.
+# Where each dataset's files are stored unless a test says otherwise. FBIL shares a day with AMFI,
+# so models that join the feeds by date see both.
 AMFI_DATE = date(2026, 10, 15)
 BHAVCOPY_DATE = date(2024, 7, 5)
 REFERENCE_DATE = date(2026, 10, 16)
+FBIL_DATE = AMFI_DATE
+
+FBIL_SAMPLE = (
+    REPO_ROOT / "tests" / "fixtures" / "fbil" / "reference_rates_2026-11-16_2026-11-20_sample.xls"
+).read_bytes()
+# The real download's markup up to the end of its header row; a day's row is appended to it.
+FBIL_HEAD = FBIL_SAMPLE[: FBIL_SAMPLE.index(b"</tr>") + len(b"</tr>")].decode("utf-8")
 
 NSE_FIXTURES = REPO_ROOT / "tests" / "fixtures" / "nse"
 BHAVCOPY_SAMPLE = (NSE_FIXTURES / "cm_bhavcopy_udiff_2024-07-05_sample.csv").read_bytes()
@@ -42,6 +50,16 @@ ACTION_TEMPLATE = json.loads((NSE_FIXTURES / "corporate_actions_sample.json").re
 
 # (symbol, series, close, previous close), all in rupees
 Price = tuple[str, str, str, str]
+
+# Rupees per USD, GBP and EUR, and per 100 JPY, as text
+FbilRates = tuple[str, str, str, str]
+FBIL_RATES: FbilRates = ("92.9699", "121.9337", "102.1504", "58.4300")
+
+
+def fbil_rates(day: date, rates: FbilRates = FBIL_RATES) -> bytes:
+    """An FBIL download for one day, in the markup of the real one: a header row and one day."""
+    cells = "".join(f"<td>{value}</td>" for value in (f"{day:%d/%m/%Y}", *rates))
+    return f"{FBIL_HEAD}<tr>\r\n\t\t{cells}\r\n\t</tr>\r\n</table>".encode()
 
 
 def bhavcopy(day: date, prices: list[Price]) -> bytes:
@@ -120,6 +138,7 @@ class Workspace:
     raw_dir: Path
     zone: RawZone
     stager: ZipStager
+    table_stager: HtmlTableStager
     # Builds the named models and their tests; `variables` are passed to dbt as --vars.
     build: Callable[..., BuildResult]
 
@@ -161,6 +180,32 @@ class Workspace:
             content=buffer.getvalue(),
         )
         self.stager.stage(stored.key)
+        return self._arrive(stored, arrived_at)
+
+    @staticmethod
+    def fbil_table(day: date, rates: FbilRates = FBIL_RATES) -> bytes:
+        """An FBIL download for one day, for tests that damage it before storing it."""
+        return fbil_rates(day, rates)
+
+    def store_fbil(
+        self,
+        content: bytes | None = None,
+        *,
+        trade_date: date = FBIL_DATE,
+        arrived_at: float | None = None,
+    ) -> StoredObject:
+        """Store an FBIL rates table in the raw zone and stage it as CSV, as the loader does.
+
+        Without `content`, the day's file holds the usual rates.
+        """
+        stored = self.zone.put_if_absent(
+            source="fbil",
+            dataset="reference_rates",
+            trade_date=trade_date,
+            filename=f"reference_rates_{trade_date.isoformat()}.xls",
+            content=fbil_rates(trade_date) if content is None else content,
+        )
+        self.table_stager.stage(stored.key)
         return self._arrive(stored, arrived_at)
 
     def store_prices(self, days: dict[date, list[Price]]) -> None:
@@ -308,7 +353,7 @@ def workspace(
         return BuildResult(result.success, statuses, database)
 
     store = LocalObjectStore(raw_dir)
-    return Workspace(raw_dir, RawZone(store), ZipStager(store), build)
+    return Workspace(raw_dir, RawZone(store), ZipStager(store), HtmlTableStager(store), build)
 
 
 @pytest.fixture(scope="session")

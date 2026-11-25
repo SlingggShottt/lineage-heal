@@ -37,6 +37,7 @@ def store_fixtures(workspace: Workspace, *, damage_amfi: bool = False) -> None:
     workspace.store_corporate_actions(
         (FIXTURES / "nse" / "corporate_actions_sample.json").read_bytes()
     )
+    workspace.store_fbil()
 
 
 @pytest.fixture(autouse=True)

@@ -94,7 +94,7 @@ def test_a_model_depends_on_the_raw_assets_of_the_sources_it_reads(
         parents = set(graph.get(model_key(name)).parent_keys)
         assert expected <= parents, name
         checked += len(expected)
-    assert checked == len(raw_assets)  # each of the four raw datasets is read by a model
+    assert checked == len(raw_assets)  # each of the five raw datasets is read by a model
 
 
 def test_the_all_files_source_stands_for_every_raw_dataset(graph: dg.AssetGraph) -> None:  # type: ignore[type-arg]

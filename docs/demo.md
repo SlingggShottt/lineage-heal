@@ -32,7 +32,8 @@ dbts() { uv run dbt show  --project-dir dbt --profiles-dir dbt --target dev --no
 ```bash
 lh ingest amfi --date 2026-10-16 && lh ingest nse --date 2026-10-16 \
   && lh ingest nse --dataset security_master --date 2026-10-16 \
-  && lh ingest nse --dataset corporate_actions --date 2026-10-16 && dbtb | tail -3
+  && lh ingest nse --dataset corporate_actions --date 2026-10-16 \
+  && lh ingest fbil --date 2026-10-16 && dbtb | tail -3
 rm -rf .data/demo .data/dev.duckdb      # reset
 ```
 
@@ -97,11 +98,12 @@ You see one line: `2026-10-16 amfi/navall stored 1190057 bytes raw/source=amfi/d
 lh ingest nse --date 2026-10-16
 lh ingest nse --dataset security_master --date 2026-10-16
 lh ingest nse --dataset corporate_actions --date 2026-10-16
+lh ingest fbil --date 2026-10-16
 lh ingest amfi --date 2026-10-16        # the same file again
 lh ingest nse --date 2026-10-17         # a Saturday
 ```
 
-You see `stored` for each of the three NSE datasets (the price file, the instrument list and the day's corporate actions), then `unchanged` for the repeat, then `no_data` for the weekend. Say:
+You see `stored` for each of the three NSE datasets (the price file, the instrument list and the day's corporate actions) and for FBIL's rupee reference rates (taken from the RBI archive, which republishes them), then `unchanged` for the repeat, then `no_data` for the weekend. Say:
 
 - Files are stored exactly as published. The key contains the file's SHA-256, so an identical file is never stored twice and a changed file becomes a new object. Nothing is overwritten.
 - Requests are spaced three seconds apart, retried with backoff, and a missing file on a weekend is not an error.
@@ -212,7 +214,7 @@ Say: Week 3 finishes the warehouse layers and the daily schedule. Week 4 builds 
 | Polite loaders for AMFI and three NSE datasets (bhavcopy, security master, corporate actions), with retries | The FBIL loader |
 | Write-once, content-addressed raw storage on local disk | Cloud storage in use: the R2 code is unit-tested against a fake client but has not run on a real bucket |
 | Ingestion log in Postgres: every attempt, with outcome, hash and arrival time | Using the log to pick the latest version of a republished file (silver) |
-| dbt project with bronze models for AMFI and three NSE datasets, four silver models (latest version of each day, conformed units and vocabulary, parsed corporate actions, a cross-feed par-value check), three gold tables (split- and bonus-adjusted prices, NAVs with their change, and a daily summary across both feeds), 199 quality checks including anomaly monitors for partial, duplicated and rescaled days, plausibility checks for price and NAV jumps, and an NSE holiday calendar that tells a holiday from a missing file (the check that uses it is next) | The FBIL models and the FX gold table, and calendar-based late-data checks |
+| dbt project with bronze models for AMFI, FBIL and three NSE datasets, four silver models (latest version of each day, conformed units and vocabulary, parsed corporate actions, a cross-feed par-value check), three gold tables (split- and bonus-adjusted prices, NAVs with their change, and a daily summary across both feeds), 199 quality checks including anomaly monitors for partial, duplicated and rescaled days, plausibility checks for price and NAV jumps, and an NSE holiday calendar that tells a holiday from a missing file (the check that uses it is next) | The FBIL models and the FX gold table, and calendar-based late-data checks |
 | Five fault injectors, each proven to trip its check | Unit-change faults and the full corpus of about 100 |
 | CI on every pull request, over 300 automated tests | Dagster schedule, lineage graph, agents, dashboard |
 

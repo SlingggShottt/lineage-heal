@@ -23,7 +23,7 @@ def test_every_model_builds_on_fixture_data_and_every_check_passes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The command a CI job would run: `dbt build --target ci` over all four feeds' fixtures.
+    """The command a CI job would run: `dbt build --target ci` over every feed's fixtures.
 
     The other scenarios build a few models each, so a broken reference or a test that only
     fails when two layers meet would escape them. This one uses the repository's own profile,
@@ -35,6 +35,7 @@ def test_every_model_builds_on_fixture_data_and_every_check_passes(
     workspace.store_corporate_actions(
         (FIXTURES / "nse" / "corporate_actions_sample.json").read_bytes()
     )
+    workspace.store_fbil()
     monkeypatch.chdir(REPO_ROOT)
 
     result = dbtRunner().invoke(
