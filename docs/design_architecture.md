@@ -121,7 +121,7 @@ raw/source=<source>/dataset=<dataset>/trade_date=<YYYY-MM-DD>/<sha256-prefix>__<
 
 #### Source access details
 
-Filled in by the Week 2 data spike (LH-012, LH-013).
+Filled in by the data spikes (LH-012, LH-013, LH-080).
 
 | Dataset | URL pattern | Format | Headers needed | Publication time (IST) | History available | Reachable from Actions |
 |---|---|---|---|---|---|---|
@@ -129,7 +129,7 @@ Filled in by the Week 2 data spike (LH-012, LH-013).
 | NSE `security_master` | `https://nsearchives.nseindia.com/content/cm/NSE_CM_security_DDMMYYYY.csv.gz` | Gzipped CSV with 120 named columns, about 38,100 rows, regular (no ragged or quoted lines) | As above | About 20:20 IST | Not available for 2 Jan 2024 (404); earliest date unknown | Not tested yet |
 | NSE `corporate_actions` | `https://www.nseindia.com/api/corporates-corporateActions?index=equities&from_date=DD-MM-YYYY&to_date=DD-MM-YYYY` | JSON array of objects | As above; answered without cookies in the spike | Not measured | Date ranges back to at least Jan 2024 | Not tested yet |
 | AMFI `navall` | `https://portal.amfiindia.com/DownloadNAVHistoryReport_Po.aspx?frmdt=DD-Mon-YYYY&todt=DD-Mon-YYYY` (set both to the same date). Live snapshot: `https://portal.amfiindia.com/spages/NAVAll.txt` | Semicolon-delimited text, UTF-8, CRLF; see [AMFI findings](#amfi-findings) | None; the default curl User-Agent worked | Evening; not yet published at 18:47 IST on the same day, and the live file was last modified 15:27 IST on 19 Oct 2026 | From at least 2 Jan 2024 (tested), one request per date | Not tested yet (check in LH-033) |
-| FBIL `reference_rates` | Not found. `fbil.org.in` is a JavaScript application with reCAPTCHA and exposes no plain file URL (LH-080) | Unknown | Unknown | Unknown | Unknown | Not tested |
+| FBIL `reference_rates` | Through the RBI Reference Rate Archive, which republishes them: `https://www.rbi.org.in/scripts/ReferenceRateArchive.aspx`. A form: GET it, POST a date range and currencies, then POST the Excel download event; see [FBIL findings](#fbil-findings). `fbil.org.in` itself offers no file or API | An HTML table named `BankWise.xls`: `Date` and one column per currency, four decimals, newest first, CRLF | The project User-Agent and the session cookie were enough; `robots.txt` answers 418 | Not measured | At least 1 Jan 2024 (697 business days in one download); earlier dates not tested | Not tested yet (check in LH-033) |
 
 #### NSE findings
 
@@ -180,6 +180,19 @@ Measured on 19 October 2026 (LH-013) with a handful of requests, spaced a few se
   - **What 13 weeks taught.** Eight days of data had hidden three problems that a quarter of it exposed at once; they are described under the anomaly monitors and the price-range check below.
 - **Date format** is `DD-Mon-YYYY` in both the query and the data.
 - **Precision.** History NAVs have at most four decimal places. 476 live-file NAVs have more, up to eight, so a `DECIMAL(18, 4)` column fed from the live file would silently round them, which is another reason to use the history report.
+
+#### FBIL findings
+
+Measured on 29 October and 25 November 2026 (LH-080) with nine requests to `rbi.org.in` in all, at least three seconds apart. The decision is D-81.
+
+- **No route at FBIL itself.** `fbil.org.in` is a JavaScript application behind reCAPTCHA; its readable text is a single line, so its terms could not be read either. The RBI Reference Rate Archive republishes the same rates: RBI's homepage labels its exchange rates "(Source : FBIL)". The figures have not yet been compared with FBIL's own site; the first thing the loader task does is check one date in a browser (20 November 2026, USD 92.9699), TODO(LH-020).
+- **A form with three steps, no captcha and no login.** The page is ASP.NET WebForms. (1) GET it, keeping the session cookie and the hidden `__VIEWSTATE`, `__VIEWSTATEGENERATOR` and `__EVENTVALIDATION` values. (2) POST them back with the currency boxes (`chkUSD`, `chkGBP`, `chkEURO`, `chkYEN`; the page also offers AED, IDR and RUB), `txtFromDate` and `txtToDate` as `DD/MM/YYYY`, and `btnSubmit`. (3) POST again with `__EVENTTARGET=lnkDownloadExcel` and the new hidden values from step 2's page. The date boxes are read-only in a browser, but the server accepts typed values. Every request carries the project User-Agent and a `Referer` of the page itself.
+- **The download is HTML, not Excel.** The answer is `application/vnd.ms-excel` with `Content-Disposition: attachment; filename="BankWise.xls"`, but the body is a `<table>` with tab-indented rows and CRLF line endings. The header cells are `Date`, `USD (INR / 1 USD)`, `GBP (INR / 1 GBP)`, `EUR (INR / 1 EUR)` and `JPY (INR / 100 JPY)`. DuckDB cannot read it, so like the NSE zips (D-22) it needs a derived staging step that turns the table into the CSV dbt reads, while the raw file stays as published. A real five-day sample is `tests/fixtures/fbil/reference_rates_2026-11-16_2026-11-20_sample.xls`.
+- **Units differ by currency.** The yen is quoted per 100 yen and the others per unit, so silver must carry the unit explicitly; it is also a natural unit-change fault for the benchmark.
+- **One download covers the backfill.** A single range of 1 January 2024 to 20 November 2026 for the four currencies returned 697 rows (70 KB). Backfilling is three requests, not hundreds. Dates before 2024 and the largest range the form allows were not tested.
+- **Business days only.** 697 rows against 755 weekdays in the range, so there is no row on a holiday and a missing day cannot be told from one, the same problem NSE had (D-36). FBIL needs its own calendar seed (LH-108).
+- **Not measured.** When the day's rate appears; what the page returns for a range with no data, or after a block; whether it is reachable from a GitHub Actions runner (LH-033).
+- **RBI's rules.** `https://www.rbi.org.in/robots.txt` answers HTTP 418 ("Unauthorised Access") to every client tried, so its crawler rules could not be read. The Disclaimer and Website Policies page (`/Scripts/Disclaimer.aspx`) never mentions crawling, scraping, robots or automated access. It does say RBI "reserves all right to deny or restrict access to this Web Site to any particular person, or to block access from a particular Internet address", and under Copyright Policy that the material "may be reproduced accurately and without modification, subject to appropriate acknowledgement of the RBI as the source". The sentence "caching and links to, and the framing of this Web Site or any of the contents are prohibited" sits under "Links to this Web Site from other web sites" and reads as a linking rule, but is not explicit. So the loader stays polite (a clear User-Agent, three seconds between requests, no request for a range it already holds), stores the file unmodified and credits RBI as the source. If RBI blocks the loader, the fallback is a file downloaded by hand in a browser and placed in the raw zone.
 
 ### 5.3 Lakehouse layers (dbt)
 
