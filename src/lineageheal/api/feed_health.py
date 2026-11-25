@@ -21,6 +21,7 @@ KNOWN_FEEDS: tuple[tuple[str, str], ...] = (
     ("nse", "cm_bhavcopy"),
     ("nse", "security_master"),
     ("nse", "corporate_actions"),
+    ("fbil", "reference_rates"),
 )
 # Weekends and market holidays leave a feed two or three days behind another without a fault;
 # beyond this it is late. The exact judgement per trading day is dbt's expected-file check.

@@ -11,6 +11,7 @@ from datetime import UTC, date, datetime
 from lineageheal.core.errors import ConfigurationError, LineageHealError
 from lineageheal.core.settings import Settings
 from lineageheal.ingestion.amfi import AmfiNavLoader
+from lineageheal.ingestion.fbil import FbilReferenceRatesLoader
 from lineageheal.ingestion.http import PoliteFetcher
 from lineageheal.ingestion.log import (
     AttemptRecorder,
@@ -24,7 +25,7 @@ from lineageheal.ingestion.nse import (
     NseSecurityMasterLoader,
 )
 from lineageheal.ingestion.raw_zone import RawZone, open_store
-from lineageheal.ingestion.staging import ZipStager
+from lineageheal.ingestion.staging import HtmlTableStager, ZipStager
 from lineageheal.ingestion.types import IngestionResult, Loader
 
 # FR-ING-08: the earliest trade date the project ingests (NSE's UDiFF format begins in 2024).
@@ -33,11 +34,20 @@ EARLIEST_BACKFILL = date(2024, 1, 1)
 # The datasets each source offers; the first is the default.
 DATASETS: dict[str, tuple[str, ...]] = {
     "amfi": (AmfiNavLoader.dataset,),
+    "fbil": (FbilReferenceRatesLoader.dataset,),
     "nse": (
         NseBhavcopyLoader.dataset,
         NseSecurityMasterLoader.dataset,
         NseCorporateActionsLoader.dataset,
     ),
+}
+
+
+# The datasets Dagster models as raw assets. A dataset joins once a dbt source reads it, because
+# every raw asset is named after the dbt source that reads its files (D-31).
+# TODO(LH-024): add fbil together with its dbt source and bronze model.
+ORCHESTRATED_DATASETS: dict[str, tuple[str, ...]] = {
+    source: datasets for source, datasets in DATASETS.items() if source != "fbil"
 }
 
 
@@ -57,6 +67,8 @@ def open_loader(settings: Settings, source: str, dataset: str) -> Iterator[Loade
         match (source, dataset):
             case ("amfi", AmfiNavLoader.dataset):
                 yield AmfiNavLoader(fetcher, zone)
+            case ("fbil", FbilReferenceRatesLoader.dataset):
+                yield FbilReferenceRatesLoader(fetcher, zone, HtmlTableStager(store))
             case ("nse", NseBhavcopyLoader.dataset):
                 yield NseBhavcopyLoader(fetcher, zone, ZipStager(store))
             case ("nse", NseSecurityMasterLoader.dataset):

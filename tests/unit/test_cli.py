@@ -44,6 +44,11 @@ NSE_URL = (
 )
 NSE_CSV = (FIXTURES.parent / "nse" / "cm_bhavcopy_udiff_2024-07-05_sample.csv").read_bytes()
 
+FBIL_URL = "https://www.rbi.org.in/scripts/ReferenceRateArchive.aspx"
+FBIL_SAMPLE = (
+    FIXTURES.parent / "fbil" / "reference_rates_2026-11-16_2026-11-20_sample.xls"
+).read_bytes()
+
 runner = CliRunner()
 
 
@@ -377,6 +382,61 @@ def test_backfill_refuses_an_end_before_the_start() -> None:
 
     assert result.exit_code == 2
     assert "must not be before" in result.output
+
+
+def fbil_form() -> httpx.Response:
+    page = (
+        b'<input type="hidden" name="__VIEWSTATE" value="vs1" />'
+        b'<input type="hidden" name="__EVENTVALIDATION" value="ev1" />'
+    )
+    return httpx.Response(200, content=page)
+
+
+def fbil_download() -> httpx.Response:
+    """One day of rates: the real sample cut to its header and its newest day."""
+    end = 0
+    for _ in range(2):
+        end = FBIL_SAMPLE.index(b"</tr>", end) + len(b"</tr>")
+    return httpx.Response(
+        200,
+        content=FBIL_SAMPLE[:end] + b"\r\n</table>",
+        headers={"content-disposition": 'attachment;filename="BankWise.xls"'},
+    )
+
+
+@respx.mock
+def test_ingest_stores_fbil_rates_and_stages_a_csv_for_dbt(tmp_path: Path) -> None:
+    respx.get(FBIL_URL).mock(return_value=fbil_form())
+    respx.post(FBIL_URL).mock(return_value=fbil_download())
+
+    result = runner.invoke(app, ["ingest", "fbil", "--date", "2026-11-20"])
+
+    assert result.exit_code == 0
+    assert result.stdout.startswith("2026-11-20 fbil/reference_rates stored")
+    (raw,) = (tmp_path / "raw" / "raw").rglob("*__reference_rates_2026-11-20.xls")
+    (staged,) = (tmp_path / "raw" / "staged").rglob("*__reference_rates_2026-11-20.csv")
+    assert raw.read_bytes().startswith(b"<style>")
+    assert staged.read_text().splitlines()[1].startswith("20/11/2026,92.9699")
+
+
+@respx.mock
+def test_backfill_stops_at_once_when_the_source_refuses_a_request(tmp_path: Path) -> None:
+    """A block can last, so more requests would only add to it: the days after it are not asked."""
+    respx.get(FBIL_URL).mock(return_value=fbil_form())
+    post = respx.post(FBIL_URL).mock(side_effect=[fbil_download(), httpx.Response(418)])
+
+    result = runner.invoke(
+        app, ["backfill", "fbil", "--start", "2026-11-16", "--end", "2026-11-20"]
+    )
+
+    assert result.exit_code == 1
+    assert post.call_count == 2  # the 16th stored, the 17th refused, the 18th to 20th never sent
+    assert "2026-11-17 fbil/reference_rates blocked:" in result.stderr
+    summary = result.stdout.strip().splitlines()[-1]
+    assert "1 stored" in summary
+    assert "1 failed" in summary
+    assert summary.endswith("stopped early: the source refused a request")
+    assert len(list((tmp_path / "raw" / "raw").rglob("*.xls"))) == 1
 
 
 def store_report(tmp_path: Path, content: bytes = REPORT) -> RawZone:

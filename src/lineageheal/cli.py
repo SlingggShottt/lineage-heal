@@ -26,7 +26,12 @@ from lineageheal.agents.wiring import (
 )
 from lineageheal.benchmark.cli import bench_app
 from lineageheal.benchmark.faults import AMFI_FAULTS
-from lineageheal.core.errors import BenchmarkError, ConfigurationError, LineageHealError
+from lineageheal.core.errors import (
+    BenchmarkError,
+    ConfigurationError,
+    LineageHealError,
+    SourceBlockedError,
+)
 from lineageheal.core.logging import configure_logging
 from lineageheal.core.settings import get_settings
 from lineageheal.core.signals import Signal
@@ -87,6 +92,7 @@ class Source(enum.StrEnum):
     """Feeds that can be ingested from the command line."""
 
     AMFI = "amfi"
+    FBIL = "fbil"
     NSE = "nse"
 
 
@@ -97,7 +103,7 @@ DATASETS: dict[Source, tuple[str, ...]] = {
     Source(source): datasets for source, datasets in runner.DATASETS.items()
 }
 
-SourceArgument = Annotated[Source, typer.Argument(help="Data feed: amfi or nse.")]
+SourceArgument = Annotated[Source, typer.Argument(help="Data feed: amfi, nse or fbil.")]
 DatasetOption = Annotated[
     str | None,
     typer.Option(
@@ -222,8 +228,9 @@ def backfill(
         typer.Option(
             "--skip-weekends",
             help=(
-                "Do not ask for Saturdays and Sundays. Saves requests for NSE, which publishes "
-                "nothing then, but would miss a special weekend session and AMFI's weekend reports."
+                "Do not ask for Saturdays and Sundays. Saves requests for NSE and FBIL, which "
+                "publish nothing then, but would miss a special weekend session and AMFI's "
+                "weekend reports."
             ),
         ),
     ] = False,
@@ -233,7 +240,8 @@ def backfill(
     A re-run therefore carries on where an interrupted one stopped and sends the source no
     request for a day it already has; pass --refresh to download them again anyway (AMFI
     republishes corrected reports). A day that fails is reported and skipped so the rest
-    still load; the exit code is 1 if any day failed.
+    still load; the exit code is 1 if any day failed. A source that refuses a request
+    outright (a block) stops the run instead, because more requests would only add to it.
     """
     chosen = _resolve_dataset(source, dataset)
     first = start.date()
@@ -246,6 +254,7 @@ def backfill(
     outcomes: Counter[IngestionOutcome] = Counter()
     failed: list[date] = []
     already_stored = weekend_days = 0
+    blocked = False
     with (
         _exit_on_project_errors(),
         _open_recorder() as recorder,
@@ -264,6 +273,11 @@ def backfill(
                 continue
             try:
                 result = _load_and_record(loader, recorder, day)
+            except SourceBlockedError as exc:
+                failed.append(day)
+                blocked = True
+                typer.echo(f"{day} {source.value}/{chosen} blocked: {exc}", err=True)
+                break
             except LineageHealError as exc:
                 failed.append(day)
                 typer.echo(f"{day} {source.value}/{chosen} failed: {exc}", err=True)
@@ -277,6 +291,8 @@ def backfill(
     if weekend_days:
         parts.append(f"{weekend_days} weekend days skipped")
     parts.append(f"{len(failed)} failed")
+    if blocked:
+        parts.append("stopped early: the source refused a request")
     typer.echo(f"backfill {source.value}/{chosen} {first}..{last}: {', '.join(parts)}")
     if failed:
         raise typer.Exit(code=1)

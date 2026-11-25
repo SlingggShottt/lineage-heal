@@ -219,6 +219,15 @@ staged/source=nse/dataset=cm_bhavcopy/trade_date=D/<hash>__BhavCopy_..._0000.csv
 
 The staged key is derived from the raw key, so the hash prefix still says which raw version a row came from, and staging is idempotent: re-running an ingest repairs a missing staged copy, and the whole area can be rebuilt from the raw zone. Raw bytes are never touched. Staging checks the raw object's hash, accepts only single-file zips, and refuses one that would expand beyond 256 MB. Alternatives considered: a DuckDB community extension that reads zip (it works, but loads third-party binary code at run time, in every CI run, and its behaviour on MotherDuck is unknown) and a dbt-duckdb Python model (it would hide the SQL from column-level lineage).
 
+**FBIL tables are staged too (D-81, D-82).** The FBIL download is an HTML table that is named `.xls`, which DuckDB cannot read either, so the same staged area holds a CSV of it:
+
+```
+raw/source=fbil/dataset=reference_rates/trade_date=D/<hash>__reference_rates_D.xls     as published (an HTML table)
+staged/source=fbil/dataset=reference_rates/trade_date=D/<hash>__reference_rates_D.csv  derived
+```
+
+`HtmlTableStager` follows the zip stager's rules (a derived key, idempotent, hash checked, raw bytes untouched) and adds those of a table: exactly one table, closed, with rows of equal width, UTF-8 and under 16 MB. It writes the text of each cell and nothing else, so dates stay `DD/MM/YYYY` and rates stay text, and it does not check column names. Typing and naming belong to the bronze model, so a renamed column or a changed date format fails there, with its lineage, instead of at ingestion. The loader runs the same table check before it stores a file, so a block page or a cut-off download is never kept as a raw file.
+
 `brz_nse__cm_bhavcopy` follows the same pattern over the staged files. Its checks are `not_null` on the key and price columns, "not negative" on prices, volume and turnover, uniqueness per day, symbol, series and file, a date-match test, and a range test (the high is never below the low, and the close lies between them). A file in the pre-July-2024 format is rejected, because its column names do not match: alone it fails the model, and next to a healthy file it shows up as missing values.
 
 `brz_nse__security_master` reads the gzipped CSV directly (DuckDB handles gzip) and `brz_nse__corporate_actions` reads the JSON arrays with `read_json`. Both match columns or keys by name, so a renamed one fails the model (matching ignores letter case, so `exDate` and `exdate` are the same). Details worth knowing:
