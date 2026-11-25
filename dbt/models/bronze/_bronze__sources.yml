@@ -40,6 +40,35 @@ sources:
           - name: Date
             description: NAV date as DD-Mon-YYYY, for example 15-Oct-2026.
 
+  - name: raw_fbil
+    description: >
+      FBIL reference rates, one file per date, fetched from the RBI Reference Rate Archive, which
+      republishes them (D-81). The download is an HTML table, which DuckDB cannot read, so the
+      files are read from the staged area: a CSV copy derived from each raw file (D-82). A date
+      with no rate has no file.
+    meta:
+      external_location: >
+        read_csv('{{ env_var("RAW_ZONE_DIR", ".data/raw") }}/staged/source=fbil/dataset=reference_rates/*/*.csv',
+        header = true, all_varchar = true, union_by_name = true, filename = true,
+        hive_partitioning = true)
+    tables:
+      - name: reference_rates
+        description: >
+          One row per date per stored version of that date's file, all columns as text. A file
+          holds exactly one date, so a file with several rows means a range came back. Columns are
+          matched by header name.
+        columns:
+          - name: Date
+            description: Rate date as DD/MM/YYYY, for example 20/11/2026.
+          - name: USD (INR / 1 USD)
+            description: Rupees per US dollar, four decimals, as text.
+          - name: GBP (INR / 1 GBP)
+            description: Rupees per pound sterling, four decimals, as text.
+          - name: EUR (INR / 1 EUR)
+            description: Rupees per euro, four decimals, as text.
+          - name: JPY (INR / 100 JPY)
+            description: Rupees per 100 Japanese yen, not per yen, four decimals, as text.
+
   - name: raw_nse
     description: >
       NSE datasets, one file per date. Each table has its own location and reader, because

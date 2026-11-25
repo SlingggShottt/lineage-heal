@@ -11,13 +11,17 @@ from datetime import date
 
 import dagster as dg
 
-from lineageheal.ingestion.runner import ORCHESTRATED_DATASETS
+from lineageheal.ingestion.runner import DATASETS
 from lineageheal.ingestion.types import IngestionResult
 from lineageheal.orchestration.partitions import daily_partitions
 from lineageheal.orchestration.resources import IngestionResource
 
 DESCRIPTIONS = {
     ("amfi", "navall"): "AMFI mutual fund NAV report for one date, stored as published.",
+    (
+        "fbil",
+        "reference_rates",
+    ): "FBIL reference rates for one date (an HTML table), stored as published.",
     (
         "nse",
         "cm_bhavcopy",
@@ -78,6 +82,6 @@ def _build_raw_asset(source: str, dataset: str) -> dg.AssetsDefinition:
 
 raw_assets = [
     _build_raw_asset(source, dataset)
-    for source, datasets in ORCHESTRATED_DATASETS.items()
+    for source, datasets in DATASETS.items()
     for dataset in datasets
 ]

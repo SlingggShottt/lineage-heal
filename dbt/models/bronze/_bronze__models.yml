@@ -255,6 +255,51 @@ models:
         data_tests:
           - not_null
 
+  - name: brz_fbil__reference_rates
+    description: >
+      FBIL reference rates, typed and renamed to project conventions: one row per date per
+      stored version of that date's file, with a column per currency as the file has them. A
+      file holds exactly one date, so more than one row per file means a range came back. Rates
+      are rupees per one unit of the currency, except the yen, which FBIL quotes per 100 yen
+      (`jpy_inr_per_100`); silver unpivots them and converts the yen. A date with no rate, such as
+      a bank holiday, has no file and so no row. Values that do not convert become nulls.
+    columns:
+      - name: rate_date
+        description: The date the rates apply to, as published (DD/MM/YYYY in the file).
+        data_tests:
+          - not_null
+      - name: usd_inr
+        description: Rupees per US dollar.
+        data_tests:
+          - not_null
+          - positive
+      - name: gbp_inr
+        description: Rupees per pound sterling.
+        data_tests:
+          - not_null
+          - positive
+      - name: eur_inr
+        description: Rupees per euro.
+        data_tests:
+          - not_null
+          - positive
+      - name: jpy_inr_per_100
+        description: Rupees per 100 Japanese yen, not per yen.
+        data_tests:
+          - not_null
+          - positive
+      - name: _trade_date
+        description: The date of the folder the file was stored under.
+        data_tests:
+          - not_null
+      - name: _source_file
+        description: >
+          Path of the staged file the row came from; the 16-character hash in its name is the
+          version of the raw file. Unique, because each file holds one date.
+        data_tests:
+          - not_null
+          - unique
+
   - name: brz_meta__raw_file_versions
     description: >
       One row per stored raw file with the time it arrived. This is what lets silver choose the

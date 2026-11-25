@@ -107,7 +107,7 @@ All requirements are mandatory unless marked **(S)** for "should".
 
 | ID | Interface | Requirement | Verify |
 |---|---|---|---|
-| IF-SW-01 | NSE, AMFI, FBIL websites | The system shall retrieve files over HTTPS using configurable URLs and headers. | T |
+| IF-SW-01 | NSE, AMFI and RBI (serving FBIL's rates) websites | The system shall retrieve files over HTTPS using configurable URLs and headers. | T |
 | IF-SW-02 | Cloudflare R2 | The system shall store and read raw files through the S3-compatible API. | T |
 | IF-SW-03 | MotherDuck / DuckDB | The system shall run dbt against MotherDuck for `prod` and local DuckDB for `dev`, `ci` and `bench`. | T |
 | IF-SW-04 | Postgres (Neon) | The system shall store application state, lineage and retrieval data in Postgres with pgvector. | T |
@@ -336,4 +336,4 @@ The logical model is in [design_architecture.md](design_architecture.md#9-applic
 
 ## Appendix A — Open issues
 
-See [context.md](context.md#open-questions). Requirements affected by open questions: FR-ORC-02 (source reachability from runners), FR-ING-04 (FBIL history), FR-WH-05 (Elementary compatibility).
+See [context.md](context.md#open-questions). Requirements affected by open questions: FR-ORC-02 (source reachability from runners), FR-WH-05 (Elementary compatibility).

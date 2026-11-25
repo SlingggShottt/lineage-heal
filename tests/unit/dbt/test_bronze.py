@@ -749,3 +749,178 @@ def test_an_added_corporate_actions_key_is_tolerated(workspace: Workspace) -> No
     workspace.store_corporate_actions(as_json(records))
 
     assert workspace.build(ACTIONS_MODEL).success
+
+
+# --- FBIL reference rates -----------------------------------------------------------------
+
+FBIL_MODEL = "brz_fbil__reference_rates"
+FBIL_DAY = date(2026, 10, 15)
+FBIL_DATE_TEST = "assert_brz_fbil__reference_rates_dates_match_their_file"
+FBIL_UNIQUE_TEST = "unique_brz_fbil__reference_rates__source_file"
+FBIL_USD_NULL_TEST = "not_null_brz_fbil__reference_rates_usd_inr"
+FBIL_USD_POSITIVE_TEST = "positive_brz_fbil__reference_rates_usd_inr"
+FBIL_DATE_NULL_TEST = "not_null_brz_fbil__reference_rates_rate_date"
+
+# One day's row in the real markup, for tests that add rows to a file.
+FBIL_ROW = (
+    b"<tr>\r\n\t\t<td>15/10/2026</td><td>92.9699</td><td>121.9337</td>"
+    b"<td>102.1504</td><td>58.4300</td>\r\n\t</tr>"
+)
+
+
+def add_fbil_row(table: bytes, row: bytes) -> bytes:
+    return table.replace(b"\r\n</table>", row + b"\r\n</table>")
+
+
+def test_a_healthy_fbil_file_builds_and_every_test_passes(workspace: Workspace) -> None:
+    workspace.store_fbil()
+
+    result = workspace.build(FBIL_MODEL)
+
+    assert result.success
+    assert result.failed() == set()
+    assert result.statuses[FBIL_MODEL] == "success"
+
+
+def test_fbil_rates_are_typed_and_renamed_and_come_from_the_staged_copy(
+    workspace: Workspace,
+) -> None:
+    workspace.store_fbil()
+
+    result = workspace.build(FBIL_MODEL)
+
+    row = result.query(
+        "select rate_date, usd_inr, gbp_inr, eur_inr, jpy_inr_per_100, _trade_date, _source_file "
+        "from bronze.brz_fbil__reference_rates"
+    )[0]
+    assert row[:6] == (
+        FBIL_DAY,
+        Decimal("92.9699"),
+        Decimal("121.9337"),
+        Decimal("102.1504"),
+        Decimal("58.4300"),
+        FBIL_DAY,
+    )
+    source_file = str(row[6])
+    assert "/staged/source=fbil/dataset=reference_rates/" in source_file
+    assert source_file.endswith("__reference_rates_2026-10-15.csv")
+
+
+def test_each_day_is_one_row_from_its_own_file(workspace: Workspace) -> None:
+    days = [FBIL_DAY - timedelta(days=offset) for offset in range(3)]
+    for day in days:
+        workspace.store_fbil(trade_date=day)
+
+    result = workspace.build(FBIL_MODEL)
+
+    assert result.failed() == set()
+    assert result.query(
+        "select rate_date, _trade_date from bronze.brz_fbil__reference_rates order by 1"
+    ) == [(day, day) for day in sorted(days)]
+
+
+# What each kind of damage should trip, when it is the only version of the day's file.
+FBIL_FAULTS: dict[str, tuple[Callable[[bytes], bytes], set[str]]] = {
+    "blank rate": (lambda t: t.replace(b"<td>92.9699</td>", b"<td></td>"), {FBIL_USD_NULL_TEST}),
+    "text for a rate": (
+        lambda t: t.replace(b"<td>92.9699</td>", b"<td>n/a</td>"),
+        {FBIL_USD_NULL_TEST},
+    ),
+    "negative rate": (
+        lambda t: t.replace(b"<td>92.9699</td>", b"<td>-92.9699</td>"),
+        {FBIL_USD_POSITIVE_TEST},
+    ),
+    "zero rate": (
+        lambda t: t.replace(b"<td>92.9699</td>", b"<td>0</td>"),
+        {FBIL_USD_POSITIVE_TEST},
+    ),
+    "a date format that changed": (
+        lambda t: t.replace(b"15/10/2026", b"2026-10-15"),
+        {FBIL_DATE_NULL_TEST},
+    ),
+    "another day's rates": (lambda t: t.replace(b"15/10/2026", b"14/10/2026"), {FBIL_DATE_TEST}),
+    "the same day twice": (lambda t: add_fbil_row(t, FBIL_ROW), {FBIL_UNIQUE_TEST}),
+    "a second day (a range came back)": (
+        lambda t: add_fbil_row(t, FBIL_ROW.replace(b"15/10/2026", b"14/10/2026")),
+        {FBIL_UNIQUE_TEST, FBIL_DATE_TEST},
+    ),
+}
+
+
+@pytest.mark.parametrize("fault", sorted(FBIL_FAULTS))
+def test_each_fbil_fault_is_caught_by_exactly_the_expected_checks(
+    workspace: Workspace, fault: str
+) -> None:
+    damage, expected = FBIL_FAULTS[fault]
+    workspace.store_fbil(damage(workspace.fbil_table(FBIL_DAY)))
+
+    result = workspace.build(FBIL_MODEL)
+
+    assert not result.success
+    assert result.failed() == expected
+
+
+def test_a_rate_in_the_wrong_unit_is_not_a_bronze_fault(workspace: Workspace) -> None:
+    """The yen per unit instead of per 100 is positive and well formed, so bronze lets it by.
+
+    Catching a value that is plausible in form but wrong in scale needs the rate's history, which
+    is the FX band check in silver.
+    """
+    # TODO(LH-087): the FX band is what catches this.
+    workspace.store_fbil(
+        workspace.fbil_table(FBIL_DAY).replace(b"<td>58.4300</td>", b"<td>0.5843</td>")
+    )
+
+    assert workspace.build(FBIL_MODEL).success
+
+
+def test_a_corrected_republication_adds_a_row_and_leaves_the_first_version(
+    workspace: Workspace,
+) -> None:
+    workspace.store_fbil()
+    workspace.store_fbil(
+        workspace.fbil_table(FBIL_DAY, ("92.9700", "121.9337", "102.1504", "58.43"))
+    )
+
+    result = workspace.build(FBIL_MODEL)
+
+    assert result.failed() == set()  # one row per file, so uniqueness still holds
+    assert result.query(
+        "select usd_inr from bronze.brz_fbil__reference_rates order by usd_inr"
+    ) == [(Decimal("92.9699"),), (Decimal("92.9700"),)]
+
+
+def test_a_renamed_fbil_column_breaks_the_model_and_skips_what_depends_on_it(
+    workspace: Workspace,
+) -> None:
+    """Schema drift surfaces in dbt: the model fails, so its tests cannot vouch for the data."""
+    workspace.store_fbil(workspace.fbil_table(FBIL_DAY).replace(b"USD (INR / 1 USD)", b"USD"))
+
+    result = workspace.build(FBIL_MODEL)
+
+    assert result.statuses[FBIL_MODEL] == "error"
+    assert result.statuses[FBIL_USD_NULL_TEST] == "skipped"
+
+
+def test_a_renamed_column_in_a_republished_file_shows_up_as_missing_rates(
+    workspace: Workspace,
+) -> None:
+    """Files merge by column name, so next to a healthy version the drift appears as nulls."""
+    workspace.store_fbil()
+    workspace.store_fbil(workspace.fbil_table(FBIL_DAY).replace(b"USD (INR / 1 USD)", b"USD"))
+
+    result = workspace.build(FBIL_MODEL)
+
+    assert result.statuses[FBIL_MODEL] == "success"
+    assert result.failed() == {FBIL_USD_NULL_TEST}
+
+
+def test_an_added_fbil_column_is_tolerated(workspace: Workspace) -> None:
+    table = workspace.fbil_table(FBIL_DAY)
+    table = table.replace(
+        b"<td>JPY (INR / 100 JPY)</td>", b"<td>JPY (INR / 100 JPY)</td><td>AED</td>"
+    )
+    table = table.replace(b"<td>58.4300</td>", b"<td>58.4300</td><td>25.3100</td>")
+    workspace.store_fbil(table)
+
+    assert workspace.build(FBIL_MODEL).success

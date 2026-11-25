@@ -43,14 +43,6 @@ DATASETS: dict[str, tuple[str, ...]] = {
 }
 
 
-# The datasets Dagster models as raw assets. A dataset joins once a dbt source reads it, because
-# every raw asset is named after the dbt source that reads its files (D-31).
-# TODO(LH-024): add fbil together with its dbt source and bronze model.
-ORCHESTRATED_DATASETS: dict[str, tuple[str, ...]] = {
-    source: datasets for source, datasets in DATASETS.items() if source != "fbil"
-}
-
-
 @contextmanager
 def open_loader(settings: Settings, source: str, dataset: str) -> Iterator[Loader]:
     """Build the loader for a source's dataset on the configured raw zone, closing it afterwards.

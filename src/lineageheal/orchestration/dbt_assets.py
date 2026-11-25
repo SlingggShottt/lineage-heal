@@ -25,7 +25,7 @@ from dagster_dbt import (
 from lineageheal.core.errors import ConfigurationError, LineageHealError
 from lineageheal.core.settings import get_settings
 from lineageheal.ingestion.raw_zone import open_store
-from lineageheal.ingestion.runner import ORCHESTRATED_DATASETS
+from lineageheal.ingestion.runner import DATASETS
 from lineageheal.orchestration.assets import raw_asset_key
 from lineageheal.orchestration.run_artifacts import record_dbt_run, run_prefix
 
@@ -45,9 +45,7 @@ _GENERATED = {"target", "logs", "dbt_packages"}
 # one dbt source, so it stands for all the raw datasets rather than for one.
 RAW_ZONE_FILES = dg.AssetKey(["raw_zone", "files"])
 ALL_RAW_ASSETS = [
-    raw_asset_key(source, dataset)
-    for source, datasets in ORCHESTRATED_DATASETS.items()
-    for dataset in datasets
+    raw_asset_key(source, dataset) for source, datasets in DATASETS.items() for dataset in datasets
 ]
 
 
