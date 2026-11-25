@@ -287,3 +287,105 @@ def test_an_nse_bhavcopy_fault_is_injected_into_the_zip_and_staged(tmp_path: Pat
     assert len(staged) == 1
     assert staged[0].name.endswith("20261015_F_0000.csv")
     assert staged[0].read_bytes() != csv
+
+
+# -- patch verification ------------------------------------------------------------------------
+
+
+class FakeSandbox:
+    def __init__(self, passed: bool = True, error: str | None = None) -> None:
+        self.calls: list[tuple[str, str]] = []
+        self._passed = passed
+        self._error = error
+
+    def verify(self, patch: Any, model: str) -> Any:
+        from lineageheal.agents.fixer.sandbox import SandboxError, SandboxResult
+
+        self.calls.append((model, patch.diff))
+        if self._error:
+            raise SandboxError(self._error)
+        return SandboxResult(self._passed, "fixed 1 failing node(s)", f"{model}+", seconds=3.0)
+
+
+class Patcher:
+    def __init__(self, causes: tuple[str, ...], verdict: bool | None = None) -> None:
+        self.name = "patcher"
+        self._causes = causes
+        self._verdict = verdict
+
+    def diagnose(self, scenario: Scenario) -> Diagnosis:
+        from lineageheal.benchmark.models import PatchRecord
+
+        return Diagnosis(
+            root_causes=self._causes,
+            patch=PatchRecord(diff="--- a\n+++ b\n", files=("dbt/x.sql",), changed_lines=2),
+            sandbox_passed=self._verdict,
+            seconds=1.0,
+        )
+
+
+def verifying(tmp_path: Path, system: Any, sandbox: FakeSandbox | None) -> tuple[Any, ResultStore]:
+    store = ResultStore(tmp_path / "results", "run1")
+    builder = ScenarioBuilder(
+        seed_source(tmp_path / "source"), tmp_path, tmp_path / "scratch", dbt_build=no_dbt
+    )
+    (tmp_path / "scratch").mkdir(exist_ok=True)
+    verifier = (lambda _scenario: sandbox) if sandbox else None
+    return BenchmarkRunner(builder, store, [system], verifier=verifier), store
+
+
+def test_a_patch_is_judged_by_the_sandbox_on_its_roots_source(tmp_path: Path) -> None:
+    sandbox = FakeSandbox(passed=True)
+    run, store = verifying(tmp_path, Patcher(("raw.amfi.navall.Net Asset Value",)), sandbox)
+
+    run.run([amfi_case()], {"run_id": "run1"})
+
+    diagnosis = store.load("amfi-nulls-001", "patcher").diagnosis
+    assert diagnosis is not None
+    assert sandbox.calls[0][0] == "source:raw_amfi.navall"
+    assert diagnosis.sandbox_passed is True
+    assert diagnosis.sandbox_seconds == 3.0
+    assert diagnosis.seconds == 1.0  # the system's own time stays apart from the sandbox's
+
+
+def test_a_patch_that_already_has_a_verdict_is_not_judged_again(tmp_path: Path) -> None:
+    sandbox = FakeSandbox()
+    run, store = verifying(tmp_path, Patcher(("raw.amfi.navall.X",), verdict=False), sandbox)
+
+    run.run([amfi_case()], {"run_id": "run1"})
+
+    assert sandbox.calls == []
+    assert store.load("amfi-nulls-001", "patcher").diagnosis.sandbox_passed is False  # type: ignore[union-attr]
+
+
+def test_a_sandbox_that_cannot_run_counts_as_a_failed_patch_and_says_why(tmp_path: Path) -> None:
+    run, store = verifying(
+        tmp_path, Patcher(("raw.amfi.navall.X",)), FakeSandbox(error="git failed")
+    )
+
+    run.run([amfi_case()], {"run_id": "run1"})
+
+    diagnosis = store.load("amfi-nulls-001", "patcher").diagnosis
+    assert diagnosis is not None
+    assert diagnosis.sandbox_passed is False
+    assert diagnosis.sandbox_reason == "sandbox error: git failed"
+
+
+def test_a_patch_with_no_root_cause_to_build_fails_without_calling_the_sandbox(
+    tmp_path: Path,
+) -> None:
+    sandbox = FakeSandbox()
+    run, store = verifying(tmp_path, Patcher(()), sandbox)
+
+    run.run([amfi_case()], {"run_id": "run1"})
+
+    assert sandbox.calls == []
+    assert store.load("amfi-nulls-001", "patcher").diagnosis.sandbox_passed is False  # type: ignore[union-attr]
+
+
+def test_without_a_verifier_a_patch_is_stored_unverified(tmp_path: Path) -> None:
+    run, store = verifying(tmp_path, Patcher(("raw.amfi.navall.X",)), None)
+
+    run.run([amfi_case()], {"run_id": "run1"})
+
+    assert store.load("amfi-nulls-001", "patcher").diagnosis.sandbox_passed is None  # type: ignore[union-attr]

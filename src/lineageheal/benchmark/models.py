@@ -15,6 +15,7 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from lineageheal.agents.fixer.patch import Patch
 from lineageheal.benchmark.spec import FaultCase, FixLocation
 from lineageheal.core.signals import RunSummary
 
@@ -38,6 +39,25 @@ class Scenario:
         return bool(self.summary.signals)
 
 
+class PatchRecord(BaseModel):
+    """A drafted dbt patch, as stored: the unified diff and what it touches."""
+
+    model_config = ConfigDict(frozen=True)
+
+    diff: str
+    files: tuple[str, ...]
+    changed_lines: int = Field(ge=0)
+
+    @classmethod
+    def of(cls, patch: Patch) -> PatchRecord:
+        """The record of a checked patch."""
+        return cls(diff=patch.diff, files=patch.files, changed_lines=patch.changed_lines)
+
+    def to_patch(self) -> Patch:
+        """The patch again, for the sandbox, which applies the diff (new texts are not kept)."""
+        return Patch(self.diff, self.files, self.changed_lines)
+
+
 class Diagnosis(BaseModel):
     """What a system concluded about a scenario."""
 
@@ -47,10 +67,15 @@ class Diagnosis(BaseModel):
     # can be read off the same list.
     root_causes: tuple[str, ...] = ()
     fix_location: FixLocation | None = None
-    patch_produced: bool = False
-    # The sandbox's verdict on the system's own patch; None when there was no patch.
+    patch: PatchRecord | None = None
+    # The sandbox's verdict on the patch; None until it is verified, or when there is no patch.
     sandbox_passed: bool | None = None
+    sandbox_reason: str = ""
+    patch_attempts: int = Field(default=0, ge=0)  # patches drafted, counting revisions
+    # `seconds` is what the system itself spent (calls, tools, drafting); time in the sandbox is
+    # kept apart so a report can show both and sum them for detection-to-fix time.
     seconds: float = Field(default=0.0, ge=0)
+    sandbox_seconds: float = Field(default=0.0, ge=0)
     llm_calls: int = Field(default=0, ge=0)
     input_tokens: int = Field(default=0, ge=0)
     output_tokens: int = Field(default=0, ge=0)

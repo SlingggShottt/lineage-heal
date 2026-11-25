@@ -138,3 +138,9 @@ def test_an_incident_without_a_model_is_not_sent_to_the_fixer() -> None:
     assert outcome.status is VerificationStatus.NO_PATCH
     assert model_of(incident(None)) is None
     assert model_of(incident("slv_nse__prices.close_inr")) == "slv_nse__prices"
+
+
+def test_a_raw_column_is_built_from_its_source_because_it_is_not_a_model() -> None:
+    assert model_of(incident("raw.amfi.navall.Net Asset Value")) == "source:raw_amfi.navall"
+    assert model_of(incident("raw.nse.cm_bhavcopy.*")) == "source:raw_nse.cm_bhavcopy"
+    assert model_of(incident("raw.amfi")) is None

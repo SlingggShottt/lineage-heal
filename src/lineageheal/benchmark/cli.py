@@ -10,6 +10,7 @@ from typing import Annotated
 
 import typer
 
+from lineageheal.agents.fixer import Sandbox
 from lineageheal.benchmark.corpus import summarise
 from lineageheal.benchmark.knowledge import build_index
 from lineageheal.benchmark.loader import load_cases
@@ -149,7 +150,17 @@ def run(
         )
         context = BenchContext(settings, store, builder, corpus)
         runner = BenchmarkRunner(
-            builder, store, [SYSTEMS[n](context) for n in system], keep_scenarios=keep_scenarios
+            builder,
+            store,
+            [SYSTEMS[n](context) for n in system],
+            keep_scenarios=keep_scenarios,
+            verifier=lambda scenario: Sandbox(
+                REPO_ROOT,
+                scenario.warehouse,
+                scenario.raw_zone,
+                timeout_seconds=settings.sandbox_timeout_seconds,
+                target="bench",
+            ),
         )
         report = runner.run(cases, build_manifest(settings, REPO_ROOT, run_id, cases, system))
     except LineageHealError as exc:

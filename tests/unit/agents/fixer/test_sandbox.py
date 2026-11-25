@@ -205,3 +205,19 @@ def test_the_builder_runs_in_its_own_copy_of_the_data(
     assert result.passed
     assert len(set(seen)) == 2
     assert warehouse not in seen
+
+
+def test_a_benchmark_target_names_the_copied_warehouse_after_itself(
+    repo: Path, warehouse: Path, tmp_path: Path
+) -> None:
+    seen: list[str] = []
+
+    def builder(project: Path, data_dir: Path, selector: str, timeout: float) -> BuildResult:
+        seen.extend(p.name for p in data_dir.iterdir())
+        return BuildResult({TEST: "fail" if len(seen) == 1 else "pass"}, 0, "", 0.1)
+
+    patch = build_patch(repo, [("dbt/models/m.sql", "select 1 as v\n")])
+
+    Sandbox(repo, warehouse, tmp_path, builder=builder, target="bench").verify(patch, "m")
+
+    assert seen == ["bench.duckdb", "bench.duckdb"]

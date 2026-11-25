@@ -9,19 +9,29 @@ are identical (FR-BEN-03).
 from __future__ import annotations
 
 import time
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from lineageheal.agents.fixer.models import PatchProposal
+from lineageheal.agents.fixer.patch import (
+    DEFAULT_LIMITS,
+    Patch,
+    PatchError,
+    PatchLimits,
+    build_patch,
+)
 from lineageheal.agents.prompt_registry import PromptRegistry
-from lineageheal.benchmark.models import Diagnosis, Scenario
-from lineageheal.benchmark.systems.common import first_signal, read_manifest
+from lineageheal.benchmark.models import Diagnosis, PatchRecord, Scenario
+from lineageheal.benchmark.systems.common import REPO_ROOT, first_signal, model_file, read_manifest
 from lineageheal.core.signals import Signal
 from lineageheal.llm.client import LLMClient
-from lineageheal.llm.types import LLMRequest, ModelTier
+from lineageheal.llm.types import Completion, LLMRequest, ModelTier
 
 PROMPT_AGENT = "baseline"
 PROMPT_PURPOSE = "plain"
+PATCH_PURPOSE = "patch"
 TOP_N = 3
 
 
@@ -38,10 +48,28 @@ class PlainLLMSystem:
 
     name = "plain-llm"
 
-    def __init__(self, client: LLMClient, prompts: PromptRegistry | None = None) -> None:
-        """Create the baseline on a client, which owns the model, retries and rate limits."""
+    def __init__(
+        self,
+        client: LLMClient,
+        prompts: PromptRegistry | None = None,
+        *,
+        repo_root: Path = REPO_ROOT,
+        limits: PatchLimits = DEFAULT_LIMITS,
+    ) -> None:
+        """Create the baseline on a client, which owns the model, retries and rate limits.
+
+        Args:
+            client: The shared client.
+            prompts: The prompt registry; the project's own when omitted.
+            repo_root: The repository holding the dbt project, for the file it may edit.
+            limits: The patch size limits, the same ones the Fixer is held to.
+        """
         self._client = client
-        self._prompt = (prompts or PromptRegistry()).get(PROMPT_AGENT, PROMPT_PURPOSE)
+        registry = prompts or PromptRegistry()
+        self._prompt = registry.get(PROMPT_AGENT, PROMPT_PURPOSE)
+        self._patch_prompt = registry.get(PROMPT_AGENT, PATCH_PURPOSE)
+        self._root = repo_root
+        self._limits = limits
 
     def diagnose(self, scenario: Scenario) -> Diagnosis:
         """Ask the model for the root cause of the first failing check.
@@ -64,15 +92,58 @@ class PlainLLMSystem:
         )
         result = self._client.complete_structured(request, PlainAnswer)
         answer = result.parsed
+        completions = list(result.completions)
+        patch, note = None, ""
+        if answer.fix_location == "dbt":
+            patch, extra, note = self._draft_patch(scenario, signal, answer)
+            completions += extra
         return Diagnosis(
             root_causes=tuple(answer.root_causes[:TOP_N]),
             fix_location=answer.fix_location,
+            patch=PatchRecord.of(patch) if patch else None,
+            patch_attempts=1 if patch else 0,
             seconds=time.perf_counter() - started,
-            llm_calls=len(result.completions),
-            input_tokens=sum(c.input_tokens for c in result.completions),
-            output_tokens=sum(c.output_tokens for c in result.completions),
-            notes=f"{self._prompt.id}: {answer.reason}",
+            llm_calls=len(completions),
+            input_tokens=sum(c.input_tokens for c in completions),
+            output_tokens=sum(c.output_tokens for c in completions),
+            notes=f"{self._prompt.id}: {answer.reason}" + (f"; {note}" if note else ""),
         )
+
+    def _draft_patch(
+        self, scenario: Scenario, signal: Signal, answer: PlainAnswer
+    ) -> tuple[Patch | None, tuple[Completion, ...], str]:
+        """One attempt to fix the failing model's file, which is the only file it is shown."""
+        manifest = read_manifest(scenario)
+        path = model_file(manifest, signal.model) if manifest else None
+        if path is None:
+            return None, (), "no patch: the failing model's file is unknown"
+        try:
+            content = (self._root / path).read_text(encoding="utf-8")
+        except OSError:
+            return None, (), f"no patch: {path} cannot be read"
+        if len(content) > self._limits.max_file_characters:
+            return None, (), f"no patch: {path} is too long to show whole"
+        request = LLMRequest(
+            prompt=self._patch_prompt.render(
+                signal=_describe(signal),
+                root_cause=answer.root_causes[0],
+                reason=answer.reason,
+                path=path,
+                content=content,
+            ),
+            tier=ModelTier.STANDARD,
+        )
+        result = self._client.complete_structured(request, PatchProposal)
+        proposal = result.parsed
+        if proposal.declined_reason or not proposal.edits:
+            return None, result.completions, f"no patch: {proposal.declined_reason or 'no edits'}"
+        edits = [(e.path, e.new_content) for e in proposal.edits]
+        try:
+            if any(p != path for p, _ in edits):
+                raise PatchError("the model changed a file it was not shown")
+            return build_patch(self._root, edits, self._limits), result.completions, ""
+        except PatchError as exc:
+            return None, result.completions, f"no patch: {exc}"
 
 
 def _describe(signal: Signal) -> str:
