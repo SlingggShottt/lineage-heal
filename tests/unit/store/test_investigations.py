@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 
 import pytest
 from sqlalchemy import Engine, func, select
@@ -272,13 +273,42 @@ def test_a_finished_run_cannot_be_finished_or_failed_again(
     assert count == 2
 
 
+def test_evidence_holding_dates_and_decimals_is_stored_as_json_text(
+    engine: Engine, repository: InvestigationRepository
+) -> None:
+    """A warehouse row holds `date` and `Decimal` values, and a tool returns them as they are."""
+    incident_id = make_incident(engine)
+    run_id = repository.start(incident_id, NOW)
+    investigation = concluded()
+    investigation.evidence.append(
+        Evidence(
+            3,
+            "query_warehouse",
+            {"on": date(2026, 11, 20)},
+            True,
+            "c",
+            {"rows": [{"nav_date": date(2026, 11, 20), "nav_inr": Decimal("21.8600")}]},
+        )
+    )
+
+    repository.finish(run_id, investigation, LATER)
+
+    stored = repository.latest_for(incident_id)
+    assert stored is not None
+    assert stored.evidence[2]["arguments"] == {"on": "2026-11-20"}
+    assert stored.evidence[2]["output"] == {
+        "rows": [{"nav_date": "2026-11-20", "nav_inr": "21.8600"}]
+    }
+
+
 def test_a_save_that_fails_leaves_nothing_half_written(
     engine: Engine, repository: InvestigationRepository
 ) -> None:
     incident_id = make_incident(engine)
     run_id = repository.start(incident_id, NOW)
     broken = concluded()
-    broken.evidence.append(Evidence(3, "t", {}, True, "c", {"bad": {1, 2}}))  # not JSON
+    # The table requires a tool name, so this row makes the database refuse the last write.
+    broken.evidence.append(Evidence(3, None, {}, True, "c", {}))  # type: ignore[arg-type]
 
     with pytest.raises(StorageError):
         repository.finish(run_id, broken, LATER)

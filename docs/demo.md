@@ -7,7 +7,7 @@ A rehearsed run-through of what works today, in about 15 minutes. The data steps
 **What it does not show live, and you should say so up front:**
 
 - **Approving or rejecting a fix.** The dashboard has the controls, and the server checks every request, but GitHub sign-in is not set up on this machine, so you see everything read-only.
-- **A live diagnosis by the agents.** A rehearsal on 26 November reached the models but could not finish: saving the result hit a bug (LH-113) and the model providers answered with errors (LH-114). The incidents in step 7 are stored samples. Do not run `lh heal` on stage until LH-113 is fixed.
+- **A live diagnosis by the agents.** Two rehearsals on 26 November reached the models and could not finish: Gemini answered with errors and long delays, and the time budget ran out (LH-114). A storage bug found in the first one is fixed (LH-113). The incidents in step 7 are stored samples. Do not run `lh heal` on stage until LH-114 is settled.
 - **Pull requests, the benchmark results and a deployed copy.** Nothing is published from this machine, the full benchmark has not been run, and the demo runs locally (see "Built and not built").
 
 ## Before the day
@@ -263,7 +263,7 @@ Say: when a check fails, the failure becomes an incident that a person reviews. 
 
 ### 8. What exists, what is next, and questions (1.5 min)
 
-Say: the pipeline, the lakehouse, the agents, the API and the dashboard are built and tested. What is left is proving it: a benchmark of 100 injected faults against a rule-based baseline and a plain language model, including the real July 2024 NSE change as a held-out case, then deployment and the write-up. Be direct about the two things found while preparing this demo: a live diagnosis does not finish yet because of a storage bug and provider errors, both logged, and Dagster runs ignore a demo setup, also logged.
+Say: the pipeline, the lakehouse, the agents, the API and the dashboard are built and tested. What is left is proving it: a benchmark of 100 injected faults against a rule-based baseline and a plain language model, including the real July 2024 NSE change as a held-out case, then deployment and the write-up. Be direct about the two things found while preparing this demo: a live diagnosis does not finish yet because the model providers answer with errors and long delays (logged), and Dagster runs ignore a demo setup (also logged). A storage bug found on the way has been fixed.
 
 ## Built and not built
 
@@ -273,7 +273,7 @@ Say: the pipeline, the lakehouse, the agents, the API and the dashboard are buil
 | Write-once, content-addressed raw storage on local disk, and an ingestion log in Postgres | Scheduled runs on GitHub Actions and a deployed copy (the API on Render and the dashboard on Cloudflare Pages) |
 | dbt project: bronze models for five datasets, six silver models (latest version of each day, conformed units and vocabulary, parsed corporate actions, FBIL's rates one row per currency with the yen per unit, a cross-feed par-value check, a calendar), four gold tables (split- and bonus-adjusted prices, NAVs and FBIL's rates each beside their previous value, and a daily summary across equity and funds), and 245 quality checks | A plausibility band on FX rates (LH-087), FBIL's holiday calendar (LH-108), and FX in the daily summary (LH-091) |
 | Dagster assets for every dataset and model, with every dbt test as a check, and a record of each run's failure signals | Dagster runs that respect a demo setup (LH-112) |
-| Column-level lineage graph, the Detector, the Investigator with its tools, runbooks and similar-incident retrieval, the Fixer with a path allowlist and a sandbox verifier, drafted issues for faults outside dbt, and the GitHub App client | A live diagnosis that completes on real data (LH-113, LH-114), pause and resume at review (LH-097), OpenLineage events (LH-037, LH-038) and LangSmith tracing (LH-043) |
+| Column-level lineage graph, the Detector, the Investigator with its tools, runbooks and similar-incident retrieval, the Fixer with a path allowlist and a sandbox verifier, drafted issues for faults outside dbt, and the GitHub App client | A live diagnosis that completes on real data (LH-114), pause and resume at review (LH-097), OpenLineage events (LH-037, LH-038) and LangSmith tracing (LH-043) |
 | FastAPI backend with GitHub sign-in, an approver allowlist, sessions and approve and reject endpoints | GitHub sign-in set up on this machine |
 | Dashboard: overview, incident list with filters, incident page with root cause, lineage graph and side-by-side diff, approve and reject controls, and runbooks | The benchmark screen (LH-075) and a browser end-to-end test (LH-077) |
 | Benchmark foundations: a corpus of 100 faults with seed and test splits, injectors for AMFI and NSE, a resumable runner, both baselines, and LineageHeal as a benchmark system | Benchmark results, the July 2024 replay, the metrics report and the full run (LH-071 to LH-074) |
@@ -281,7 +281,7 @@ Say: the pipeline, the lakehouse, the agents, the API and the dashboard are buil
 
 ## Likely questions
 
-**Where are the agents?** Built and tested with recorded and fake model responses, so the tests never call a real model. A live run with real keys reached the models but did not finish on 26 November, for two logged reasons: a storage bug (LH-113) and provider errors (LH-114). The incidents in the dashboard are stored samples.
+**Where are the agents?** Built and tested with recorded and fake model responses, so the tests never call a real model. A live run with real keys reached the models twice on 26 November and did not finish: Gemini answered with errors and long delays and the time budget ran out (LH-114). A storage bug found in the first run is fixed (LH-113). The incidents in the dashboard are stored samples.
 
 **How is this different from data-observability tools?** They detect and alert. This project aims to diagnose through lineage and to propose a verified, reviewable fix.
 
