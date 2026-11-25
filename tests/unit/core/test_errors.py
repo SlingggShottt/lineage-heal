@@ -9,6 +9,7 @@ from lineageheal.core import errors
         errors.ConfigurationError,
         errors.IngestionError,
         errors.SourceUnavailableError,
+        errors.SourceBlockedError,
         errors.StorageError,
         errors.LineageError,
         errors.AgentError,
@@ -23,3 +24,7 @@ def test_every_project_error_can_be_caught_as_lineageheal_error(
 
 def test_source_unavailable_is_an_ingestion_error() -> None:
     assert issubclass(errors.SourceUnavailableError, errors.IngestionError)
+
+
+def test_a_blocked_source_is_also_unavailable_so_existing_handlers_still_catch_it() -> None:
+    assert issubclass(errors.SourceBlockedError, errors.SourceUnavailableError)

@@ -14,6 +14,7 @@ import yaml
 
 from lineageheal.core.errors import SourceUnavailableError
 from lineageheal.core.settings import get_settings
+from lineageheal.ingestion import runner
 from lineageheal.ingestion.log import NullRecorder
 from lineageheal.ingestion.raw_zone import StoredObject
 from lineageheal.ingestion.types import IngestionOutcome, IngestionResult
@@ -97,6 +98,15 @@ def test_there_is_one_raw_asset_for_each_dataset_the_loaders_offer() -> None:
     assert {key for a in raw_assets for key in a.keys} == {
         raw_asset_key(source, dataset) for source, dataset in DATASETS
     }
+
+
+def test_fbil_is_the_only_loader_dataset_without_a_raw_asset_yet() -> None:
+    """Its dbt source and bronze model come with the FBIL part of LH-024; drop this test then."""
+    offered = {(s, d) for s, names in runner.DATASETS.items() for d in names}
+    modelled = {(s, d) for s, names in runner.ORCHESTRATED_DATASETS.items() for d in names}
+
+    assert offered - modelled == {("fbil", "reference_rates")}
+    assert modelled < offered
 
 
 def test_asset_keys_are_the_names_of_the_dbt_sources_that_read_the_files() -> None:

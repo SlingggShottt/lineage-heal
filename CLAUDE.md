@@ -121,7 +121,8 @@ docker compose run --rm app ingest amfi --date 2026-10-15   # any lineageheal co
 uv run lineageheal ingest amfi --date 2026-10-15
 uv run lineageheal ingest nse --date 2026-10-15
 uv run lineageheal ingest nse --dataset security_master --date 2026-10-15   # or corporate_actions
-uv run lineageheal backfill amfi --start 2026-10-01 --end 2026-10-15   # resumes; --refresh re-downloads, --skip-weekends for NSE
+uv run lineageheal ingest fbil --date 2026-11-20   # rates from the RBI archive; stops a backfill if RBI refuses
+uv run lineageheal backfill amfi --start 2026-10-01 --end 2026-10-15   # resumes; --refresh re-downloads, --skip-weekends for NSE and FBIL
 uv run lineageheal db upgrade                    # needs DATABASE_URL and `make up`
 uv run lineageheal calendar fetch-nse            # NSE's official holidays for this year into the calendar seed
 uv run lineageheal log --limit 10                # recent ingestion attempts

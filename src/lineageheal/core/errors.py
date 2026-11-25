@@ -22,6 +22,14 @@ class SourceUnavailableError(IngestionError):
     """A source file could not be downloaded after retries."""
 
 
+class SourceBlockedError(SourceUnavailableError):
+    """A source refused our requests outright, so asking again would only add to the block.
+
+    A timeout or a server error may clear by the next attempt; a refusal can last, and repeated
+    requests make it worse. A run over many days stops when it meets one.
+    """
+
+
 class StorageError(LineageHealError):
     """The raw-zone object store rejected or failed an operation."""
 

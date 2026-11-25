@@ -11,7 +11,7 @@ from datetime import date
 
 import dagster as dg
 
-from lineageheal.ingestion.runner import DATASETS
+from lineageheal.ingestion.runner import ORCHESTRATED_DATASETS
 from lineageheal.ingestion.types import IngestionResult
 from lineageheal.orchestration.partitions import daily_partitions
 from lineageheal.orchestration.resources import IngestionResource
@@ -78,6 +78,6 @@ def _build_raw_asset(source: str, dataset: str) -> dg.AssetsDefinition:
 
 raw_assets = [
     _build_raw_asset(source, dataset)
-    for source, datasets in DATASETS.items()
+    for source, datasets in ORCHESTRATED_DATASETS.items()
     for dataset in datasets
 ]
