@@ -276,16 +276,23 @@ staged/source=fbil/dataset=reference_rates/trade_date=D/<hash>__reference_rates_
 - A scheme with a NAV of 0 (108 on the last real day) has no change computed from it, because nothing can be compared with zero. A NAV that falls to 0 is shown as -100, which is what the feed says. Dividend (IDCW) payouts lower a NAV and are not adjusted for.
 - `assert_gld_mf_nav_daily_match_silver` proves no silver NAV is lost, invented or changed; a duplicating window or join would show up there.
 
+**Gold: `gld_fx_reference_rates` (D-83).** One row per currency per date: the rate in rupees per one unit beside the currency's previous rate, the calendar days between them (`days_since_prev_rate`) and the change in percent. It reads `slv_fbil__reference_rates` only and is built like `gld_mf_nav_daily`.
+
+- **The previous rate is the currency's last date with a rate, not "yesterday".** FBIL publishes on bank working days only, so a Monday's previous rate is the Friday's (a gap of 3), and a day that was never ingested shows as a wider gap. A scenario test covers both.
+- **Gold carries the converted rate only.** The published quote and its units stay in silver, where the conversion is checked against them, so a consumer meets one unambiguous per-unit rate and never the yen's per-100 figure. D-27 kept the published prices in the gold price table because the adjustment happens in gold; here the derivation happens in silver, so the audit columns live there.
+- **The percent change is computed in floating point and stored as a decimal**, as in the NAV table: it is a ratio, not a money value. The rates themselves stay exact decimals.
+- **Checks:** uniqueness per date and currency, `not_null` on the keys and the rate, `positive` on both rates and the gap, and an accepted list of currencies. A plausibility band on the change is LH-087.
+
 **Gold: `gld_market_daily_summary` (D-28).** One row per calendar date across the equity and fund feeds, which is the model whose lineage crosses sources. Equity totals (instruments, volume, turnover) cover every series; advancers, decliners, unchanged and the median return cover the EQ series only and use the adjusted returns, so a split day is not a crash. Beside them: how many schemes published a NAV and the median NAV change.
 
 - A date with only one feed keeps its row with the other feed's figures null (not zero, which would claim nothing traded), and `has_equity_data` and `has_nav_data` say which feeds are present. That is what separates a weekend, where only the fund feed has data, from a missing file; the late-data detection (FR-ING-07, LH-016) can build on it.
 - Because it reads both feeds, `dbt build` skips it when either feed fails a check, so the summary never publishes a day with one side wrong. The other feed's own gold table still builds.
 - `assert_gld_market_daily_summary_reconciles_with_sources` compares its counts and totals with the silver tables rather than the gold tables it reads, so the check does not trust the model it checks; a second check keeps advancers, decliners and unchanged within the instrument count.
-- FX turnover or USD/INR per day joins here once the FBIL feed exists (LH-080).
+- USD/INR per day is not in the summary yet. It joins together with the expected and missing flags in LH-091 (D-83): the summary would then wait for FBIL's checks as well, as it does for the other two feeds, and FBIL's bank holidays differ from NSE's closures, so the join needs the flags to tell a holiday from a missing file.
 
 The dbt project lives in `dbt/`. Its profile has four targets: `dev` (local DuckDB file in `DBT_DATA_DIR`, default `.data`), `ci` (in-memory DuckDB), `bench` (a separate local file) and `prod` (MotherDuck, with the token read from `MOTHERDUCK_TOKEN`). Only `prod` is remote, and a test guards that the benchmark target can never be. Each layer builds into a schema of the same name (`bronze`, `silver`, `gold`) on every target, through a `generate_schema_name` override.
 
-`gld_market_daily_summary` deliberately joins the feeds (equity turnover and breadth beside NAV coverage, and USD/INR per day once FBIL is available), so lineage paths cross sources and the agents must reason about which feed a failure came from.
+`gld_market_daily_summary` deliberately joins the feeds (equity turnover and breadth beside NAV coverage, and USD/INR per day once LH-091 adds it), so lineage paths cross sources and the agents must reason about which feed a failure came from.
 
 **Calendars (FR-ING-07, D-36).** To tell "no file expected" from "file missing" there must be a record of which days a source publishes that does not come from the files themselves; defined by what was stored, "expected" would always equal "present" and a missing file could never show.
 
@@ -316,7 +323,7 @@ The dbt project lives in `dbt/`. Its profile has four targets: `dev` (local Duck
   - **Price jumps (gold).** `unexplained_price_move` runs on `gld_equity_daily_prices`, whose returns are already restated for splits and bonuses, and treats any corporate action on the date as an explanation, because rights issues, demergers and buy-backs also move prices. Two tiers, because the certainty differs: a rise over 400% or a fall over 80% is a change of scale (prices a hundred times too large or small) and **fails the build**; a move over 25% in the EQ series, beyond the widest price band, only **warns**. The second leaves out other series, where real data showed legitimate moves of 25 to 33% (a rights entitlement, a trade-to-trade stock, an SME stock). A listing needs no exemption: its first-day moves stay within the exchange's bands, far inside the scale tier. Only the latest three dates are judged, so an old odd day cannot block the build for ever. Blind spot: a scale fault on a day with an unrelated corporate action for the same symbol is explained away.
   - **NAV jumps (gold).** `implausible_nav_move` on `gld_mf_nav_daily`, with the same two tiers (real data: the largest daily rise was 5% and the largest fall 13%, a dividend payout). A NAV of 0 is never judged, since segregated portfolios and matured schemes publish it on ordinary days.
   - **Limit.** These tests run after the gold table is built, so a failure stops what is downstream (the market summary) but the table itself already exists in the warehouse; consumers read only after a successful run, which the scheduled pipeline (LH-033) will enforce.
-  - **NAV not negative** is a column test (zero is valid: about 100 segregated-portfolio schemes publish exactly 0 on an ordinary day). The FX rate band waits for FBIL (LH-087).
+  - **NAV not negative** is a column test (zero is valid: about 100 segregated-portfolio schemes publish exactly 0 on an ordinary day). The FX rate band is LH-087, which `gld_fx_reference_rates` and its percent change now make possible.
 
 ## 6. Orchestration
 

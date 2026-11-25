@@ -186,6 +186,49 @@ models:
           NAV against the previous NAV, in percent. Null for the first date and when the
           previous NAV is 0, which some schemes publish on ordinary days.
 
+  - name: gld_fx_reference_rates
+    description: >
+      FBIL's rupee reference rates, one row per currency per date, each beside the currency's
+      previous rate and the change between them. Rates are rupees per one unit of the currency;
+      the yen is already converted from FBIL's per-100 quote in silver. The previous rate is the
+      currency's last date with a rate, not necessarily the day before: FBIL publishes on bank
+      working days only, and `days_since_prev_rate` says how wide the gap is.
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [rate_date, currency]
+    columns:
+      - name: rate_date
+        description: The date the rate applies to.
+        data_tests:
+          - not_null
+      - name: currency
+        description: ISO code of the currency, USD, GBP, EUR or JPY.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [USD, GBP, EUR, JPY]
+      - name: rate_inr
+        description: Rupees per one unit of the currency.
+        data_tests:
+          - not_null
+          - positive
+      - name: prev_rate_date
+        description: The currency's previous date with a rate. Null for its first date.
+      - name: prev_rate_inr
+        description: The rate on that date, in rupees per one unit. Null for the first date.
+        data_tests:
+          - positive
+      - name: days_since_prev_rate
+        description: Calendar days between the previous rate and this one. Null for the first date.
+        data_tests:
+          - positive
+      - name: rate_change_pct
+        description: >
+          The rate against the previous rate, in percent. Null for the first date. Plausibility
+          bands on this change are a separate check (LH-087).
+
   - name: gld_market_daily_summary
     description: >
       One row per date across both feeds: NSE equity totals and breadth beside AMFI NAV
