@@ -653,3 +653,162 @@ def test_the_latest_bhavcopy_of_a_day_is_kept_and_its_version_is_found_in_the_st
         "where symbol = 'RELIANCE'"
     ) == [(Decimal("3180.0000"), revised.sha256[:16])]
     assert result.query("select count(*) from bronze.brz_nse__cm_bhavcopy") == [(14,)]
+
+
+# --- FBIL reference rates ----------------------------------------------------------------
+
+BRONZE_FBIL = "brz_fbil__reference_rates"
+SILVER_FBIL = "slv_fbil__reference_rates"
+FBIL_CHAIN = (VERSIONS, BRONZE_FBIL, SILVER_FBIL)
+FBIL_DAY = date(2026, 10, 15)
+FBIL_CONVERSION_TEST = "assert_slv_fbil__reference_rates_conversion_matches_the_quote"
+FBIL_UNIQUE_TEST = "unique_combination_slv_fbil__reference_rates_rate_date__currency"
+CORRECTED_RATES = ("92.9700", "121.9337", "102.1504", "58.4300")
+
+
+def test_a_healthy_fbil_day_builds_through_silver_with_every_test_passing(
+    workspace: Workspace,
+) -> None:
+    workspace.store_fbil()
+
+    result = workspace.build(*FBIL_CHAIN)
+
+    assert result.success
+    assert result.failed() == set()
+    assert result.statuses[SILVER_FBIL] == "success"
+    assert result.statuses[FBIL_CONVERSION_TEST] == "pass"
+
+
+def test_a_day_becomes_one_row_per_currency_with_the_yen_per_unit_and_the_quote_kept(
+    workspace: Workspace,
+) -> None:
+    workspace.store_fbil()
+
+    result = workspace.build(*FBIL_CHAIN)
+
+    assert result.query(
+        "select currency, rate_inr, quoted_rate_inr, quoted_units "
+        "from silver.slv_fbil__reference_rates order by currency"
+    ) == [
+        ("EUR", Decimal("102.150400"), Decimal("102.1504"), 1),
+        ("GBP", Decimal("121.933700"), Decimal("121.9337"), 1),
+        ("JPY", Decimal("0.584300"), Decimal("58.4300"), 100),
+        ("USD", Decimal("92.969900"), Decimal("92.9699"), 1),
+    ]
+
+
+def test_rates_are_exact_decimals_never_floating_point(workspace: Workspace) -> None:
+    """The yen is converted by multiplying with 0.01; DuckDB's division would give a double."""
+    workspace.store_fbil()
+
+    result = workspace.build(*FBIL_CHAIN)
+
+    assert result.query(
+        "select distinct typeof(rate_inr), typeof(quoted_rate_inr) "
+        "from silver.slv_fbil__reference_rates"
+    ) == [("DECIMAL(18,6)", "DECIMAL(18,4)")]
+
+
+def test_every_stored_day_has_its_four_currencies(workspace: Workspace) -> None:
+    days = [date(2026, 10, 13), date(2026, 10, 14), FBIL_DAY]
+    for day in days:
+        workspace.store_fbil(trade_date=day)
+
+    result = workspace.build(*FBIL_CHAIN)
+
+    assert result.failed() == set()
+    assert result.query(
+        "select rate_date, count(*) from silver.slv_fbil__reference_rates group by 1 order by 1"
+    ) == [(day, 4) for day in days]
+
+
+@pytest.mark.parametrize(
+    ("original_arrives", "corrected_arrives", "expected_usd"),
+    [
+        pytest.param(EARLY, LATE, Decimal("92.970000"), id="the corrected version arrives last"),
+        pytest.param(LATE, EARLY, Decimal("92.969900"), id="the original arrives last and wins"),
+    ],
+)
+def test_the_fbil_version_that_arrived_last_is_the_one_silver_keeps(
+    workspace: Workspace,
+    original_arrives: float,
+    corrected_arrives: float,
+    expected_usd: Decimal,
+) -> None:
+    """Arrival time decides, not which version holds the higher or the newer-looking value."""
+    workspace.store_fbil(arrived_at=original_arrives)
+    workspace.store_fbil(
+        workspace.fbil_table(FBIL_DAY, CORRECTED_RATES), arrived_at=corrected_arrives
+    )
+
+    result = workspace.build(*FBIL_CHAIN)
+
+    assert result.success
+    assert result.query(
+        "select rate_inr from silver.slv_fbil__reference_rates where currency = 'USD'"
+    ) == [(expected_usd,)]
+
+
+def test_bronze_keeps_every_fbil_version_while_silver_keeps_one_row_per_currency(
+    workspace: Workspace,
+) -> None:
+    workspace.store_fbil(arrived_at=EARLY)
+    workspace.store_fbil(workspace.fbil_table(FBIL_DAY, CORRECTED_RATES), arrived_at=LATE)
+
+    result = workspace.build(*FBIL_CHAIN)
+
+    (bronze,) = result.query("select count(*) from bronze.brz_fbil__reference_rates")[0]
+    (silver,) = result.query("select count(*) from silver.slv_fbil__reference_rates")[0]
+    (versions,) = result.query(
+        "select count(*) from bronze.brz_meta__raw_file_versions where source = 'fbil'"
+    )[0]
+    assert (bronze, silver, versions) == (2, 4, 2)
+
+
+def test_a_bad_fbil_republication_stops_the_build_before_silver_runs(
+    workspace: Workspace,
+) -> None:
+    """A failed bronze test gates what follows, so a blank rate does not reach silver."""
+    workspace.store_fbil(arrived_at=EARLY)
+    workspace.store_fbil(
+        workspace.fbil_table(FBIL_DAY).replace(b"<td>92.9699</td>", b"<td></td>"), arrived_at=LATE
+    )
+
+    result = workspace.build(*FBIL_CHAIN)
+
+    assert not result.success
+    assert result.failed() == {"not_null_brz_fbil__reference_rates_usd_inr"}
+    assert result.statuses[SILVER_FBIL] == "skipped"
+
+
+def test_a_stale_versions_model_shows_up_as_duplicates_not_as_missing_rates(
+    workspace: Workspace,
+) -> None:
+    """If the versions model is not rebuilt, a new day's two versions both stay, and fail loudly."""
+    workspace.store_fbil(arrived_at=EARLY)
+    assert workspace.build(*FBIL_CHAIN).success
+
+    day_two = date(2026, 10, 16)  # a new day with two versions, and the versions model not rebuilt
+    workspace.store_fbil(trade_date=day_two)
+    workspace.store_fbil(workspace.fbil_table(day_two, CORRECTED_RATES), trade_date=day_two)
+    result = workspace.build(BRONZE_FBIL, SILVER_FBIL)
+
+    assert not result.success
+    assert result.failed() == {FBIL_UNIQUE_TEST}
+
+
+def test_a_wrong_yen_conversion_is_caught_against_the_quote_it_keeps(
+    workspace: Workspace,
+) -> None:
+    """The other checks pass a yen rate that is a hundred times off; this one does not."""
+    workspace.store_fbil()
+    built = workspace.build(*FBIL_CHAIN)
+    assert built.success
+
+    # What a faulty change to the conversion would produce: the yen divided by 10,000, not 100.
+    built.query(
+        "update silver.slv_fbil__reference_rates set rate_inr = 0.005843 where currency = 'JPY'"
+    )
+    damaged = workspace.build(FBIL_CONVERSION_TEST)  # only this check, on the damaged table
+
+    assert damaged.failed() == {FBIL_CONVERSION_TEST}
