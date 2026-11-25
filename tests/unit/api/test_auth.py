@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from lineageheal.api.app import create_app
 from lineageheal.api.dependencies import ApproverDep
@@ -484,3 +485,99 @@ def test_a_refused_sign_in_still_returns_to_the_page_and_says_why(
     )
 
     assert response.headers["location"] == DASHBOARD + "/incidents/7?a=1&sign_in=denied"
+
+
+# --- through the dashboard's proxy (LH-115) -------------------------------------------------------
+
+
+class StripPrefix:
+    """Forwards requests under `prefix` with it removed, as the dashboard's proxy does (D-61).
+
+    The test client's cookie jar then applies the browser's own path rules to the address the
+    visitor really uses, `/api/auth/...`, while the application sees `/auth/...`.
+    """
+
+    def __init__(self, app: ASGIApp, prefix: str) -> None:
+        self.app = app
+        self.prefix = prefix
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and scope["path"].startswith(self.prefix + "/"):
+            path = scope["path"][len(self.prefix) :]
+            scope = {**scope, "path": path, "raw_path": path.encode()}
+        await self.app(scope, receive, send)
+
+
+@pytest.fixture
+def browser(engine: Engine, clock: Clock) -> Iterator[TestClient]:
+    """A visitor who reaches the API at `http://localhost:5173/api`, the dashboard's origin."""
+    application = create_app(settings(api_public_url="http://localhost:5173/api"), clock=clock)
+    application.state.engine = engine
+    with TestClient(StripPrefix(application, "/api"), base_url="http://localhost:5173") as visitor:
+        yield visitor
+
+
+def _mock_github_user(github: respx.MockRouter) -> None:
+    github.post(TOKEN_URL).mock(
+        return_value=httpx.Response(200, json={"access_token": GITHUB_TOKEN})
+    )
+    github.get(USER_URL).mock(
+        return_value=httpx.Response(200, json={"id": 4_000_000_001, "login": "ada"})
+    )
+
+
+def test_the_sign_in_cookies_are_scoped_to_the_path_the_browser_uses(
+    browser: TestClient,
+) -> None:
+    started = browser.get(
+        "/api/auth/login", params={"next": "/incidents/7"}, follow_redirects=False
+    )
+
+    assert parse_qs(urlsplit(started.headers["location"]).query)["redirect_uri"] == [
+        "http://localhost:5173/api/auth/callback"
+    ]
+    cookies = started.headers.get_list("set-cookie")
+    assert len(cookies) == 2
+    assert all("Path=/api/auth" in cookie for cookie in cookies)
+
+
+def test_signing_in_through_the_dashboards_proxy_works(
+    browser: TestClient, github: respx.MockRouter
+) -> None:
+    """Before LH-115 the state cookie was not sent to `/api/auth/callback`: `invalid-state`."""
+    started = browser.get(
+        "/api/auth/login", params={"next": "/incidents/7"}, follow_redirects=False
+    )
+    state = parse_qs(urlsplit(started.headers["location"]).query)["state"][0]
+    _mock_github_user(github)
+
+    response = browser.get(
+        "/api/auth/callback", params={"code": "one-time", "state": state}, follow_redirects=False
+    )
+
+    assert response.status_code == 302
+    assert response.headers["location"] == DASHBOARD + "/incidents/7"
+    assert browser.get("/api/me").json()["login"] == "ada"
+
+
+@pytest.mark.parametrize("layout", ["direct", "proxied"])
+def test_the_sign_in_cookies_are_removed_once_sign_in_ends(
+    layout: str,
+    client: TestClient,
+    browser: TestClient,
+    github: respx.MockRouter,
+) -> None:
+    """Deleting a cookie only works with the path it was set with."""
+    visitor, prefix = (client, "") if layout == "direct" else (browser, "/api")
+    started = visitor.get(f"{prefix}/auth/login", follow_redirects=False)
+    state = parse_qs(urlsplit(started.headers["location"]).query)["state"][0]
+    _mock_github_user(github)
+    assert {STATE_COOKIE, NEXT_COOKIE} <= {c.name for c in visitor.cookies.jar}
+
+    visitor.get(
+        f"{prefix}/auth/callback",
+        params={"code": "one-time", "state": state},
+        follow_redirects=False,
+    )
+
+    assert {c.name for c in visitor.cookies.jar} == {SESSION_COOKIE}

@@ -137,6 +137,12 @@ the API through the dashboard's own origin. Set `API_PUBLIC_URL=http://localhost
 accepts several, so keep the `8000` one for the check above). The dev server forwards `/api/*`
 to the API with the prefix removed, which is what production's proxy will do too.
 
+The API scopes its sign-in cookies to the path of `API_PUBLIC_URL` (`/auth`, or `/api/auth` behind
+the proxy), so both layouts work. Whichever you choose, `API_PUBLIC_URL` must be the address the
+browser uses for the API, and `<API_PUBLIC_URL>/auth/callback` must be one of the App's callback
+URLs. Before LH-115 only the first layout worked; through the proxy GitHub's return failed with
+`invalid-state`.
+
 The dashboard and API are meant to share one origin (a dev proxy in Vite, a proxy on the
 dashboard host in production), so the session cookie stays `SameSite=Lax`; see D-60.
 

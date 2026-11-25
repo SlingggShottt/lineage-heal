@@ -7,6 +7,7 @@ from lineageheal.api.security import (
     TokenError,
     hash_session_id,
     new_token,
+    sign_in_cookie_path,
     tokens_match,
 )
 from lineageheal.core.errors import ConfigurationError
@@ -62,3 +63,24 @@ def test_a_tampered_token_is_refused() -> None:
 def test_a_short_secret_is_refused_with_advice() -> None:
     with pytest.raises(ConfigurationError, match="openssl rand"):
         TokenCipher("short")
+
+
+@pytest.mark.parametrize(
+    ("public_url", "expected"),
+    [
+        ("http://localhost:8000", "/auth"),
+        ("http://localhost:8000/", "/auth"),
+        ("http://localhost:5173/api", "/api/auth"),
+        ("http://localhost:5173/api/", "/api/auth"),
+        ("https://demo.example.com/lineageheal/api", "/lineageheal/api/auth"),
+        ("http://localhost:5173/api?x=1#top", "/api/auth"),
+        # Not a URL a browser could use; the cookie still gets the plain path, not a broken one.
+        ("localhost:5173/api", "/auth"),
+        ("", "/auth"),
+    ],
+)
+def test_the_sign_in_cookie_path_is_the_apis_public_path_plus_auth(
+    public_url: str, expected: str
+) -> None:
+    """The browser only sends a cookie to paths under the one it was set for (LH-115)."""
+    assert sign_in_cookie_path(public_url) == expected

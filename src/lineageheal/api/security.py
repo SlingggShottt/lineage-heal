@@ -10,6 +10,7 @@ import base64
 import hashlib
 import hmac
 import secrets
+from urllib.parse import urlsplit
 
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
@@ -81,6 +82,19 @@ class TokenCipher:
             return self._fernet.decrypt(token.encode()).decode()
         except InvalidToken as exc:
             raise TokenError("The stored token cannot be decrypted with this secret") from exc
+
+
+def sign_in_cookie_path(api_public_url: str) -> str:
+    """The path the sign-in cookies are scoped to: the API's public path plus `/auth`.
+
+    A browser sends a cookie only to paths under the one it was set for, and the path it uses is
+    the public one. Reached directly (`http://localhost:8000`) that is `/auth`; reached through
+    the dashboard's proxy (`http://localhost:5173/api`) it is `/api/auth`, although the API itself
+    only ever sees `/auth`. A fixed `/auth` made the state cookie vanish on the way back from
+    GitHub in the second layout (LH-115). A value that is not an absolute URL gives `/auth`.
+    """
+    path = urlsplit(api_public_url).path.rstrip("/")
+    return (path if path.startswith("/") else "") + "/auth"
 
 
 _MAX_NEXT_LENGTH = 512
