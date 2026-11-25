@@ -26,6 +26,7 @@ from lineageheal.agents.investigator.models import (
 from lineageheal.core.errors import StorageError
 from lineageheal.store.database import explain_database_error
 from lineageheal.store.models import AgentRun, Evidence, Incident
+from lineageheal.store.types import json_safe
 
 # Incidents an investigation may start on. Anything later (a fix proposed, a human decision)
 # must not be pulled back by a new search.
@@ -240,8 +241,9 @@ def _evidence_row(agent_run_id: int, found: FoundEvidence, at: datetime) -> Evid
     return Evidence(
         agent_run_id=agent_run_id,
         tool=found.tool,
-        arguments=found.arguments,
-        output=found.payload,
+        # A tool returns warehouse rows as they are, with `date` and `Decimal` values in them.
+        arguments=json_safe(found.arguments),
+        output=json_safe(found.payload),
         hypothesis=hypothesis,
         collected_at=found.collected_at or at,
     )

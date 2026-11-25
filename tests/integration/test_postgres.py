@@ -8,6 +8,7 @@ migrations applied to the server the project actually uses.
 import secrets
 from collections.abc import Iterator
 from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 
 import pytest
 from schema_drift import schema_differences
@@ -252,6 +253,51 @@ def test_an_investigation_round_trips_through_jsonb_and_the_run_constraints_hold
                 prompt_versions={},
             )
         )  # no error text
+    engine.dispose()
+
+
+def test_evidence_holding_dates_and_decimals_is_stored_on_postgres(database_url: str) -> None:
+    """A warehouse row holds `date` and `Decimal` values, which a tool returns as they are.
+
+    The unit tests run on SQLite, where a JSON value that cannot be encoded is reported as a
+    database error. psycopg encodes JSONB itself, inside the call, so on Postgres the same
+    value escapes as a bare TypeError: the failure the first live diagnosis hit (LH-113).
+    """
+    upgrade_database(database_url)
+    engine = create_db_engine(database_url)
+    with Session(engine) as session, session.begin():
+        incident = Incident(status="detected", summary="x", opened_at=T0, updated_at=T0)
+        session.add(incident)
+        session.flush()
+        incident_id = incident.id
+    repository = InvestigationRepository(engine)
+    found = Investigation(
+        status=InvestigationStatus.BUDGET_EXHAUSTED,
+        conclusion=None,
+        partial=None,
+        evidence=[
+            Evidence(
+                1,
+                "query_warehouse",
+                {"on": DAY},
+                True,
+                "c",
+                {"rows": [{"nav_date": DAY, "nav_inr": Decimal("21.8600")}]},
+            )
+        ],
+        llm_calls=1,
+        elapsed_seconds=1.0,
+    )
+
+    run_id = repository.start(incident_id, T0)
+    repository.finish(run_id, found, T0 + timedelta(minutes=1))
+    stored = repository.latest_for(incident_id)
+
+    assert stored is not None
+    assert stored.evidence[0]["arguments"] == {"on": "2026-10-16"}
+    assert stored.evidence[0]["output"] == {
+        "rows": [{"nav_date": "2026-10-16", "nav_inr": "21.8600"}]
+    }
     engine.dispose()
 
 
