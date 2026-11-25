@@ -91,7 +91,7 @@ make api                                 # http://localhost:8000/docs
 make web                                 # http://localhost:5173
 ```
 
-**GitHub sign-in (optional).** It needs the GitHub App set up as in `docs/repository_settings.md` §5, with its settings in `.env`. Set `API_PUBLIC_URL=http://localhost:8000` there, not the `.../5173/api` that the notes suggest: through the dashboard's proxy the sign-in cookie never comes back and GitHub's return fails with `invalid-state` (LH-115). Start the API after changing `.env`. The session lasts eight hours, and resetting the demo database signs everyone out.
+**GitHub sign-in (optional).** It needs the GitHub App set up as in `docs/repository_settings.md` §5, with its settings in `.env`. `API_PUBLIC_URL` is either `http://localhost:8000` (GitHub returns straight to the API) or `http://localhost:5173/api` (through the dashboard's proxy, as production will run); each needs its `/auth/callback` address registered in the App. Start the API after changing `.env`. The session lasts eight hours, and resetting the demo database signs everyone out.
 
 In a fifth terminal **without** the pasted block, start Dagster for the pipeline tour. Use port 3030 if something else holds 3000, as it does on the development machine:
 
@@ -344,8 +344,8 @@ Say: the pipeline, the lakehouse, the agents, the API and the dashboard are buil
 - **The healthy build warns `file_present_when_expected_slv_meta__calendar_`:** a day between two stored ones has no file where the calendar expects one. AMFI publishes every day, so store its report for `$H`; NSE and FBIL files are only expected on their own trading days.
 - **`error: Could not write to the ingestion log`:** Postgres is not running or the demo database is missing. Run `make up`, then the create-database and `lh db upgrade` steps.
 - **`error: The manifest has no compiled SQL`:** run the `dbt compile` line from the setup, then `lh dev seed-demo` again.
-- **Signing in ends with `invalid-state`:** `API_PUBLIC_URL` in `.env` is set to the dashboard's proxy. Set it to `http://localhost:8000`, restart the API and try again from the dashboard (LH-115).
-- **GitHub says the App must be configured with a callback URL:** add `http://localhost:8000/auth/callback` under "Add redirect URI" in the App's settings, and save.
+- **Signing in ends with `invalid-state`:** the browser did not send back the sign-in cookie. Either the sign-in took more than ten minutes, or it started on one address and ended on another (`localhost` against `127.0.0.1`, or an `API_PUBLIC_URL` that is not the address the browser uses). Set `API_PUBLIC_URL` to `http://localhost:8000` or `http://localhost:5173/api`, restart the API and start again from the dashboard's sign-in link.
+- **GitHub says the App must be configured with a callback URL:** add `<API_PUBLIC_URL>/auth/callback` (for example `http://localhost:8000/auth/callback`) under "Add redirect URI" in the App's settings, and save.
 - **The overview shows no feeds, or "late":** the demo database starts empty. Feeds appear as step 3 stores files.
 - **The dashboard shows no incidents:** `lh dev seed-demo --repository SlingggShottt/lineage-heal --first-number 9001` stores the three samples, and `--reset` removes exactly those.
 - **Port 3000 is taken:** Dagster here runs on 3030, as in the setup. Port 5173 in use means an earlier dashboard server is still running; stop it before `make web`.

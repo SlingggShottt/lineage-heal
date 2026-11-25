@@ -33,6 +33,7 @@ from lineageheal.api.security import (
     hash_session_id,
     new_token,
     safe_next_path,
+    sign_in_cookie_path,
     tokens_match,
 )
 from lineageheal.core.settings import Settings
@@ -96,11 +97,12 @@ def login(
     response = RedirectResponse(oauth.authorize_url(state), status_code=302)
     # Always Lax whatever the session cookie uses: GitHub sends the browser back with a
     # cross-site navigation, which a Strict cookie would not accompany.
+    path = sign_in_cookie_path(settings.api_public_url)
     response.set_cookie(
         STATE_COOKIE,
         state,
         max_age=STATE_LIFETIME_SECONDS,
-        path="/auth",
+        path=path,
         httponly=True,
         secure=_secure(settings),
         samesite="lax",
@@ -109,7 +111,7 @@ def login(
         NEXT_COOKIE,
         safe_next_path(next),
         max_age=STATE_LIFETIME_SECONDS,
-        path="/auth",
+        path=path,
         httponly=True,
         secure=_secure(settings),
         samesite="lax",
@@ -221,6 +223,8 @@ def _back_to_dashboard(
     if problem:
         target += ("&" if "?" in destination else "?") + f"sign_in={problem}"
     response = RedirectResponse(target, status_code=302)
-    response.delete_cookie(STATE_COOKIE, path="/auth")
-    response.delete_cookie(NEXT_COOKIE, path="/auth")
+    # The same path they were set with, or the browser keeps them.
+    path = sign_in_cookie_path(settings.api_public_url)
+    response.delete_cookie(STATE_COOKIE, path=path)
+    response.delete_cookie(NEXT_COOKIE, path=path)
     return response
