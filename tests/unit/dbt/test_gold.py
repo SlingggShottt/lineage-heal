@@ -439,3 +439,135 @@ def test_a_failing_feed_stops_the_summary_but_not_the_other_feeds_gold_model(
     assert result.statuses[GOLD_PRICES] == "success"
     assert result.statuses["gld_market_daily_summary"] == "skipped"
     assert result.statuses["gld_mf_nav_daily"] == "skipped"
+
+
+# --- FX reference rates ------------------------------------------------------------------
+
+FX_CHAIN = (
+    "brz_meta__raw_file_versions",
+    "brz_fbil__reference_rates",
+    "slv_fbil__reference_rates",
+    "gld_fx_reference_rates",
+)
+FRIDAY, MONDAY, TUESDAY = date(2026, 10, 16), date(2026, 10, 19), date(2026, 10, 20)
+EARLY = 1_700_000_000.0  # arrival times in seconds since 1970; only their order matters
+LATE = EARLY + 3600
+
+# What gold says about one currency on one day: (previous date, previous rate, days since, change)
+FxRow = tuple[date | None, Decimal | None, int | None, Decimal | None]
+# Rupees per USD, GBP and EUR, and per 100 JPY, as FBIL publishes them
+Rates = tuple[str, str, str, str]
+
+
+def store_rates(workspace: Workspace, days: dict[date, Rates]) -> None:
+    """Store an FBIL file for each day, with the given published rates."""
+    for day, rates in days.items():
+        workspace.store_fbil(workspace.fbil_table(day, rates), trade_date=day)
+
+
+def fx_rows(result: BuildResult, currency: str) -> dict[date, FxRow]:
+    rows = result.query(
+        "select rate_date, prev_rate_date, prev_rate_inr, days_since_prev_rate, rate_change_pct "
+        "from gold.gld_fx_reference_rates where currency = ? order by rate_date",
+        currency,
+    )
+    return {rate_date: (*rest,) for rate_date, *rest in rows}  # type: ignore[misc]
+
+
+def test_each_rate_is_compared_with_the_same_currencys_previous_rate(
+    workspace: Workspace,
+) -> None:
+    store_rates(
+        workspace,
+        {
+            DAY_1: ("100.0000", "120.0000", "110.0000", "50.0000"),
+            DAY_2: ("102.0000", "120.0000", "99.0000", "50.5000"),
+            DAY_3: ("101.4900", "126.0000", "99.0000", "50.0000"),
+        },
+    )
+
+    result = workspace.build(*FX_CHAIN)
+
+    assert result.success
+    assert result.failed() == set()
+    assert fx_rows(result, "USD") == {
+        DAY_1: (None, None, None, None),
+        DAY_2: (DAY_1, Decimal("100"), 1, Decimal("2")),
+        DAY_3: (DAY_2, Decimal("102"), 1, Decimal("-0.5")),
+    }
+    assert fx_rows(result, "GBP")[DAY_3] == (DAY_2, Decimal("120"), 1, Decimal("5"))
+    # The yen is compared per one yen; a change in percent does not depend on the unit.
+    assert fx_rows(result, "JPY") == {
+        DAY_1: (None, None, None, None),
+        DAY_2: (DAY_1, Decimal("0.5"), 1, Decimal("1")),
+        DAY_3: (DAY_2, Decimal("0.505"), 1, Decimal("-0.9901")),
+    }
+
+
+def test_a_weekend_is_a_wider_gap_not_a_missing_rate(workspace: Workspace) -> None:
+    """FBIL publishes on bank working days, so a Monday's previous rate is the Friday's."""
+    rates: Rates = ("100.0000", "120.0000", "110.0000", "50.0000")
+    store_rates(workspace, {FRIDAY: rates, MONDAY: rates, TUESDAY: rates})
+
+    result = workspace.build(*FX_CHAIN)
+
+    assert result.success
+    usd = fx_rows(result, "USD")
+    assert usd[MONDAY][0:3] == (FRIDAY, Decimal("100"), 3)
+    assert usd[TUESDAY][0:3] == (MONDAY, Decimal("100"), 1)
+
+
+def test_published_rates_reach_gold_as_silver_has_them(workspace: Workspace) -> None:
+    store_rates(
+        workspace,
+        {
+            DAY_1: ("92.9699", "121.9337", "102.1504", "58.4300"),
+            DAY_2: ("93.3461", "122.6577", "102.3770", "58.5200"),
+        },
+    )
+
+    result = workspace.build(*FX_CHAIN)
+
+    assert result.success
+    assert result.query(
+        "select rate_date, currency, rate_inr from gold.gld_fx_reference_rates order by 1, 2"
+    ) == result.query(
+        "select rate_date, currency, rate_inr from silver.slv_fbil__reference_rates order by 1, 2"
+    )
+
+
+def test_a_corrected_republication_changes_the_next_days_previous_rate(
+    workspace: Workspace,
+) -> None:
+    """Version selection flows through: gold compares with the corrected figure, not the first."""
+    workspace.store_fbil(
+        workspace.fbil_table(DAY_1, ("100.0000", "120.0000", "110.0000", "50.0000")),
+        trade_date=DAY_1,
+        arrived_at=EARLY,
+    )
+    workspace.store_fbil(
+        workspace.fbil_table(DAY_2, ("102.0000", "120.0000", "110.0000", "50.0000")),
+        trade_date=DAY_2,
+    )
+    workspace.store_fbil(
+        workspace.fbil_table(DAY_1, ("101.0000", "120.0000", "110.0000", "50.0000")),
+        trade_date=DAY_1,
+        arrived_at=LATE,
+    )
+
+    result = workspace.build(*FX_CHAIN)
+
+    assert result.success
+    assert fx_rows(result, "USD")[DAY_2] == (DAY_1, Decimal("101"), 1, Decimal("0.9901"))
+
+
+def test_a_blank_rate_stops_the_build_before_gold(workspace: Workspace) -> None:
+    """A failed bronze check gates what follows, so a damaged rate never reaches gold."""
+    workspace.store_fbil(
+        workspace.fbil_table(DAY_1).replace(b"<td>92.9699</td>", b"<td></td>"), trade_date=DAY_1
+    )
+
+    result = workspace.build(*FX_CHAIN)
+
+    assert result.failed() == {"not_null_brz_fbil__reference_rates_usd_inr"}
+    assert result.statuses["gld_fx_reference_rates"] == "skipped"
