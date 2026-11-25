@@ -38,7 +38,7 @@ def _is_transient(error: BaseException) -> bool:
 
 
 class PoliteFetcher:
-    """GET requests with a minimum interval, a project User-Agent and retries."""
+    """GET and POST requests with a minimum interval, a project User-Agent and retries."""
 
     def __init__(
         self,
@@ -116,18 +116,55 @@ class PoliteFetcher:
         Raises:
             SourceUnavailableError: The request still failed after all attempts.
         """
+        return self._send("GET", url, params=params)
+
+    def post(
+        self,
+        url: str,
+        data: Mapping[str, str],
+        headers: Mapping[str, str] | None = None,
+    ) -> httpx.Response:
+        """Submit a form, retrying transient failures.
+
+        Spacing, retries and error reporting are those of `get`, and the client's cookies carry
+        over from one call to the next, so a session started by a GET continues. A retry sends the
+        form again, so use this only for requests that are safe to repeat, such as the read-only
+        queries of a public archive.
+
+        Args:
+            url: The URL to post to.
+            data: Form fields, sent URL-encoded.
+            headers: Headers for this request only, added to the client's defaults.
+
+        Returns:
+            The response.
+
+        Raises:
+            SourceUnavailableError: The request still failed after all attempts.
+        """
+        return self._send("POST", url, data=data, headers=headers)
+
+    def _send(
+        self,
+        method: str,
+        url: str,
+        *,
+        params: Mapping[str, str] | None = None,
+        data: Mapping[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> httpx.Response:
         retrying = Retrying(
             stop=stop_after_attempt(self._max_attempts),
             wait=wait_exponential(multiplier=2, min=2, max=30),
             retry=retry_if_exception(_is_transient),
             sleep=self._sleep,
             before_sleep=lambda state: log.warning(
-                "request_retry_scheduled", url=url, attempt=state.attempt_number
+                "request_retry_scheduled", method=method, url=url, attempt=state.attempt_number
             ),
             reraise=True,
         )
         try:
-            return retrying(self._attempt, url, params)
+            return retrying(self._attempt, method, url, params, data, headers)
         except (httpx.TransportError, _TransientStatusError) as exc:
             reason = (
                 f"HTTP {exc.status_code}"
@@ -135,12 +172,19 @@ class PoliteFetcher:
                 else (type(exc).__name__)
             )
             raise SourceUnavailableError(
-                f"GET {url} failed after {self._max_attempts} attempts: {reason}"
+                f"{method} {url} failed after {self._max_attempts} attempts: {reason}"
             ) from exc
 
-    def _attempt(self, url: str, params: Mapping[str, str] | None) -> httpx.Response:
+    def _attempt(
+        self,
+        method: str,
+        url: str,
+        params: Mapping[str, str] | None,
+        data: Mapping[str, str] | None,
+        headers: Mapping[str, str] | None,
+    ) -> httpx.Response:
         self._wait_for_turn()
-        response = self._client.get(url, params=params)
+        response = self._client.request(method, url, params=params, data=data, headers=headers)
         if response.status_code in _TRANSIENT_STATUSES:
             raise _TransientStatusError(response.status_code)
         return response

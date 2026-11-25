@@ -1,4 +1,6 @@
-"""FR-ING-10: retries with backoff and a minimum interval between requests."""
+"""FR-ING-10: retries with backoff and a minimum interval between requests, for GET and POST."""
+
+from urllib.parse import parse_qs
 
 import httpx
 import pytest
@@ -156,3 +158,90 @@ def test_real_client_identifies_the_project_and_sets_explicit_timeouts() -> None
     assert "lineageheal" in USER_AGENT
     assert request.extensions["timeout"]["connect"] == 10.0
     assert request.extensions["timeout"]["read"] == 60.0
+
+
+@respx.mock
+def test_a_form_is_posted_url_encoded_with_the_headers_given_for_it(fake_time: FakeTime) -> None:
+    route = respx.post(URL).mock(return_value=httpx.Response(200, content=b"table"))
+
+    response = make_fetcher(fake_time).post(
+        URL, {"__EVENTTARGET": "download", "txtFromDate": "20/11/2026"}, headers={"Referer": URL}
+    )
+
+    request = route.calls.last.request
+    assert response.content == b"table"
+    assert request.headers["content-type"] == "application/x-www-form-urlencoded"
+    assert request.headers["referer"] == URL
+    assert parse_qs(request.content.decode()) == {
+        "__EVENTTARGET": ["download"],
+        "txtFromDate": ["20/11/2026"],
+    }
+
+
+@respx.mock
+def test_headers_given_to_one_post_do_not_stick_to_later_requests(fake_time: FakeTime) -> None:
+    respx.post(URL).mock(return_value=httpx.Response(200))
+    get_route = respx.get(URL).mock(return_value=httpx.Response(200))
+    fetcher = make_fetcher(fake_time)
+
+    fetcher.post(URL, {"a": "1"}, headers={"Referer": URL})
+    fetcher.get(URL)
+
+    assert "referer" not in get_route.calls.last.request.headers
+
+
+@respx.mock
+def test_a_post_is_retried_after_a_transient_status_and_sends_the_form_again(
+    fake_time: FakeTime,
+) -> None:
+    route = respx.post(URL).mock(
+        side_effect=[httpx.Response(503), httpx.Response(200, content=b"ok")]
+    )
+
+    response = make_fetcher(fake_time).post(URL, {"a": "1"})
+
+    assert response.content == b"ok"
+    assert fake_time.sleeps == [2]
+    assert [parse_qs(call.request.content.decode()) for call in route.calls] == [
+        {"a": ["1"]},
+        {"a": ["1"]},
+    ]
+
+
+@respx.mock
+def test_a_post_that_keeps_failing_names_the_method_and_the_url(fake_time: FakeTime) -> None:
+    route = respx.post(URL).mock(return_value=httpx.Response(503))
+
+    with pytest.raises(
+        SourceUnavailableError, match=rf"POST {URL} failed after 4 attempts: HTTP 503"
+    ):
+        make_fetcher(fake_time, max_attempts=4).post(URL, {"a": "1"})
+
+    assert route.call_count == 4
+
+
+@respx.mock
+def test_gets_and_posts_share_one_minimum_interval(fake_time: FakeTime) -> None:
+    respx.get(URL).mock(return_value=httpx.Response(200))
+    respx.post(URL).mock(return_value=httpx.Response(200))
+    fetcher = make_fetcher(fake_time, min_interval=3.0)
+
+    fetcher.get(URL)
+    fetcher.post(URL, {"a": "1"})
+    fetcher.get(URL)
+
+    assert fake_time.sleeps == [3.0, 3.0]
+
+
+@respx.mock
+def test_a_session_cookie_from_a_get_carries_over_to_a_post(fake_time: FakeTime) -> None:
+    respx.get(URL).mock(
+        return_value=httpx.Response(200, headers={"set-cookie": "ASP.NET_SessionId=abc123; path=/"})
+    )
+    post_route = respx.post(URL).mock(return_value=httpx.Response(200))
+    fetcher = make_fetcher(fake_time)
+
+    fetcher.get(URL)
+    fetcher.post(URL, {"a": "1"})
+
+    assert post_route.calls.last.request.headers["cookie"] == "ASP.NET_SessionId=abc123"
