@@ -137,6 +137,7 @@ uv run lineageheal dev github-smoke              # signs in as the GitHub App an
 uv run lineageheal dev seed-demo                 # three sample incidents in the local database for the dashboard, no model call; needs `dbt compile`, DATABASE_URL (local only) and GITHUB_REPOSITORY; --reset removes them
 
 uv run lineageheal bench list                    # the fault corpus (benchmark/cases): counts, ids; --split, --fault-class
+uv run lineageheal bench report --run-id r1      # score a run: report.json and report.md in its folder (test split; held-out apart)
 uv run lineageheal bench run --run-id r1 --system none --limit 3   # build fault sandboxes and run systems; results in BENCH_DIR; rerun the id to resume; needs the feeds backfilled around each fault date
 
 # Quality gates — all must pass before proposing a commit

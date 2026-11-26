@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -14,8 +15,10 @@ from lineageheal.agents.fixer import Sandbox
 from lineageheal.benchmark.corpus import summarise
 from lineageheal.benchmark.knowledge import build_index
 from lineageheal.benchmark.loader import load_cases
+from lineageheal.benchmark.metrics import compute_metrics
 from lineageheal.benchmark.models import System
 from lineageheal.benchmark.provenance import build_manifest
+from lineageheal.benchmark.report import build_report, render_markdown, write_report
 from lineageheal.benchmark.results import ResultStore
 from lineageheal.benchmark.runner import BenchmarkRunner, NoneSystem, scratch_folder
 from lineageheal.benchmark.scenario import ScenarioBuilder
@@ -23,7 +26,7 @@ from lineageheal.benchmark.spec import FaultCase
 from lineageheal.benchmark.systems.lineageheal import LineageHealSystem
 from lineageheal.benchmark.systems.plain_llm import PlainLLMSystem
 from lineageheal.benchmark.systems.rule_based import RuleBasedSystem
-from lineageheal.core.errors import LineageHealError
+from lineageheal.core.errors import BenchmarkError, LineageHealError
 from lineageheal.core.settings import Settings, get_settings
 from lineageheal.ingestion.object_stores import LocalObjectStore
 from lineageheal.llm.factory import build_client
@@ -31,6 +34,7 @@ from lineageheal.rag.embeddings import build_embedder
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_CASES = REPO_ROOT / "benchmark" / "cases"
+DEFAULT_HELDOUT = REPO_ROOT / "benchmark" / "heldout"
 
 
 @dataclass(frozen=True)
@@ -107,6 +111,38 @@ def list_cases(
     typer.echo(f"by feed: {dict(sorted(summary.by_source.items()))}")
     for case in _select(cases, split, fault_class, None):
         typer.echo(f"{case.id:28} {case.split:5} {case.trade_date} {case.injection.type}")
+
+
+@bench_app.command("report")
+def report(
+    run_id: Annotated[str, typer.Option(help="The run to score.")],
+    cases_dir: CasesOption = DEFAULT_CASES,
+    heldout_dir: Annotated[
+        Path, typer.Option("--heldout", help="Folder of held-out replay specifications.")
+    ] = DEFAULT_HELDOUT,
+) -> None:
+    """Score a run and write `report.json` and `report.md` into its folder.
+
+    Only the test split is scored; held-out replay results get their own table. Safe to run at
+    any time, including on a run that has not finished: it reports what is stored.
+    """
+    settings = get_settings()
+    try:
+        store = ResultStore(settings.bench_dir / "results", run_id)
+        manifest = store.read_manifest()
+        specs = {c.id: c for folder in (cases_dir, heldout_dir) if folder.is_dir()
+                 for c in load_cases(folder)}  # fmt: skip
+        stored = store.load_all()
+        if not stored:
+            raise BenchmarkError(f"run {run_id} has no results yet")
+        metrics = compute_metrics(stored, specs, order=manifest.get("systems") or ())
+        data = build_report(metrics, manifest, generated_at=datetime.now(UTC))
+        json_path, md_path = write_report(store.root, data)
+    except LineageHealError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(render_markdown(data))
+    typer.echo(f"written: {json_path} and {md_path}")
 
 
 @bench_app.command("run")
