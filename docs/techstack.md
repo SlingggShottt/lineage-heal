@@ -121,7 +121,7 @@ OpenLineage events are stored as JSONB in Postgres, and the column-level graph i
 |---|---|---|
 | Investigation and patch writing | Gemini 3.5 Flash | Google AI Studio (free tier) |
 | Lightweight steps (classification, summaries) | Gemini 3.1 Flash-Lite | Google AI Studio (free tier) |
-| Fallback when Gemini is rate-limited or down | `openai/gpt-oss-120b` | Groq (free tier) |
+| Fallback when Gemini is rate-limited or down | `openai/gpt-oss-120b` | Groq (free tier). The order is `LLM_PROVIDER_ORDER`; timeouts, deadline and cooldown are `LLM_ATTEMPT_TIMEOUT_SECONDS`, `LLM_CALL_DEADLINE_SECONDS` and `LLM_COOLDOWN_SECONDS` (LH-114) |
 
 Prompts are rendered with **Jinja2** (BSD-3-Clause, in a sandbox) and their front matter is read with **PyYAML** (MIT); both were already installed through other packages and are now declared directly. Alternatives: stdlib `string.Template` (no filters, no undefined-variable control) and a hand-written front-matter parser. PyYAML ships no type hints, so mypy ignores its import rather than adding a stubs package.
 

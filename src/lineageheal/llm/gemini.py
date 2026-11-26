@@ -42,6 +42,7 @@ class GeminiProvider:
         light_model: str,
         client: httpx.Client | None = None,
         base_url: str = _BASE_URL,
+        timeout_seconds: float = 90.0,
     ) -> None:
         """Create a provider.
 
@@ -53,10 +54,15 @@ class GeminiProvider:
             client: An httpx client; tests pass one backed by respx. When omitted, a client with
                 explicit timeouts is created.
             base_url: The API root, overridable for tests.
+            timeout_seconds: How long one request may wait for the provider to answer or send
+                more of its answer, when no client is given. A provider that goes quiet then
+                counts as failed instead of holding up the investigation.
         """
         self._key = api_key
         self._models = {ModelTier.STANDARD: standard_model, ModelTier.LIGHT: light_model}
-        self._client = client or httpx.Client(timeout=httpx.Timeout(90.0, connect=10.0))
+        self._client = client or httpx.Client(
+            timeout=httpx.Timeout(timeout_seconds, connect=min(10.0, timeout_seconds))
+        )
         self._base_url = base_url.rstrip("/")
 
     def complete(self, request: LLMRequest) -> Completion:

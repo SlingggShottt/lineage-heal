@@ -179,3 +179,116 @@ def test_usage_counts_each_answered_call_and_its_tokens_but_not_failures() -> No
     assert llm.usage.calls == 1  # the failed attempt was not billed
     assert llm.usage.input_tokens == len(REQUEST.prompt.split())
     assert llm.usage.output_tokens == 3
+
+
+# -- an outage should cost seconds, not minutes (LH-114) ---------------------------------------
+
+
+class Clock:
+    """A clock the tests move by hand; sleeping advances it, so waits are visible as time."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.now += seconds
+
+
+def timed(
+    *providers: FakeProvider,
+    clock: Clock,
+    attempts: int = 3,
+    deadline: float | None = None,
+    cooldown: float = 0.0,
+) -> LLMClient:
+    return LLMClient(
+        [Endpoint(p, TokenBucket(6000, capacity=100)) for p in providers],
+        attempts=attempts,
+        base_delay_seconds=2.0,
+        sleep=clock.sleep,
+        call_deadline_seconds=deadline,
+        cooldown_seconds=cooldown,
+        clock=clock,
+    )
+
+
+def test_a_provider_is_not_retried_past_the_deadline_of_one_call() -> None:
+    clock = Clock()
+    slow = FakeProvider("slow", [ServerError("down")] * 5)
+    fine = FakeProvider("fine", ["ok"])
+
+    answer = timed(slow, fine, clock=clock, attempts=5, deadline=5.0).complete(REQUEST)
+
+    assert answer.text == "ok"
+    # Waits are 2 then 4 seconds: a third attempt would start after 6, past the deadline of 5.
+    assert len(slow.requests) == 2
+    assert clock.now == 2.0
+
+
+def test_without_a_deadline_every_attempt_is_made() -> None:
+    clock = Clock()
+    slow = FakeProvider("slow", [ServerError("down")] * 5)
+
+    with pytest.raises(ServerError):
+        timed(slow, clock=clock, attempts=4).complete(REQUEST)
+
+    assert len(slow.requests) == 4
+
+
+def test_a_provider_that_failed_all_its_attempts_is_passed_over_for_the_cooldown() -> None:
+    clock = Clock()
+    flaky = FakeProvider("flaky", [ServerError("down")] * 3 + ["back"])
+    steady = FakeProvider("steady", ["one", "two", "three"])
+    llm = timed(flaky, steady, clock=clock, cooldown=60.0)
+
+    first = llm.complete(REQUEST)
+    clock.now += 10
+    second = llm.complete(REQUEST)
+    clock.now += 100
+    third = llm.complete(REQUEST)
+
+    assert (first.provider, second.provider, third.provider) == ("steady", "steady", "flaky")
+    assert len(flaky.requests) == 4  # three failures, then nothing while cooling, then one try
+
+
+def test_a_success_ends_the_cooldown_so_the_provider_is_preferred_again() -> None:
+    clock = Clock()
+    flaky = FakeProvider("flaky", [ServerError("down")] * 3 + ["back", "again"])
+    steady = FakeProvider("steady", ["one", "two"])
+    llm = timed(flaky, steady, clock=clock, cooldown=30.0)
+
+    llm.complete(REQUEST)
+    clock.now += 31
+    back = llm.complete(REQUEST)
+    again = llm.complete(REQUEST)  # no waiting: the success cleared the cooldown
+
+    assert (back.provider, again.provider) == ("flaky", "flaky")
+
+
+def test_when_every_provider_is_cooling_they_are_all_still_tried() -> None:
+    clock = Clock()
+    a = FakeProvider("a", [ServerError("down")] * 3 + ["a back"])
+    b = FakeProvider("b", [ServerError("down")] * 3 + ["b back"])
+    llm = timed(a, b, clock=clock, cooldown=60.0)
+
+    with pytest.raises(ServerError):
+        llm.complete(REQUEST)
+    clock.now += 5  # still inside both cooldowns
+    answer = llm.complete(REQUEST)
+
+    assert answer.text == "a back"  # the outage ended and was noticed, in the original order
+
+
+def test_a_rejected_request_does_not_start_a_cooldown() -> None:
+    clock = Clock()
+    picky = FakeProvider("picky", [BadRequestError("no"), "fine"])
+    other = FakeProvider("other", ["other"])
+    llm = timed(picky, other, clock=clock, cooldown=60.0)
+
+    with pytest.raises(BadRequestError):
+        llm.complete(REQUEST)
+
+    assert llm.complete(REQUEST).provider == "picky"

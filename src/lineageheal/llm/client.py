@@ -17,7 +17,7 @@ from dataclasses import dataclass, replace
 
 import structlog
 from pydantic import BaseModel, ValidationError
-from tenacity import RetryCallState, Retrying, retry_if_exception, stop_after_attempt
+from tenacity import RetryCallState, Retrying, retry_if_exception
 
 from lineageheal.llm.limiter import TokenBucket
 from lineageheal.llm.provider import Provider
@@ -63,6 +63,9 @@ class LLMClient:
         attempts: int = 3,
         base_delay_seconds: float = 2.0,
         sleep: Callable[[float], None] = time.sleep,
+        call_deadline_seconds: float | None = None,
+        cooldown_seconds: float = 0.0,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         """Create a client.
 
@@ -71,6 +74,13 @@ class LLMClient:
             attempts: Tries per provider for a transient failure before moving on.
             base_delay_seconds: First backoff; each further try doubles it.
             sleep: Blocks for the given seconds (injected so tests do not wait).
+            call_deadline_seconds: Longest to keep retrying one provider for one call; no new
+                attempt starts once it has passed. None means only `attempts` limits it. A call
+                already in flight is bounded by the provider's own timeout.
+            cooldown_seconds: How long a provider that failed all its attempts is passed over
+                in favour of the next, so a struggling provider is not paid for on every call.
+                Zero never skips one.
+            clock: Monotonic seconds (injected so tests need no real time).
         """
         if not endpoints:
             raise ValueError("at least one endpoint is required")
@@ -78,6 +88,10 @@ class LLMClient:
         self._attempts = attempts
         self._base_delay = base_delay_seconds
         self._sleep = sleep
+        self._deadline = call_deadline_seconds
+        self._cooldown = cooldown_seconds
+        self._clock = clock
+        self._cooling_until: dict[int, float] = {}
         # Cumulative; the benchmark takes the difference around one fault to cost its systems.
         self.usage = Usage()
 
@@ -89,8 +103,10 @@ class LLMClient:
             LLMError: Every provider failed; the last provider's error is raised.
         """
         last: LLMError | None = None
-        for position, endpoint in enumerate(self._endpoints):
-            has_next = position < len(self._endpoints) - 1
+        order = self._order()
+        for position, index in enumerate(order):
+            endpoint = self._endpoints[index]
+            has_next = position < len(order) - 1
             try:
                 completion = self._call(endpoint, request, has_next=has_next)
             except (RateLimitedError, ServerError) as error:
@@ -101,7 +117,10 @@ class LLMClient:
                     falling_back=has_next,
                 )
                 last = error
+                if self._cooldown > 0:
+                    self._cooling_until[index] = self._clock() + self._cooldown
                 continue
+            self._cooling_until.pop(index, None)
             self.usage.calls += 1
             self.usage.input_tokens += completion.input_tokens
             self.usage.output_tokens += completion.output_tokens
@@ -148,6 +167,17 @@ class LLMClient:
             return StructuredCompletion(outcome, (first, second))
         raise StructuredOutputError(f"the reply did not fit {schema.__name__}: {outcome}")
 
+    def _order(self) -> list[int]:
+        """Providers in the order to try them: those not cooling down first, then the rest.
+
+        A provider that failed recently goes to the back rather than out, so an outage that has
+        ended is noticed, and if every provider is cooling they are all still tried.
+        """
+        now = self._clock()
+        ready = [i for i in range(len(self._endpoints)) if self._cooling_until.get(i, 0.0) <= now]
+        cooling = [i for i in range(len(self._endpoints)) if i not in ready]
+        return ready + cooling
+
     def _call(self, endpoint: Endpoint, request: LLMRequest, *, has_next: bool) -> Completion:
         def should_retry(error: BaseException) -> bool:
             # With another provider to go to, waiting out a quota is wasted time.
@@ -155,8 +185,16 @@ class LLMClient:
                 return not has_next
             return isinstance(error, ServerError)
 
+        deadline = None if self._deadline is None else self._clock() + self._deadline
+
+        def stop(state: RetryCallState) -> bool:
+            if state.attempt_number >= self._attempts:
+                return True
+            # Do not start a wait that would carry the call past its deadline.
+            return deadline is not None and self._clock() + self._wait(state) >= deadline
+
         retrying = Retrying(
-            stop=stop_after_attempt(self._attempts),
+            stop=stop,
             retry=retry_if_exception(should_retry),
             wait=self._wait,
             sleep=self._sleep,
