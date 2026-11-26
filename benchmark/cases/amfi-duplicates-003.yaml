@@ -3,8 +3,8 @@ id: amfi-duplicates-003
 class: duplicates
 source: amfi
 dataset: navall
-trade_date: 2024-09-24
-split: seed
+trade_date: 2024-12-21
+split: test
 seed: 832
 injection:
   type: duplicate_row

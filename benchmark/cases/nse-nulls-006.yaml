@@ -3,7 +3,7 @@ id: nse-nulls-006
 class: nulls
 source: nse
 dataset: cm_bhavcopy
-trade_date: 2025-06-12
+trade_date: 2026-02-05
 split: test
 seed: 428
 injection:

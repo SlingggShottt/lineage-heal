@@ -3,7 +3,7 @@ id: nse-nulls-005
 class: nulls
 source: nse
 dataset: cm_bhavcopy
-trade_date: 2025-02-21
+trade_date: 2025-09-09
 split: test
 seed: 283
 injection:

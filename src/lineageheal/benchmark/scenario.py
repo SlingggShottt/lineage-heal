@@ -27,7 +27,7 @@ from lineageheal.benchmark.spec import FaultCase
 from lineageheal.core.errors import BenchmarkError
 from lineageheal.ingestion.object_stores import LocalObjectStore
 from lineageheal.ingestion.raw_zone import ObjectStore, RawZone
-from lineageheal.ingestion.staging import ZipStager
+from lineageheal.ingestion.staging import HtmlTableStager, ZipStager
 from lineageheal.orchestration.run_artifacts import record_dbt_run
 
 log = structlog.get_logger(__name__)
@@ -45,6 +45,7 @@ FEEDS: tuple[tuple[str, str], ...] = (
     ("amfi", "navall"),
     ("nse", "cm_bhavcopy"),
     ("nse", "corporate_actions"),
+    ("fbil", "reference_rates"),
 )
 REFERENCE = ("nse", "security_master")  # one file, no history: the newest on or before the date
 
@@ -112,7 +113,7 @@ class ScenarioBuilder:
     def _fill(self, case: FaultCase, sandbox: ObjectStore) -> None:
         zone = RawZone(self.source)
         target = RawZone(sandbox)
-        stager = ZipStager(sandbox)
+        stager = _stager(sandbox)
         for source, dataset in FEEDS:
             own = (source, dataset) == (case.source, case.dataset)
             dates = _history(zone, source, dataset, case.trade_date)
@@ -135,7 +136,9 @@ class ScenarioBuilder:
                 "date and run again"
             )
 
-    def _inject(self, case: FaultCase, zone: RawZone, target: RawZone, stager: ZipStager) -> None:
+    def _inject(
+        self, case: FaultCase, zone: RawZone, target: RawZone, stager: Callable[[str], None]
+    ) -> None:
         keys = zone.stored_keys(
             source=case.source, dataset=case.dataset, trade_date=case.trade_date
         )
@@ -156,12 +159,16 @@ class ScenarioBuilder:
             filename=_original_name(keys[-1]),
             content=damaged,
         )
-        if stored.key.endswith(".zip"):
-            stager.stage(stored.key)
+        stager(stored.key)
 
     @staticmethod
     def _copy(
-        zone: RawZone, target: RawZone, stager: ZipStager, source: str, dataset: str, day: date
+        zone: RawZone,
+        target: RawZone,
+        stager: Callable[[str], None],
+        source: str,
+        dataset: str,
+        day: date,
     ) -> None:
         keys = zone.stored_keys(source=source, dataset=dataset, trade_date=day)
         if not keys:
@@ -173,10 +180,11 @@ class ScenarioBuilder:
             filename=_original_name(keys[-1]),
             content=zone.read(keys[-1]),
         )
-        if stored.key.endswith(".zip"):
-            stager.stage(stored.key)
+        stager(stored.key)
 
-    def _copy_reference(self, zone: RawZone, target: RawZone, stager: ZipStager, day: date) -> None:
+    def _copy_reference(
+        self, zone: RawZone, target: RawZone, stager: Callable[[str], None], day: date
+    ) -> None:
         source, dataset = REFERENCE
         found = _history(zone, source, dataset, day, count=1)
         if not found:
@@ -197,6 +205,19 @@ def _history(
                 break
         day -= timedelta(days=1)
     return sorted(found)
+
+
+def _stager(store: ObjectStore) -> Callable[[str], None]:
+    """A function that stages a raw file for dbt when its format needs it (a zip or a table)."""
+    zips, tables = ZipStager(store), HtmlTableStager(store)
+
+    def stage(key: str) -> None:
+        if key.endswith(".zip"):
+            zips.stage(key)
+        elif key.endswith(".xls"):
+            tables.stage(key)
+
+    return stage
 
 
 def _original_name(key: str) -> str:

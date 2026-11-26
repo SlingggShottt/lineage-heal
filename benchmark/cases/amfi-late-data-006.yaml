@@ -3,13 +3,13 @@ id: amfi-late-data-006
 class: late_data
 source: amfi
 dataset: navall
-trade_date: 2025-08-26
+trade_date: 2026-04-19
 split: test
 seed: 164
 injection:
   type: stale_date
   column: Date
-  value: 19-Aug-2025
+  value: 12-Apr-2026
 expected:
   root_cause: raw.amfi.navall.Date
   fix_location: outside_dbt

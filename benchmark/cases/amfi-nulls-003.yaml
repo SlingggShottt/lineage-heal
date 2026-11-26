@@ -3,8 +3,8 @@ id: amfi-nulls-003
 class: nulls
 source: amfi
 dataset: navall
-trade_date: 2024-08-25
-split: seed
+trade_date: 2024-11-21
+split: test
 seed: 1
 injection:
   type: blank_value

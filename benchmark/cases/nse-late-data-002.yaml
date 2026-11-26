@@ -3,13 +3,13 @@ id: nse-late-data-002
 class: late_data
 source: nse
 dataset: cm_bhavcopy
-trade_date: 2024-07-22
+trade_date: 2024-09-27
 split: seed
 seed: 518
 injection:
   type: stale_date
   column: TradDt
-  value: '2024-07-15'
+  value: '2024-09-20'
 expected:
   root_cause: raw.nse.cm_bhavcopy.TradDt
   fix_location: outside_dbt

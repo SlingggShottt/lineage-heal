@@ -3,7 +3,7 @@ id: nse-duplicates-006
 class: duplicates
 source: nse
 dataset: cm_bhavcopy
-trade_date: 2025-06-24
+trade_date: 2026-03-02
 split: test
 seed: 734
 injection:

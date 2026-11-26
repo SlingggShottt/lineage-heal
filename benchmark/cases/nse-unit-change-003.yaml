@@ -3,8 +3,8 @@ id: nse-unit-change-003
 class: unit_change
 source: nse
 dataset: cm_bhavcopy
-trade_date: 2024-09-25
-split: seed
+trade_date: 2025-01-20
+split: test
 seed: 836
 injection:
   type: scale_values

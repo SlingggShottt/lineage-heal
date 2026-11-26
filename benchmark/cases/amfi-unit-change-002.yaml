@@ -3,7 +3,7 @@ id: amfi-unit-change-002
 class: unit_change
 source: amfi
 dataset: navall
-trade_date: 2024-06-27
+trade_date: 2024-09-22
 split: seed
 seed: 71
 injection:

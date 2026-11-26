@@ -3,8 +3,8 @@ id: amfi-schema-drift-003
 class: schema_drift
 source: amfi
 dataset: navall
-trade_date: 2024-08-18
-split: seed
+trade_date: 2024-11-18
+split: test
 seed: 401
 injection:
   type: rename_column
