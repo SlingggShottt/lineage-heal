@@ -764,6 +764,9 @@ Results are written per fault, so an interrupted run resumes where it stopped (F
 
 The July 2024 replay configures the pipeline as it would have looked before NSE's change, then feeds the real post-change files. Both the file-naming change (outside dbt) and the column changes (inside dbt) appear, testing both fix paths.
 
+**The pre-change pipeline (LH-071, D-85).** The current project reads UDiFF, so the replay needs a project that still reads the old layout, and old files to run it on. `benchmark/heldout/project.py` exports the dbt directory at `HEAD` into a scratch git repository and overlays an old-format `brz_nse__cm_bhavcopy` model (reading `SYMBOL`, `CLOSE`, `TIMESTAMP` and the rest, emitting the same typed columns, with a null instrument id, name and settlement price) and the old columns on the `raw_nse.cm_bhavcopy` source; silver, gold and the checks are untouched. The Fixer, the sandbox and the baselines take that repository as their root. `benchmark/heldout/legacy.py` makes old-format history from UDiFF files: NSE served old files only to 5 July 2024 and the backfill is UDiFF only (D-20), but the formats hold the same rows, so renaming the columns, trimming price padding, writing `05-JUL-2024` dates, ending lines with a comma and sorting by symbol reproduces the real old file for that day byte for byte (a test compares them). Tests build twelve old-format days with real dbt, where every NSE price check passes, and add the first UDiFF day, which fails the symbol and close price checks as it did in July 2024. The held-out cases themselves (no file arriving after the URL change, and the UDiFF file arriving) and the replay run are LH-117.
+
+
 ## 13. Security
 
 - **Secrets:** environment variables locally, GitHub Actions secrets in CI, Render and Cloudflare environment settings in deployment. gitleaks runs in pre-commit and CI.
