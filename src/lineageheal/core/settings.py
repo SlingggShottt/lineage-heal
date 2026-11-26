@@ -87,6 +87,14 @@ class Settings(BaseSettings):
     groq_model: str = "openai/gpt-oss-120b"
     gemini_requests_per_minute: float = Field(default=10.0, gt=0)
     groq_requests_per_minute: float = Field(default=20.0, gt=0)
+    # Which provider to try first. A provider with no key is left out, so one key is enough.
+    llm_provider_order: str = "gemini,groq"
+    # How long a struggling provider may hold a call up before the next one is tried (LH-114): one
+    # request may wait this long for an answer, a provider is retried for at most the deadline,
+    # and one that failed all its attempts is passed over for the cooldown.
+    llm_attempt_timeout_seconds: float = Field(default=30.0, gt=0)
+    llm_call_deadline_seconds: float = Field(default=60.0, gt=0)
+    llm_cooldown_seconds: float = Field(default=60.0, ge=0)
 
     # What one investigation may spend (FR-INV-05). The call limit includes the final answer;
     # twelve fits a few minutes of the free tiers' per-minute limits.
