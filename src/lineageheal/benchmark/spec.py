@@ -14,6 +14,8 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 EARLIEST_TRADE_DATE = date(2024, 1, 1)
+# The first trading day NSE published UDiFF only: its old-format URL was not served from here.
+CHANGE_DAY = date(2024, 7, 8)
 
 FaultClass = Literal["schema_drift", "nulls", "duplicates", "unit_change", "late_data"]
 FixLocation = Literal["dbt", "outside_dbt"]
@@ -73,8 +75,18 @@ class WithholdFile(_Strict):
     type: Literal["withhold_file"]
 
 
+class RealFile(_Strict):
+    """Deliver the day's real file unchanged: the fault is that the pipeline cannot read it.
+
+    Only meaningful for a replay (`pipeline: pre_july_2024`), where the project is the one that
+    predates the file's layout.
+    """
+
+    type: Literal["real_file"]
+
+
 Injection = Annotated[
-    RenameColumn | BlankValue | DuplicateRow | ScaleValues | StaleDate | WithholdFile,
+    RenameColumn | BlankValue | DuplicateRow | ScaleValues | StaleDate | WithholdFile | RealFile,
     Field(discriminator="type"),
 ]
 
@@ -86,6 +98,7 @@ CLASS_OF_INJECTION: dict[str, FaultClass] = {
     "scale_values": "unit_change",
     "stale_date": "late_data",
     "withhold_file": "late_data",
+    "real_file": "schema_drift",
 }
 
 
@@ -94,14 +107,23 @@ class Expected(_Strict):
 
     root_cause: str
     fix_location: FixLocation
+    # Other nodes that are equally right, for a fault with no single column to name: a layout
+    # change renames many at once, and finding any of them finds the change.
+    also_accept: tuple[str, ...] = ()
 
     @model_validator(mode="after")
     def _check_root_cause(self) -> Expected:
-        if not _ROOT_CAUSE.fullmatch(self.root_cause):
-            raise ValueError(
-                f"root_cause {self.root_cause!r} must look like raw.<source>.<dataset>.<column>"
-            )
+        for node in (self.root_cause, *self.also_accept):
+            if not _ROOT_CAUSE.fullmatch(node):
+                raise ValueError(
+                    f"root_cause {node!r} must look like raw.<source>.<dataset>.<column>"
+                )
         return self
+
+    @property
+    def accepted(self) -> frozenset[str]:
+        """Every node a diagnosis may name and be counted right."""
+        return frozenset({self.root_cause, *self.also_accept})
 
 
 class FaultCase(_Strict):
@@ -113,8 +135,12 @@ class FaultCase(_Strict):
     source: Literal["amfi", "nse", "fbil"]
     dataset: str = Field(min_length=1)
     trade_date: date
-    split: Literal["seed", "test"]
+    # `heldout` is the replay of a real event: scored apart from the corpus and never indexed.
+    split: Literal["seed", "test", "heldout"]
     seed: int = Field(ge=0)
+    # `pre_july_2024` replays NSE's format change: the project is the one before it, and the
+    # bhavcopy history before the change day is converted to the old layout (LH-071).
+    pipeline: Literal["current", "pre_july_2024"] = "current"
     injection: Injection
     expected: Expected
 
@@ -134,9 +160,23 @@ class FaultCase(_Strict):
         if self.fault_class == "late_data" and self.expected.fix_location != "outside_dbt":
             # No dbt change brings a missing or stale file back (D-51).
             raise ValueError("a late_data fault can only be fixed outside_dbt")
-        if not self.expected.root_cause.startswith(f"raw.{self.source}.{self.dataset}."):
+        prefix = f"raw.{self.source}.{self.dataset}."
+        for node in self.expected.accepted:
+            if not node.startswith(prefix):
+                raise ValueError(
+                    f"root_cause must be in raw.{self.source}.{self.dataset}, not {node!r}"
+                )
+        replay = self.pipeline == "pre_july_2024"
+        if replay and (self.source, self.dataset, self.trade_date) != (
+            "nse",
+            "cm_bhavcopy",
+            CHANGE_DAY,
+        ):
+            raise ValueError(f"a pre_july_2024 replay is NSE bhavcopy on {CHANGE_DAY}")
+        if self.injection.type == "real_file" and not replay:
             raise ValueError(
-                f"root_cause must be in raw.{self.source}.{self.dataset}, "
-                f"not {self.expected.root_cause!r}"
+                "real_file delivers a file the project cannot read, so it needs a replay"
             )
+        if self.split == "heldout" and not replay:
+            raise ValueError("a held-out case is a replay")
         return self

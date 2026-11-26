@@ -21,6 +21,7 @@ from lineageheal.benchmark.spec import (
     BlankValue,
     DuplicateRow,
     FaultCase,
+    RealFile,
     RenameColumn,
     ScaleValues,
     StaleDate,
@@ -137,6 +138,8 @@ def apply_fault(case: FaultCase, content: bytes) -> bytes | None:
         )
     if isinstance(case.injection, WithholdFile):
         return None
+    if isinstance(case.injection, RealFile):
+        return content
     if key == ("nse", "cm_bhavcopy"):
         # The zip is opened, its CSV damaged and a new zip written with the same entry name.
         name, csv_bytes = read_single_csv(content)

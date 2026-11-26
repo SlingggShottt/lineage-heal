@@ -32,6 +32,9 @@ class Scenario:
     summary: RunSummary
     dbt_exit_code: int
     build_seconds: float
+    # The repository the sandbox's dbt project came from. Systems patch and verify against it, not
+    # the real one: a replay's is the project as it was before the fault's real-world cause.
+    repo_root: Path | None = None
 
     @property
     def detected(self) -> bool:
@@ -100,7 +103,7 @@ class CaseResult(BaseModel):
     run_id: str
     case_id: str
     system: str
-    split: Literal["seed", "test"]
+    split: Literal["seed", "test", "heldout"]
     fault_class: str
     status: Literal["completed", "errored", "scenario_failed"]
     detected: bool = False

@@ -40,7 +40,7 @@ class BenchContext:
     settings: Settings
     store: ResultStore
     builder: ScenarioBuilder
-    cases: list[FaultCase]  # the whole corpus, not just the selection
+    cases: list[FaultCase]  # the main corpus, whose seed split is what the index learns from
 
 
 def _lineageheal(context: BenchContext) -> System:
@@ -148,14 +148,19 @@ def run(
             repo_root=REPO_ROOT,
             scratch_root=scratch_folder(settings.bench_dir, run_id),
         )
-        context = BenchContext(settings, store, builder, corpus)
+        # The index learns from the main corpus's seed split whichever folder is being run, so a
+        # held-out replay retrieves from the same index as the benchmark itself.
+        main = (
+            corpus if cases_dir.resolve() == DEFAULT_CASES.resolve() else load_cases(DEFAULT_CASES)
+        )
+        context = BenchContext(settings, store, builder, main)
         runner = BenchmarkRunner(
             builder,
             store,
             [SYSTEMS[n](context) for n in system],
             keep_scenarios=keep_scenarios,
             verifier=lambda scenario: Sandbox(
-                REPO_ROOT,
+                scenario.repo_root or REPO_ROOT,
                 scenario.warehouse,
                 scenario.raw_zone,
                 timeout_seconds=settings.sandbox_timeout_seconds,

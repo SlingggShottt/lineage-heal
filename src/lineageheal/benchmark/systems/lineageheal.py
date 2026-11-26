@@ -105,10 +105,11 @@ class LineageHealSystem:
         if top is None or detection is None or _fix_location(top) != "dbt":
             return None
         settings = self._settings
+        root = scenario.repo_root or REPO_ROOT
         fixer = Fixer(
             self._client,
             LineageService(detection.graph),
-            REPO_ROOT,
+            root,
             limits=PatchLimits(
                 max_files=settings.fixer_max_files,
                 max_changed_lines=settings.fixer_max_changed_lines,
@@ -116,7 +117,7 @@ class LineageHealSystem:
             max_llm_calls=settings.fixer_max_llm_calls,
         )
         sandbox = Sandbox(
-            REPO_ROOT,
+            root,
             scenario.warehouse,
             scenario.raw_zone,
             timeout_seconds=settings.sandbox_timeout_seconds,
