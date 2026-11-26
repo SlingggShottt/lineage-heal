@@ -1,6 +1,44 @@
 {
   "components": {
     "schemas": {
+      "AccuracyGoal": {
+        "description": "A goal that is a share at or above a threshold (G1, G3).",
+        "properties": {
+          "goal": {
+            "title": "Goal",
+            "type": "number"
+          },
+          "met": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Met"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "value",
+          "goal",
+          "met"
+        ],
+        "title": "AccuracyGoal",
+        "type": "object"
+      },
       "Affected": {
         "description": "What the incident touches.",
         "properties": {
@@ -61,6 +99,129 @@
           "confidence"
         ],
         "title": "Alternative",
+        "type": "object"
+      },
+      "BaselineComparison": {
+        "description": "Goal G4 for one fault class: LineageHeal's top-1 against the best baseline's.",
+        "properties": {
+          "best_baseline": {
+            "title": "Best Baseline",
+            "type": "string"
+          },
+          "best_baseline_value": {
+            "title": "Best Baseline Value",
+            "type": "number"
+          },
+          "lineageheal": {
+            "title": "Lineageheal",
+            "type": "number"
+          },
+          "result": {
+            "enum": [
+              "ahead",
+              "tied",
+              "behind"
+            ],
+            "title": "Result",
+            "type": "string"
+          },
+          "separated": {
+            "title": "Separated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "lineageheal",
+          "best_baseline",
+          "best_baseline_value",
+          "result",
+          "separated"
+        ],
+        "title": "BaselineComparison",
+        "type": "object"
+      },
+      "BenchmarkReport": {
+        "description": "A scored benchmark run.",
+        "properties": {
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "goals": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Goals"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ignored_seed_results": {
+            "title": "Ignored Seed Results",
+            "type": "integer"
+          },
+          "manifest": {
+            "$ref": "#/components/schemas/ReportManifest"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "systems": {
+            "items": {
+              "$ref": "#/components/schemas/SystemReport"
+            },
+            "title": "Systems",
+            "type": "array"
+          },
+          "test_cases": {
+            "title": "Test Cases",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "run_id",
+          "generated_at",
+          "manifest",
+          "test_cases",
+          "ignored_seed_results",
+          "systems",
+          "goals"
+        ],
+        "title": "BenchmarkReport",
+        "type": "object"
+      },
+      "BenchmarkRunSummary": {
+        "description": "One published run, for the list.",
+        "properties": {
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "systems": {
+            "items": {
+              "$ref": "#/components/schemas/SystemHeadline"
+            },
+            "title": "Systems",
+            "type": "array"
+          },
+          "test_cases": {
+            "title": "Test Cases",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "run_id",
+          "generated_at",
+          "test_cases",
+          "systems"
+        ],
+        "title": "BenchmarkRunSummary",
         "type": "object"
       },
       "Decision": {
@@ -579,6 +740,98 @@
           "created_at"
         ],
         "title": "FixSummary",
+        "type": "object"
+      },
+      "Goals": {
+        "description": "The PRD goals checked against a run.",
+        "properties": {
+          "g1_accuracy": {
+            "$ref": "#/components/schemas/AccuracyGoal"
+          },
+          "g2_time": {
+            "$ref": "#/components/schemas/TimeGoal"
+          },
+          "g3_patches": {
+            "$ref": "#/components/schemas/AccuracyGoal"
+          },
+          "g4_by_class": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/BaselineComparison"
+            },
+            "title": "G4 By Class",
+            "type": "object"
+          }
+        },
+        "required": [
+          "g1_accuracy",
+          "g2_time",
+          "g3_patches",
+          "g4_by_class"
+        ],
+        "title": "Goals",
+        "type": "object"
+      },
+      "HeldoutRow": {
+        "description": "How one system did on one replay case.",
+        "properties": {
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "fix_location_ok": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fix Location Ok"
+          },
+          "patch": {
+            "enum": [
+              "passed",
+              "failed",
+              "none"
+            ],
+            "title": "Patch",
+            "type": "string"
+          },
+          "seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seconds"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "top1": {
+            "title": "Top1",
+            "type": "boolean"
+          },
+          "top3": {
+            "title": "Top3",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "case_id",
+          "status",
+          "top1",
+          "top3",
+          "fix_location_ok",
+          "patch",
+          "seconds"
+        ],
+        "title": "HeldoutRow",
         "type": "object"
       },
       "IncidentDetail": {
@@ -1231,6 +1484,37 @@
         "title": "Me",
         "type": "object"
       },
+      "Page_BenchmarkRunSummary_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BenchmarkRunSummary"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "Page[BenchmarkRunSummary]",
+        "type": "object"
+      },
       "Page_IncidentSummary_": {
         "properties": {
           "items": {
@@ -1353,6 +1637,61 @@
         "title": "Problem",
         "type": "object"
       },
+      "Rate": {
+        "description": "A share with its 95% Wilson interval; `value` is null when nothing was measured.",
+        "properties": {
+          "high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "High"
+          },
+          "hits": {
+            "title": "Hits",
+            "type": "integer"
+          },
+          "low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Low"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "hits",
+          "total",
+          "value",
+          "low",
+          "high"
+        ],
+        "title": "Rate",
+        "type": "object"
+      },
       "Readiness": {
         "description": "The process is up and its database is reachable and migrated.",
         "properties": {
@@ -1391,6 +1730,101 @@
           "reason"
         ],
         "title": "RejectRequest",
+        "type": "object"
+      },
+      "ReportManifest": {
+        "description": "What produced the run: code, models, prompts and how many faults.",
+        "properties": {
+          "cases": {
+            "title": "Cases",
+            "type": "integer"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "lockfile_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lockfile Sha256"
+          },
+          "models": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Models"
+          },
+          "prompts": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompts"
+          },
+          "systems": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Systems"
+          },
+          "temperature": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature"
+          }
+        },
+        "required": [
+          "created_at",
+          "lockfile_sha256",
+          "models",
+          "temperature",
+          "prompts",
+          "systems",
+          "cases"
+        ],
+        "title": "ReportManifest",
         "type": "object"
       },
       "RootCause": {
@@ -1690,6 +2124,108 @@
         "title": "SandboxOut",
         "type": "object"
       },
+      "Scope": {
+        "description": "One system's scores over all test faults, or over one fault class.",
+        "properties": {
+          "attempted": {
+            "title": "Attempted",
+            "type": "integer"
+          },
+          "calls_mean": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calls Mean"
+          },
+          "errored": {
+            "title": "Errored",
+            "type": "integer"
+          },
+          "fix_location": {
+            "$ref": "#/components/schemas/Rate"
+          },
+          "patch_coverage": {
+            "$ref": "#/components/schemas/Rate"
+          },
+          "patch_pass": {
+            "$ref": "#/components/schemas/Rate"
+          },
+          "patches_produced": {
+            "title": "Patches Produced",
+            "type": "integer"
+          },
+          "scenario_failed": {
+            "title": "Scenario Failed",
+            "type": "integer"
+          },
+          "time_median": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time Median"
+          },
+          "time_p90": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time P90"
+          },
+          "tokens_mean": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tokens Mean"
+          },
+          "tokens_total": {
+            "title": "Tokens Total",
+            "type": "integer"
+          },
+          "top1": {
+            "$ref": "#/components/schemas/Rate"
+          },
+          "top3": {
+            "$ref": "#/components/schemas/Rate"
+          }
+        },
+        "required": [
+          "attempted",
+          "errored",
+          "scenario_failed",
+          "top1",
+          "top3",
+          "fix_location",
+          "patches_produced",
+          "patch_pass",
+          "patch_coverage",
+          "time_median",
+          "time_p90",
+          "calls_mean",
+          "tokens_mean",
+          "tokens_total"
+        ],
+        "title": "Scope",
+        "type": "object"
+      },
       "SignalOut": {
         "description": "One failure the Detector grouped into the incident.",
         "properties": {
@@ -1764,6 +2300,116 @@
           "detected_at"
         ],
         "title": "SignalOut",
+        "type": "object"
+      },
+      "SystemHeadline": {
+        "description": "The three numbers a run's row in the list shows for one system.",
+        "properties": {
+          "median_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Seconds"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "patch_pass": {
+            "$ref": "#/components/schemas/Rate"
+          },
+          "top1": {
+            "$ref": "#/components/schemas/Rate"
+          }
+        },
+        "required": [
+          "name",
+          "top1",
+          "patch_pass",
+          "median_seconds"
+        ],
+        "title": "SystemHeadline",
+        "type": "object"
+      },
+      "SystemReport": {
+        "description": "Everything reported for one system.",
+        "properties": {
+          "by_class": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Scope"
+            },
+            "title": "By Class",
+            "type": "object"
+          },
+          "heldout": {
+            "items": {
+              "$ref": "#/components/schemas/HeldoutRow"
+            },
+            "title": "Heldout",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "overall": {
+            "$ref": "#/components/schemas/Scope"
+          }
+        },
+        "required": [
+          "name",
+          "overall",
+          "by_class",
+          "heldout"
+        ],
+        "title": "SystemReport",
+        "type": "object"
+      },
+      "TimeGoal": {
+        "description": "Goal G2: median time to a fix against the target and the limit.",
+        "properties": {
+          "median_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Seconds"
+          },
+          "required_seconds": {
+            "title": "Required Seconds",
+            "type": "number"
+          },
+          "status": {
+            "enum": [
+              "target met",
+              "required met",
+              "missed",
+              "n/a"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "target_seconds": {
+            "title": "Target Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "median_seconds",
+          "target_seconds",
+          "required_seconds",
+          "status"
+        ],
+        "title": "TimeGoal",
         "type": "object"
       }
     }
@@ -2184,6 +2830,291 @@
         "summary": "Sign out",
         "tags": [
           "auth"
+        ]
+      }
+    },
+    "/benchmark/runs": {
+      "get": {
+        "description": "Published runs, the newest scored first, each with its headline numbers per system.",
+        "operationId": "get_runs_benchmark_runs_get",
+        "parameters": [
+          {
+            "description": "Rows per page.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "description": "Rows per page.",
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Rows to skip.",
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "description": "Rows to skip.",
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_BenchmarkRunSummary_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "List published benchmark runs",
+        "tags": [
+          "benchmark"
+        ]
+      }
+    },
+    "/benchmark/runs/{run_id}": {
+      "get": {
+        "description": "The full scored report.\n\nEvery system overall and per fault class, the PRD goal checks and the held-out replay.",
+        "operationId": "get_run_benchmark_runs__run_id__get",
+        "parameters": [
+          {
+            "description": "The id the run was named with.",
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "description": "The id the run was named with.",
+              "pattern": "^[A-Za-z0-9_.-]{1,64}$",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenchmarkReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "One benchmark run's report",
+        "tags": [
+          "benchmark"
         ]
       }
     },

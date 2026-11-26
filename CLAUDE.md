@@ -138,6 +138,7 @@ uv run lineageheal dev seed-demo                 # three sample incidents in the
 
 uv run lineageheal bench list                    # the fault corpus (benchmark/cases): counts, ids; --split, --fault-class
 uv run lineageheal bench report --run-id r1      # score a run: report.json and report.md in its folder (test split; held-out apart)
+uv run lineageheal bench publish --run-id r1     # store a scored run's report in the database so the API serves it; needs DATABASE_URL
 uv run lineageheal bench run --run-id r1 --system none --limit 3   # build fault sandboxes and run systems; results in BENCH_DIR; rerun the id to resume; needs the feeds backfilled around each fault date
 
 # Quality gates — all must pass before proposing a commit

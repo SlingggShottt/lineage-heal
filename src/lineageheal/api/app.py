@@ -12,7 +12,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from lineageheal.api.problems import PROBLEM_RESPONSES, install_problem_handlers
-from lineageheal.api.routers import auth, decisions, feeds, health, incidents, runbooks
+from lineageheal.api.routers import (
+    auth,
+    benchmark,
+    decisions,
+    feeds,
+    health,
+    incidents,
+    runbooks,
+)
 from lineageheal.core.settings import Settings, get_settings
 
 TAGS = [
@@ -82,6 +90,7 @@ def create_app(
     app.include_router(decisions.router)
     app.include_router(feeds.router)
     app.include_router(runbooks.router)
+    app.include_router(benchmark.router)
     return app
 
 

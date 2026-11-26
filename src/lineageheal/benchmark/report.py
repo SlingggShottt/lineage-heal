@@ -111,13 +111,13 @@ def _goals(metrics: Metrics) -> dict[str, Any] | None:
             ),
         }
     return {
-        "G1_accuracy": {"value": ours.overall.top1.value, "goal": ACCURACY_GOAL,
+        "g1_accuracy": {"value": ours.overall.top1.value, "goal": ACCURACY_GOAL,
                         "met": _at_least(ours.overall.top1.value, ACCURACY_GOAL)},
-        "G2_time": {"median_seconds": median, "target_seconds": TIME_TARGET_SECONDS,
+        "g2_time": {"median_seconds": median, "target_seconds": TIME_TARGET_SECONDS,
                     "required_seconds": TIME_REQUIRED_SECONDS, "status": time_status},
-        "G3_patches": {"value": ours.overall.patch_pass.value, "goal": PATCH_GOAL,
+        "g3_patches": {"value": ours.overall.patch_pass.value, "goal": PATCH_GOAL,
                        "met": _at_least(ours.overall.patch_pass.value, PATCH_GOAL)},
-        "G4_by_class": classes,
+        "g4_by_class": classes,
     }  # fmt: skip
 
 
@@ -234,7 +234,7 @@ def _goals_text(goals: dict[str, Any]) -> str:
     def mark(met: bool | None) -> str:
         return "n/a" if met is None else ("met" if met else "not met")
 
-    g1, g2, g3 = goals["G1_accuracy"], goals["G2_time"], goals["G3_patches"]
+    g1, g2, g3 = goals["g1_accuracy"], goals["g2_time"], goals["g3_patches"]
     lines = [
         f"- **G1, find the root cause:** top-1 "
         f"{'n/a' if g1['value'] is None else f'{g1["value"] * 100:.1f}%'} against "
@@ -247,7 +247,7 @@ def _goals_text(goals: dict[str, Any]) -> str:
         f"{g3['goal'] * 100:.0f}% or more: {mark(g3['met'])}",
         "- **G4, beat the baselines (top-1, per fault class):**",
     ]
-    for fault_class, row in goals["G4_by_class"].items():
+    for fault_class, row in goals["g4_by_class"].items():
         gap = "gap beyond chance" if row["separated"] else "gap within chance"
         lines.append(
             f"  - {fault_class}: {row['result']} "

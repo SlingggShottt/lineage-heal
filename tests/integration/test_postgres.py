@@ -345,3 +345,28 @@ def test_the_incident_list_filters_and_pages_on_postgres(database_url: str) -> N
     assert [i.root_node for i in nse] == ["raw.nse.bhavcopy.ClsPric"]
     assert wildcard == ([], 0)
     engine.dispose()
+
+
+def test_a_benchmark_report_round_trips_through_jsonb_and_replaces_on_republish(
+    database_url: str,
+) -> None:
+    from benchmark_reports import sample_report
+
+    from lineageheal.core.benchmark_report import BenchmarkReport
+    from lineageheal.store.benchmark import BenchmarkRepository
+
+    upgrade_database(database_url)
+    engine = create_db_engine(database_url)
+    repository = BenchmarkRepository(engine)
+    run_id = f"it-{secrets.token_hex(4)}"
+    report = sample_report(run_id)
+
+    created = repository.publish(run_id, report, generated_at=T0, at=T0)
+    again = repository.publish(run_id, report, generated_at=T0, at=T0 + timedelta(minutes=1))
+    stored = repository.get(run_id)
+
+    assert (created, again) == (True, False)
+    assert stored is not None
+    assert BenchmarkReport.model_validate(stored).run_id == run_id
+    assert stored["systems"][0]["overall"]["top1"]["value"] == 1.0
+    engine.dispose()

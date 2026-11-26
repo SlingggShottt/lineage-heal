@@ -508,3 +508,20 @@ class WebSession(Base):
     csrf_token: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(UTCDateTime())
     expires_at: Mapped[datetime] = mapped_column(UTCDateTime())
+
+
+class BenchmarkRun(Base):
+    """A scored benchmark run, published for the dashboard (FR-API-01, FR-UI-07).
+
+    The whole report is one JSON value: the dashboard shows it as a unit, and the per-fault results
+    it was made from stay in the run's files. Publishing the same run again replaces its report.
+    """
+
+    __tablename__ = "benchmark_run"
+    __table_args__ = (Index("ix_benchmark_run_generated_at", "generated_at"),)
+
+    run_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    generated_at: Mapped[datetime] = mapped_column(UTCDateTime())  # when the report was scored
+    published_at: Mapped[datetime] = mapped_column(UTCDateTime())
+    test_cases: Mapped[int] = mapped_column(Integer)
+    report: Mapped[dict[str, Any]] = mapped_column(JSONType)
