@@ -3,8 +3,8 @@ id: nse-duplicates-003
 class: duplicates
 source: nse
 dataset: cm_bhavcopy
-trade_date: 2024-09-19
-split: seed
+trade_date: 2025-01-03
+split: test
 seed: 668
 injection:
   type: duplicate_row

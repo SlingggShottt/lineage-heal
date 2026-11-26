@@ -14,8 +14,8 @@ def test_list_summarises_the_corpus_and_filters_by_split() -> None:
     result = CliRunner().invoke(app, ["bench", "list", "--cases", str(CASES), "--split", "seed"])
 
     assert result.exit_code == 0
-    assert "100 cases" in result.output
-    assert result.output.count("\nnse-") + result.output.count("\namfi-") == 30
+    assert "98 cases" in result.output
+    assert sum(result.output.count(f"\n{feed}-") for feed in ("amfi", "nse", "fbil")) == 28
 
 
 def test_run_refuses_an_unknown_system_and_an_empty_selection() -> None:

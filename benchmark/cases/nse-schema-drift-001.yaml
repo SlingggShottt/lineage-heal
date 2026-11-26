@@ -3,7 +3,7 @@ id: nse-schema-drift-001
 class: schema_drift
 source: nse
 dataset: cm_bhavcopy
-trade_date: 2024-01-16
+trade_date: 2024-01-19
 split: seed
 seed: 559
 injection:

@@ -3,7 +3,7 @@ id: amfi-schema-drift-005
 class: schema_drift
 source: amfi
 dataset: navall
-trade_date: 2025-03-06
+trade_date: 2025-08-01
 split: test
 seed: 783
 injection:

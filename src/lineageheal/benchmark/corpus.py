@@ -18,7 +18,7 @@ from lineageheal.ingestion.calendar import CalendarEntry, expectation
 
 # FR-BEN-01 asks for about 100; the band allows a case to be added or dropped without a rewrite.
 MIN_CASES = 90
-MAX_CASES = 110
+MAX_CASES = 110  # about 100: the corpus is 98, and a case may be added or dropped
 FAULT_CLASSES = ("schema_drift", "nulls", "duplicates", "unit_change", "late_data")
 
 
@@ -42,6 +42,17 @@ def summarise(cases: Sequence[FaultCase]) -> CorpusSummary:
     )
 
 
+def _publishes(case: FaultCase, calendar: Sequence[CalendarEntry]) -> bool:
+    """Whether the case's feed is expected to have a file that day.
+
+    FBIL has no calendar yet (LH-108), so any weekday counts; a day it skipped shows up when the
+    scenario is built, as a failed scenario naming the date.
+    """
+    if case.source == "fbil":
+        return case.trade_date.weekday() < 5
+    return expectation(case.source, case.trade_date, calendar)[1]
+
+
 def validate_corpus(cases: Sequence[FaultCase], calendar: Sequence[CalendarEntry]) -> CorpusSummary:
     """Check the corpus as a whole and return its summary.
 
@@ -63,8 +74,8 @@ def validate_corpus(cases: Sequence[FaultCase], calendar: Sequence[CalendarEntry
                 problems.append(f"no {fault_class} case in the {split} split")
     seen: dict[tuple[object, ...], str] = {}
     for case in cases:
-        _, expected = expectation(case.source, case.trade_date, calendar)
-        if case.source in ("amfi", "nse") and not expected:
+        expected = _publishes(case, calendar)
+        if not expected:
             problems.append(f"{case.id}: {case.source} publishes no file on {case.trade_date}")
         key = (case.source, case.dataset, case.trade_date, case.injection.model_dump_json())
         if key in seen:

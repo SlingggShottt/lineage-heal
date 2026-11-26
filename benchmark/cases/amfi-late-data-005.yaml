@@ -3,7 +3,7 @@ id: amfi-late-data-005
 class: late_data
 source: amfi
 dataset: navall
-trade_date: 2025-05-25
+trade_date: 2025-12-11
 split: test
 seed: 981
 injection:

@@ -3,8 +3,8 @@ id: nse-late-data-003
 class: late_data
 source: nse
 dataset: cm_bhavcopy
-trade_date: 2024-10-17
-split: seed
+trade_date: 2025-02-12
+split: test
 seed: 868
 injection:
   type: withhold_file

@@ -3,7 +3,7 @@ id: nse-late-data-005
 class: late_data
 source: nse
 dataset: cm_bhavcopy
-trade_date: 2025-05-05
+trade_date: 2025-12-11
 split: test
 seed: 176
 injection:

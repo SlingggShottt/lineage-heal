@@ -3,7 +3,7 @@ id: nse-late-data-001
 class: late_data
 source: nse
 dataset: cm_bhavcopy
-trade_date: 2024-03-20
+trade_date: 2024-04-26
 split: seed
 seed: 902
 injection:

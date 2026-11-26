@@ -3,7 +3,7 @@ id: nse-unit-change-007
 class: unit_change
 source: nse
 dataset: cm_bhavcopy
-trade_date: 2025-10-13
+trade_date: 2026-08-13
 split: test
 seed: 772
 injection:

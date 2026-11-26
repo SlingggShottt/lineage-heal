@@ -3,7 +3,7 @@ id: amfi-duplicates-002
 class: duplicates
 source: amfi
 dataset: navall
-trade_date: 2024-06-05
+trade_date: 2024-08-19
 split: seed
 seed: 248
 injection:

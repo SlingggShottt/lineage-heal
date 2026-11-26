@@ -3,8 +3,8 @@ id: nse-nulls-003
 class: nulls
 source: nse
 dataset: cm_bhavcopy
-trade_date: 2024-09-03
-split: seed
+trade_date: 2024-12-16
+split: test
 seed: 578
 injection:
   type: blank_value
