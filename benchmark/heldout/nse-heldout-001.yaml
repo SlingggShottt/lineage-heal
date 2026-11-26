@@ -1,0 +1,17 @@
+# The held-out replay of NSE's July 2024 format change (FR-BEN-05, design 12.4), file naming half:
+# on Monday 8 July 2024 the old-format URL the loader asked for was no longer served, so no file
+# arrived. Not part of the corpus: scored apart, never indexed. Run with
+# `lineageheal bench run --cases benchmark/heldout --split heldout`.
+id: nse-heldout-001
+class: late_data
+source: nse
+dataset: cm_bhavcopy
+trade_date: 2024-07-08
+split: heldout
+seed: 1
+pipeline: pre_july_2024
+injection:
+  type: withhold_file
+expected:
+  root_cause: raw.nse.cm_bhavcopy.*
+  fix_location: outside_dbt

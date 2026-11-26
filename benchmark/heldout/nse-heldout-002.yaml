@@ -1,0 +1,29 @@
+# The held-out replay of NSE's July 2024 format change (FR-BEN-05, design 12.4), column layout half:
+# the real UDiFF file for Monday 8 July 2024 reaches the project as it was before the change, which
+# reads the old column names. Twelve old columns vanish at once (ISIN keeps its name), so finding
+# any of them finds the change. Not part of the corpus: scored apart, never indexed.
+id: nse-heldout-002
+class: schema_drift
+source: nse
+dataset: cm_bhavcopy
+trade_date: 2024-07-08
+split: heldout
+seed: 2
+pipeline: pre_july_2024
+injection:
+  type: real_file
+expected:
+  root_cause: raw.nse.cm_bhavcopy.SYMBOL
+  fix_location: dbt
+  also_accept:
+    - raw.nse.cm_bhavcopy.SERIES
+    - raw.nse.cm_bhavcopy.OPEN
+    - raw.nse.cm_bhavcopy.HIGH
+    - raw.nse.cm_bhavcopy.LOW
+    - raw.nse.cm_bhavcopy.CLOSE
+    - raw.nse.cm_bhavcopy.LAST
+    - raw.nse.cm_bhavcopy.PREVCLOSE
+    - raw.nse.cm_bhavcopy.TOTTRDQTY
+    - raw.nse.cm_bhavcopy.TOTTRDVAL
+    - raw.nse.cm_bhavcopy.TIMESTAMP
+    - raw.nse.cm_bhavcopy.TOTALTRADES

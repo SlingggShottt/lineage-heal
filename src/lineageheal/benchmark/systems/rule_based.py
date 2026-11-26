@@ -114,12 +114,13 @@ class RuleBasedSystem:
         if path is None:
             return None
         old, new = removed[0], added[0]
+        root = scenario.repo_root or self._root
         try:
-            text = (self._root / path).read_text(encoding="utf-8")
+            text = (root / path).read_text(encoding="utf-8")
             if f'"{old}"' not in text:
                 return None
             patched = text.replace(f'"{old}"', f'coalesce("{new}", "{old}")')
-            return build_patch(self._root, [(path, patched)], self._limits), f"{old} became {new}"
+            return build_patch(root, [(path, patched)], self._limits), f"{old} became {new}"
         except (OSError, PatchError):
             return None
 

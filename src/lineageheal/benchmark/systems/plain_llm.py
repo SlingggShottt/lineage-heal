@@ -117,8 +117,9 @@ class PlainLLMSystem:
         path = model_file(manifest, signal.model) if manifest else None
         if path is None:
             return None, (), "no patch: the failing model's file is unknown"
+        root = scenario.repo_root or self._root
         try:
-            content = (self._root / path).read_text(encoding="utf-8")
+            content = (root / path).read_text(encoding="utf-8")
         except OSError:
             return None, (), f"no patch: {path} cannot be read"
         if len(content) > self._limits.max_file_characters:
@@ -141,7 +142,7 @@ class PlainLLMSystem:
         try:
             if any(p != path for p, _ in edits):
                 raise PatchError("the model changed a file it was not shown")
-            return build_patch(self._root, edits, self._limits), result.completions, ""
+            return build_patch(root, edits, self._limits), result.completions, ""
         except PatchError as exc:
             return None, result.completions, f"no patch: {exc}"
 

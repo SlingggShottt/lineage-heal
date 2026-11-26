@@ -144,3 +144,22 @@ def test_every_nse_example_specification_damages_the_sample() -> None:
     for example in nse:
         damaged = apply_fault(example, ZIP)
         assert damaged != ZIP, example.id
+
+
+def test_a_real_file_is_delivered_unchanged() -> None:
+    real = FaultCase.model_validate(
+        {
+            "id": "nse-heldout-009",
+            "class": "schema_drift",
+            "source": "nse",
+            "dataset": "cm_bhavcopy",
+            "trade_date": "2024-07-08",
+            "split": "heldout",
+            "seed": 1,
+            "pipeline": "pre_july_2024",
+            "injection": {"type": "real_file"},
+            "expected": {"root_cause": "raw.nse.cm_bhavcopy.SYMBOL", "fix_location": "dbt"},
+        }
+    )
+
+    assert apply_fault(real, ZIP) == ZIP

@@ -15,15 +15,17 @@ import subprocess
 import sys
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import structlog
 
+from lineageheal.benchmark.heldout.legacy import to_legacy_zip
+from lineageheal.benchmark.heldout.project import build_prechange_repo
 from lineageheal.benchmark.injection import apply_fault
 from lineageheal.benchmark.models import Scenario
-from lineageheal.benchmark.spec import FaultCase
+from lineageheal.benchmark.spec import CHANGE_DAY, FaultCase
 from lineageheal.core.errors import BenchmarkError
 from lineageheal.ingestion.object_stores import LocalObjectStore
 from lineageheal.ingestion.raw_zone import ObjectStore, RawZone
@@ -63,6 +65,8 @@ class ScenarioBuilder:
     timeout_seconds: float = 900.0
     dbt_build: DbtBuild | None = None
     now: Callable[[], datetime] = lambda: datetime.now(UTC)
+    # The pre-change repository, built once and reused by every replay.
+    _replay_repos: dict[str, Path] = field(default_factory=dict, repr=False)
 
     def build(self, case: FaultCase) -> Scenario:
         """Build the sandbox for one fault.
@@ -77,10 +81,11 @@ class ScenarioBuilder:
         _remove(root)  # a crashed earlier attempt may have left this case's folder behind
         raw_dir.mkdir(parents=True)
         sandbox = LocalObjectStore(raw_dir)
+        repo = self._repo_for(case)
         try:
             self._fill(case, sandbox)
             exit_code, tail = (self.dbt_build or run_dbt_build)(
-                self.repo_root / "dbt",
+                repo / "dbt",
                 root / "data",
                 raw_dir,
                 root / "target",
@@ -103,7 +108,18 @@ class ScenarioBuilder:
             summary=summary,
             dbt_exit_code=exit_code,
             build_seconds=time.monotonic() - started,
+            repo_root=repo,
         )
+
+    def _repo_for(self, case: FaultCase) -> Path:
+        """The repository holding the dbt project a case runs on."""
+        if case.pipeline == "current":
+            return self.repo_root
+        if case.pipeline not in self._replay_repos:
+            destination = self.scratch_root / "prechange-repo"
+            _remove(destination)
+            self._replay_repos[case.pipeline] = build_prechange_repo(self.repo_root, destination)
+        return self._replay_repos[case.pipeline]
 
     @staticmethod
     def discard(scenario: Scenario) -> None:
@@ -114,6 +130,7 @@ class ScenarioBuilder:
         zone = RawZone(self.source)
         target = RawZone(sandbox)
         stager = _stager(sandbox)
+        replay = case.pipeline == "pre_july_2024"
         for source, dataset in FEEDS:
             own = (source, dataset) == (case.source, case.dataset)
             dates = _history(zone, source, dataset, case.trade_date)
@@ -122,7 +139,7 @@ class ScenarioBuilder:
             for day in dates:
                 if own and day == case.trade_date:
                     continue  # the damaged version replaces it below
-                self._copy(zone, target, stager, source, dataset, day)
+                self._copy(zone, target, stager, source, dataset, day, legacy=replay and own)
         self._copy_reference(zone, target, stager, case.trade_date)
         self._inject(case, zone, target, stager)
 
@@ -169,16 +186,18 @@ class ScenarioBuilder:
         source: str,
         dataset: str,
         day: date,
+        *,
+        legacy: bool = False,
     ) -> None:
         keys = zone.stored_keys(source=source, dataset=dataset, trade_date=day)
         if not keys:
             return
+        filename, content = _original_name(keys[-1]), zone.read(keys[-1])
+        if legacy and day < CHANGE_DAY:
+            # A replay's history is what NSE published then: the old layout, under the old name.
+            filename, content = to_legacy_zip(content, day)
         stored = target.put_if_absent(
-            source=source,
-            dataset=dataset,
-            trade_date=day,
-            filename=_original_name(keys[-1]),
-            content=zone.read(keys[-1]),
+            source=source, dataset=dataset, trade_date=day, filename=filename, content=content
         )
         stager(stored.key)
 

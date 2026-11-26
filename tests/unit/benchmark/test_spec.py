@@ -41,6 +41,7 @@ def test_every_injection_type_has_a_class() -> None:
         "scale_values",
         "stale_date",
         "withhold_file",
+        "real_file",
     }
     assert set(CLASS_OF_INJECTION.values()) == {
         "schema_drift",
@@ -108,4 +109,69 @@ def test_a_scale_factor_must_actually_change_the_values() -> None:
                 **{"class": "unit_change"},
                 injection={"type": "scale_values", "column": "Net Asset Value", "factor": 1},
             )
+        )
+
+
+def replay(**overrides: Any) -> dict[str, Any]:
+    base = case(
+        id="nse-heldout-009",
+        source="nse",
+        dataset="cm_bhavcopy",
+        trade_date=date(2024, 7, 8),
+        split="heldout",
+        pipeline="pre_july_2024",
+        injection={"type": "real_file"},
+        expected={"root_cause": "raw.nse.cm_bhavcopy.SYMBOL", "fix_location": "dbt"},
+    )
+    base["class"] = "schema_drift"
+    base.update(overrides)
+    return base
+
+
+def test_a_replay_of_the_real_file_is_a_valid_held_out_schema_drift_case() -> None:
+    parsed = FaultCase.model_validate(replay())
+
+    assert parsed.pipeline == "pre_july_2024"
+    assert parsed.split == "heldout"
+    assert parsed.fault_class == "schema_drift"
+
+
+def test_a_replay_is_only_the_nse_bhavcopy_of_the_change_day() -> None:
+    with pytest.raises(ValidationError, match=r"NSE bhavcopy on 2024-07-08"):
+        FaultCase.model_validate(replay(trade_date=date(2024, 7, 9)))
+    with pytest.raises(ValidationError, match=r"NSE bhavcopy on 2024-07-08"):
+        FaultCase.model_validate(
+            replay(
+                source="amfi",
+                dataset="navall",
+                expected={"root_cause": "raw.amfi.navall.Date", "fix_location": "dbt"},
+            )
+        )
+
+
+def test_the_real_file_needs_a_replay_and_so_does_a_held_out_case() -> None:
+    with pytest.raises(ValidationError, match="needs a replay"):
+        FaultCase.model_validate(replay(pipeline="current", split="test"))
+    with pytest.raises(ValidationError, match="held-out case is a replay"):
+        FaultCase.model_validate(case(split="heldout", pipeline="current"))
+
+
+def test_other_acceptable_root_causes_are_checked_like_the_main_one() -> None:
+    expected = {
+        "root_cause": "raw.nse.cm_bhavcopy.SYMBOL",
+        "fix_location": "dbt",
+        "also_accept": ["raw.nse.cm_bhavcopy.CLOSE"],
+    }
+
+    parsed = FaultCase.model_validate(replay(expected=expected))
+
+    assert parsed.expected.accepted == {
+        "raw.nse.cm_bhavcopy.SYMBOL",
+        "raw.nse.cm_bhavcopy.CLOSE",
+    }
+    with pytest.raises(ValidationError, match="must look like"):
+        FaultCase.model_validate(replay(expected={**expected, "also_accept": ["CLOSE"]}))
+    with pytest.raises(ValidationError, match=r"must be in raw\.nse\.cm_bhavcopy"):
+        FaultCase.model_validate(
+            replay(expected={**expected, "also_accept": ["raw.amfi.navall.Date"]})
         )
