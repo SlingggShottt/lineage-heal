@@ -67,6 +67,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/benchmark/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List published benchmark runs
+         * @description Published runs, the newest scored first, each with its headline numbers per system.
+         */
+        get: operations["get_runs_benchmark_runs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/benchmark/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One benchmark run's report
+         * @description The full scored report.
+         *
+         *     Every system overall and per fault class, the PRD goal checks and the held-out replay.
+         */
+        get: operations["get_run_benchmark_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/feeds/health": {
         parameters: {
             query?: never;
@@ -315,6 +357,18 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * AccuracyGoal
+         * @description A goal that is a share at or above a threshold (G1, G3).
+         */
+        AccuracyGoal: {
+            /** Goal */
+            goal: number;
+            /** Met */
+            met: boolean | null;
+            /** Value */
+            value: number | null;
+        };
+        /**
          * Affected
          * @description What the incident touches.
          */
@@ -339,6 +393,57 @@ export interface components {
             fault_class: string;
             /** Node */
             node: string;
+        };
+        /**
+         * BaselineComparison
+         * @description Goal G4 for one fault class: LineageHeal's top-1 against the best baseline's.
+         */
+        BaselineComparison: {
+            /** Best Baseline */
+            best_baseline: string;
+            /** Best Baseline Value */
+            best_baseline_value: number;
+            /** Lineageheal */
+            lineageheal: number;
+            /**
+             * Result
+             * @enum {string}
+             */
+            result: "ahead" | "tied" | "behind";
+            /** Separated */
+            separated: boolean;
+        };
+        /**
+         * BenchmarkReport
+         * @description A scored benchmark run.
+         */
+        BenchmarkReport: {
+            /** Generated At */
+            generated_at: string;
+            goals: components["schemas"]["Goals"] | null;
+            /** Ignored Seed Results */
+            ignored_seed_results: number;
+            manifest: components["schemas"]["ReportManifest"];
+            /** Run Id */
+            run_id: string;
+            /** Systems */
+            systems: components["schemas"]["SystemReport"][];
+            /** Test Cases */
+            test_cases: number;
+        };
+        /**
+         * BenchmarkRunSummary
+         * @description One published run, for the list.
+         */
+        BenchmarkRunSummary: {
+            /** Generated At */
+            generated_at: string;
+            /** Run Id */
+            run_id: string;
+            /** Systems */
+            systems: components["schemas"]["SystemHeadline"][];
+            /** Test Cases */
+            test_cases: number;
         };
         /**
          * Decision
@@ -530,6 +635,42 @@ export interface components {
             sandbox_passed: boolean | null;
             /** Status */
             status: string;
+        };
+        /**
+         * Goals
+         * @description The PRD goals checked against a run.
+         */
+        Goals: {
+            g1_accuracy: components["schemas"]["AccuracyGoal"];
+            g2_time: components["schemas"]["TimeGoal"];
+            g3_patches: components["schemas"]["AccuracyGoal"];
+            /** G4 By Class */
+            g4_by_class: {
+                [key: string]: components["schemas"]["BaselineComparison"];
+            };
+        };
+        /**
+         * HeldoutRow
+         * @description How one system did on one replay case.
+         */
+        HeldoutRow: {
+            /** Case Id */
+            case_id: string;
+            /** Fix Location Ok */
+            fix_location_ok: boolean | null;
+            /**
+             * Patch
+             * @enum {string}
+             */
+            patch: "passed" | "failed" | "none";
+            /** Seconds */
+            seconds: number | null;
+            /** Status */
+            status: string;
+            /** Top1 */
+            top1: boolean;
+            /** Top3 */
+            top3: boolean;
         };
         /**
          * IncidentDetail
@@ -765,6 +906,17 @@ export interface components {
             /** Signed In */
             signed_in: boolean;
         };
+        /** Page[BenchmarkRunSummary] */
+        Page_BenchmarkRunSummary_: {
+            /** Items */
+            items: components["schemas"]["BenchmarkRunSummary"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
         /** Page[IncidentSummary] */
         Page_IncidentSummary_: {
             /** Items */
@@ -806,6 +958,22 @@ export interface components {
             type: string;
         };
         /**
+         * Rate
+         * @description A share with its 95% Wilson interval; `value` is null when nothing was measured.
+         */
+        Rate: {
+            /** High */
+            high: number | null;
+            /** Hits */
+            hits: number;
+            /** Low */
+            low: number | null;
+            /** Total */
+            total: number;
+            /** Value */
+            value: number | null;
+        };
+        /**
          * Readiness
          * @description The process is up and its database is reachable and migrated.
          */
@@ -824,6 +992,28 @@ export interface components {
         RejectRequest: {
             /** Reason */
             reason: string;
+        };
+        /**
+         * ReportManifest
+         * @description What produced the run: code, models, prompts and how many faults.
+         */
+        ReportManifest: {
+            /** Cases */
+            cases: number;
+            /** Created At */
+            created_at: string | null;
+            /** Lockfile Sha256 */
+            lockfile_sha256: string | null;
+            /** Models */
+            models: {
+                [key: string]: string;
+            } | null;
+            /** Prompts */
+            prompts: string[] | null;
+            /** Systems */
+            systems: string[] | null;
+            /** Temperature */
+            temperature: number | null;
         };
         /**
          * RootCause
@@ -942,6 +1132,35 @@ export interface components {
             still_failing: string[];
         };
         /**
+         * Scope
+         * @description One system's scores over all test faults, or over one fault class.
+         */
+        Scope: {
+            /** Attempted */
+            attempted: number;
+            /** Calls Mean */
+            calls_mean: number | null;
+            /** Errored */
+            errored: number;
+            fix_location: components["schemas"]["Rate"];
+            patch_coverage: components["schemas"]["Rate"];
+            patch_pass: components["schemas"]["Rate"];
+            /** Patches Produced */
+            patches_produced: number;
+            /** Scenario Failed */
+            scenario_failed: number;
+            /** Time Median */
+            time_median: number | null;
+            /** Time P90 */
+            time_p90: number | null;
+            /** Tokens Mean */
+            tokens_mean: number | null;
+            /** Tokens Total */
+            tokens_total: number;
+            top1: components["schemas"]["Rate"];
+            top3: components["schemas"]["Rate"];
+        };
+        /**
          * SignalOut
          * @description One failure the Detector grouped into the incident.
          */
@@ -967,6 +1186,50 @@ export interface components {
             name: string;
             /** Severity */
             severity: string;
+        };
+        /**
+         * SystemHeadline
+         * @description The three numbers a run's row in the list shows for one system.
+         */
+        SystemHeadline: {
+            /** Median Seconds */
+            median_seconds: number | null;
+            /** Name */
+            name: string;
+            patch_pass: components["schemas"]["Rate"];
+            top1: components["schemas"]["Rate"];
+        };
+        /**
+         * SystemReport
+         * @description Everything reported for one system.
+         */
+        SystemReport: {
+            /** By Class */
+            by_class: {
+                [key: string]: components["schemas"]["Scope"];
+            };
+            /** Heldout */
+            heldout: components["schemas"]["HeldoutRow"][];
+            /** Name */
+            name: string;
+            overall: components["schemas"]["Scope"];
+        };
+        /**
+         * TimeGoal
+         * @description Goal G2: median time to a fix against the target and the limit.
+         */
+        TimeGoal: {
+            /** Median Seconds */
+            median_seconds: number | null;
+            /** Required Seconds */
+            required_seconds: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "target met" | "required met" | "missed" | "n/a";
+            /** Target Seconds */
+            target_seconds: number;
         };
     };
     responses: never;
@@ -1215,6 +1478,234 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    get_runs_benchmark_runs_get: {
+        parameters: {
+            query?: {
+                /** @description Rows per page. */
+                limit?: number;
+                /** @description Rows to skip. */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_BenchmarkRunSummary_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    get_run_benchmark_runs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The id the run was named with. */
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchmarkReport"];
+                };
             };
             /** @description Bad Request */
             400: {

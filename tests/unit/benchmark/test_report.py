@@ -111,10 +111,10 @@ def test_the_markdown_has_the_overall_and_per_class_tables_with_intervals() -> N
 def test_the_goals_compare_lineageheal_with_the_best_baseline_class_by_class() -> None:
     goals = build(two_systems())["goals"]
 
-    assert goals["G1_accuracy"]["met"] is True  # type: ignore[index]
-    assert goals["G2_time"]["status"] == "target met"  # type: ignore[index]  # 120 s
-    assert goals["G3_patches"]["met"] is True  # type: ignore[index]
-    classes = goals["G4_by_class"]  # type: ignore[index]
+    assert goals["g1_accuracy"]["met"] is True  # type: ignore[index]
+    assert goals["g2_time"]["status"] == "target met"  # type: ignore[index]  # 120 s
+    assert goals["g3_patches"]["met"] is True  # type: ignore[index]
+    classes = goals["g4_by_class"]  # type: ignore[index]
     assert classes
     assert {row["result"] for row in classes.values()} <= {"ahead", "tied"}
     assert any(row["result"] == "ahead" for row in classes.values())

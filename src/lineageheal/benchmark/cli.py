@@ -18,6 +18,7 @@ from lineageheal.benchmark.loader import load_cases
 from lineageheal.benchmark.metrics import compute_metrics
 from lineageheal.benchmark.models import System
 from lineageheal.benchmark.provenance import build_manifest
+from lineageheal.benchmark.publish import publish_run
 from lineageheal.benchmark.report import build_report, render_markdown, write_report
 from lineageheal.benchmark.results import ResultStore
 from lineageheal.benchmark.runner import BenchmarkRunner, NoneSystem, scratch_folder
@@ -31,6 +32,8 @@ from lineageheal.core.settings import Settings, get_settings
 from lineageheal.ingestion.object_stores import LocalObjectStore
 from lineageheal.llm.factory import build_client
 from lineageheal.rag.embeddings import build_embedder
+from lineageheal.store.benchmark import BenchmarkRepository
+from lineageheal.store.database import create_db_engine
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_CASES = REPO_ROOT / "benchmark" / "cases"
@@ -143,6 +146,38 @@ def report(
         raise typer.Exit(code=1) from exc
     typer.echo(render_markdown(data))
     typer.echo(f"written: {json_path} and {md_path}")
+
+
+@bench_app.command("publish")
+def publish(
+    run_id: Annotated[str, typer.Option(help="The run to publish.")],
+    cases_dir: CasesOption = DEFAULT_CASES,
+    heldout_dir: Annotated[
+        Path, typer.Option("--heldout", help="Folder of held-out replay specifications.")
+    ] = DEFAULT_HELDOUT,
+) -> None:
+    """Publish a run's report to the application database, so the dashboard can show it.
+
+    Uses the run's `report.json` (scoring the run first if it has none) and replaces an earlier
+    publication of the same run id. Needs DATABASE_URL: the deployed database to show it there.
+    """
+    settings = get_settings()
+    try:
+        store = ResultStore(settings.bench_dir / "results", run_id)
+        specs = {c.id: c for folder in (cases_dir, heldout_dir) if folder.is_dir()
+                 for c in load_cases(folder)}  # fmt: skip
+        engine = create_db_engine(settings.require_database_url())
+        try:
+            published, created = publish_run(store, specs, BenchmarkRepository(engine))
+        finally:
+            engine.dispose()
+    except LineageHealError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(
+        f"{'published' if created else 'replaced'} {published.run_id}: "
+        f"{len(published.systems)} systems, {published.test_cases} test faults"
+    )
 
 
 @bench_app.command("run")
